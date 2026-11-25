@@ -1,0 +1,6 @@
+{
+  "name": "lora-speed-spike",
+  "private": true,
+  "type": "module",
+  "dependencies": { "openscad-wasm": "0.0.4" }
+}
