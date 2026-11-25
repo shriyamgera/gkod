@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The script holds the pinned version and its sha256, so its hash is the cache key.
+      - name: Restore OpenSCAD web build
+        id: openscad
+        uses: actions/cache@v6
+        with:
+          path: app/public/openscad
+          key: openscad-${{ hashFiles('scripts/fetch-openscad.sh') }}
+
+      - name: Fetch OpenSCAD web build
+        if: steps.openscad.outputs.cache-hit != 'true'
+        run: npm run fetch:openscad
+
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
