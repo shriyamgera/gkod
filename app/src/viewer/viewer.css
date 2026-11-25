@@ -1,0 +1,104 @@
+.viewer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+}
+
+.viewer-stage {
+  position: relative;
+  height: 500px;
+  max-height: 70vh;
+  min-height: 280px;
+}
+
+.viewer-canvas {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+}
+
+.viewer-canvas:active {
+  cursor: grabbing;
+}
+
+.viewer-canvas:focus-visible {
+  outline-offset: -3px;
+}
+
+.viewer-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+  pointer-events: none;
+}
+
+.viewer-busy,
+.viewer-hint {
+  position: absolute;
+  padding: 2px 4px;
+  background: var(--surface);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.viewer-busy {
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.viewer-busy-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-fill);
+}
+
+.viewer-hint {
+  left: 12px;
+  bottom: 10px;
+  max-width: calc(100% - 140px);
+  font-size: 13px;
+}
+
+.viewer-keys {
+  display: none;
+}
+
+.viewer-canvas:focus-visible ~ .viewer-hint .viewer-keys {
+  display: inline;
+}
+
+.viewer-reset {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.viewer-reset:hover {
+  background: var(--white);
+}
+
+.viewer-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 10px 16px;
+  border-top: var(--rule-soft);
+}

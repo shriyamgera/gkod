@@ -1,0 +1,127 @@
+import { type KeyboardEvent, lazy, Suspense, useId, useMemo, useRef, useSyncExternalStore } from 'react';
+import { GRID_MM } from './grid';
+import type { ViewHandle } from './Scene';
+import { describeMesh, type Mesh, parseStl } from './stl';
+import './viewer.css';
+
+const View3D = lazy(() => import('./View3D'));
+
+const TURN_STEP = Math.PI / 24;
+const ZOOM_STEP = 0.85;
+
+type Loaded = { mesh: Mesh | null; error: string | null };
+
+export function Viewer({ stl, busy = false }: { stl: ArrayBuffer | null; busy?: boolean }) {
+  const { mesh, error } = useMemo(() => load(stl), [stl]);
+  const view = useRef<ViewHandle | null>(null);
+  const summaryId = useId();
+  const spin = !useReducedMotion();
+
+  function onKeyDown(event: KeyboardEvent) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const act = keyAction(event.key);
+    if (!act || !view.current) return;
+    event.preventDefault();
+    act(view.current);
+  }
+
+  return (
+    <div className="viewer">
+      <div className="viewer-stage">
+        <div
+          className="viewer-canvas"
+          tabIndex={0}
+          role="application"
+          aria-label="3D view of the part. Arrow keys turn it, plus and minus zoom, zero resets the view."
+          aria-describedby={summaryId}
+          aria-busy={busy}
+          onKeyDown={onKeyDown}
+        >
+          {mesh && (
+            <Suspense fallback={<p className="viewer-note">Loading the 3D view</p>}>
+              <View3D mesh={mesh} spin={spin} handle={view} />
+            </Suspense>
+          )}
+        </div>
+
+        {!mesh && (
+          <p className="viewer-note" role={error ? 'alert' : undefined}>
+            {error ? `This model could not be shown. ${error}` : busy ? 'Making the model' : 'No model yet'}
+          </p>
+        )}
+        {mesh && busy && (
+          <p className="viewer-busy">
+            <span className="viewer-busy-mark" aria-hidden="true" />
+            Updating
+          </p>
+        )}
+        {mesh && (
+          <>
+            <p className="viewer-hint">
+              Drag to turn it around
+              <span className="viewer-keys">. Arrow keys turn, + and - zoom, 0 resets.</span>
+            </p>
+            <button type="button" className="viewer-reset" onClick={() => view.current?.reset()}>
+              Reset view
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="viewer-summary">
+        <p id={summaryId} className="mono">
+          {mesh ? describeMesh(mesh) : error ? 'No model to measure' : 'No model yet'}
+        </p>
+        {mesh && <p className="mono muted">Grid squares {GRID_MM} mm</p>}
+      </div>
+    </div>
+  );
+}
+
+function load(stl: ArrayBuffer | null): Loaded {
+  if (!stl) return { mesh: null, error: null };
+  try {
+    const mesh = parseStl(stl);
+    if (mesh.triangles === 0) return { mesh: null, error: 'It has no shape.' };
+    return { mesh, error: null };
+  } catch (cause) {
+    return { mesh: null, error: cause instanceof Error ? cause.message : String(cause) };
+  }
+}
+
+const reducedMotion = '(prefers-reduced-motion: reduce)';
+
+function useReducedMotion(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia(reducedMotion);
+      query.addEventListener('change', onChange);
+      return () => query.removeEventListener('change', onChange);
+    },
+    () => window.matchMedia(reducedMotion).matches,
+  );
+}
+
+function keyAction(key: string): ((view: ViewHandle) => void) | null {
+  switch (key) {
+    case 'ArrowLeft':
+      return (view) => view.turn(-TURN_STEP, 0);
+    case 'ArrowRight':
+      return (view) => view.turn(TURN_STEP, 0);
+    case 'ArrowUp':
+      return (view) => view.turn(0, -TURN_STEP);
+    case 'ArrowDown':
+      return (view) => view.turn(0, TURN_STEP);
+    case '+':
+    case '=':
+      return (view) => view.zoom(ZOOM_STEP);
+    case '-':
+    case '_':
+      return (view) => view.zoom(1 / ZOOM_STEP);
+    case '0':
+    case 'Home':
+      return (view) => view.reset();
+    default:
+      return null;
+  }
+}
