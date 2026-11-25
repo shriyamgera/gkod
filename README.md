@@ -45,7 +45,7 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
    - **GKod model**: a small open model, fine-tuned for this job on a laptop.
    - **Your own Gemini key**: kept in your browser, never stored on a server.
 3. **The code compiles in the browser** and appears in a 3D viewer. You change it by typing, or with sliders.
-4. **Print checks run on the shape**: watertight, wall thickness, overhangs, fits the bed.
+4. **Print checks run on the shape**: closed shape, flat base, overhangs, fits the bed.
 5. **The built-in slicer** produces the printer file, with suggested settings you can accept or ignore.
 
 ## The fine-tuned model
@@ -56,15 +56,14 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 
 ## Built on
 
-| Piece | Project | Licence |
-|---|---|---|
-| Part code | [OpenSCAD](https://openscad.org) compiled to WebAssembly | GPL-2.0-or-later |
-| 3D viewer | [three.js](https://threejs.org) | MIT |
-| Print checks | [trimesh](https://trimesh.org), [Manifold](https://github.com/elalish/manifold) | MIT, Apache-2.0 |
-| Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) | MIT |
-| Training | [MLX LM](https://github.com/ml-explore/mlx-lm) | MIT |
+| Piece | Project | Licence | State |
+|---|---|---|---|
+| Part code | [OpenSCAD](https://openscad.org) compiled to WebAssembly | GPL-2.0-or-later | In progress |
+| 3D viewer | [three.js](https://threejs.org) with [react-three-fiber](https://github.com/pmndrs/react-three-fiber) | MIT | In progress |
+| Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) | MIT | Planned |
+| Training | [MLX LM](https://github.com/ml-explore/mlx-lm) | MIT | Planned |
 
-Only the pieces that are in the site today are listed, with exact versions and source links, in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The print checks will be our own code. The pieces that are in the site today are listed, with exact versions and source links, in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Limits
 
