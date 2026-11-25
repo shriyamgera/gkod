@@ -38,14 +38,14 @@ const common = {
 // 2. library shims that upstream makes with webpack (three, jszip, quickjs).
 //    jszip gets its own entry: upstream's does "import * as JSZip", which esbuild turns into a
 //    namespace object, and then "new JSZip()" (used by the 3MF loader) fails.
-await fs.writeFile('shilp-jszip.js', `
+await fs.writeFile('gkod-jszip.js', `
 import JSZip from './node_modules/jszip/dist/jszip.js';
 export default JSZip;
 export { JSZip };
 `);
 for (const [entry, outfile] of [
   ['bin/webpack-three-bundle.js', 'src/ext/three.js'],
-  ['shilp-jszip.js', 'src/ext/jszip-esm.js'],
+  ['gkod-jszip.js', 'src/ext/jszip-esm.js'],
   ['bin/webpack-quickjs-bundle.js', 'src/ext/quickjs.js'],
 ]) {
   await build({ ...common, minify: false, entryPoints: [entry], outfile,
@@ -54,12 +54,12 @@ for (const [entry, outfile] of [
 
 // 3. the three runtime files. Our entry re-exports the upstream Engine plus the
 //    mesh loaders (OBJ, 3MF) that the Engine class itself does not expose.
-await fs.writeFile('shilp-entry.js', `
+await fs.writeFile('gkod-entry.js', `
 export { Engine } from './src/kiri/run/engine.js';
 export { load_data } from './src/load/file.js';
 `);
 for (const [entry, name] of [
-  ['shilp-entry.js', 'kiri-eng.js'],
+  ['gkod-entry.js', 'kiri-eng.js'],
   ['src/kiri/run/worker.js', 'kiri-work.js'],
   ['src/kiri/run/minion.js', 'kiri-pool.js'],
 ]) {

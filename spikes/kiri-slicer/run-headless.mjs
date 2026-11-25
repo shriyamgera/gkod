@@ -47,7 +47,7 @@ const cases = (process.env.CASES ? JSON.parse(process.env.CASES) : null) || [
   { name: 'printer-bambu-a1',       printer: 'Bambu.A1', layerHeight: 0.2, walls: 2, infill: 0.2 },
   { name: 'printer-bambu-p1s',      printer: 'Bambu.P1S', layerHeight: 0.2, walls: 2, infill: 0.2 },
   { name: 'custom-printer',         layerHeight: 0.2, walls: 2, infill: 0.2, bed: { w: 180, d: 180, h: 180 }, nozzle: 0.6,
-    startGcode: ['; SHILP-START', 'G90', 'M83', 'G28', 'M104 S{temp}', 'M140 S{bed_temp}', 'G92 E0'], endGcode: ['; SHILP-END', 'M104 S0', 'M84'] },
+    startGcode: ['; GKOD-START', 'G90', 'M83', 'G28', 'M104 S{temp}', 'M140 S{bed_temp}', 'G92 E0'], endGcode: ['; GKOD-END', 'M104 S0', 'M84'] },
   { name: 'format-obj',             file: 'part.obj', layerHeight: 0.2, walls: 2, infill: 0.2 },
   { name: 'format-3mf',             file: 'part.3mf', layerHeight: 0.2, walls: 2, infill: 0.2 },
 ];

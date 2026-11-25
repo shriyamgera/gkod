@@ -9,7 +9,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 function writeSTL(file, tris) {
   const buf = Buffer.alloc(84 + tris.length * 50);
-  buf.write('shilp test part', 0);
+  buf.write('gkod test part', 0);
   buf.writeUInt32LE(tris.length, 80);
   let o = 84;
   for (const [a, b, c] of tris) {

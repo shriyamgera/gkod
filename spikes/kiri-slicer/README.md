@@ -123,7 +123,7 @@ the base case took 1.0 to 2.6 s and every finished case took 0.7 to 4.8 s. Slici
 ### 5. Printer profiles and layer preview
 
 - **Bed size, nozzle, start and end G-code can all be set.** The custom case produced
-  `; Bed left:0 right:180 top:180 bottom:0`, our `; SHILP-START` / `; SHILP-END` lines, and `M104 S200` /
+  `; Bed left:0 right:180 top:180 bottom:0`, our `; GKOD-START` / `; GKOD-END` lines, and `M104 S200` /
   `M140 S60` filled in from `{temp}` / `{bed_temp}`.
 - **59 FDM printer profiles ship with it**, including `Any.Generic.Marlin`, `Any.Generic.Klipper`,
   `Bambu.A1` and `Bambu.P1S`. All four produced G-code; the Bambu ones carry Bambu's long start sequence
