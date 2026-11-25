@@ -26,7 +26,13 @@ const insideOpenscad: Item[] = [
 const packages: Item[] = [
   { name: 'React', version: '19.3.1', licence: 'MIT', href: 'https://github.com/react/react', note: 'react, react-dom' },
   { name: 'scheduler', version: '0.28.0', licence: 'MIT', href: 'https://github.com/react/react', note: 'Part of React.' },
-  { name: 'three.js', version: '0.187.0', licence: 'MIT', href: 'https://github.com/mrdoob/three.js' },
+  {
+    name: 'three.js',
+    version: '0.187.0',
+    licence: 'MIT',
+    href: 'https://github.com/mrdoob/three.js',
+    note: 'With its OrbitControls add-on.',
+  },
   {
     name: 'react-three-fiber',
     version: '9.8.2',
@@ -36,15 +42,24 @@ const packages: Item[] = [
 ];
 
 const withFiber: Item[] = [
+  {
+    name: 'react-reconciler',
+    version: 'from React 19.3.0',
+    licence: 'MIT',
+    href: 'https://github.com/react/react',
+    note: "Part of React. A copy is inside react-three-fiber's own files.",
+  },
   { name: 'zustand', version: '5.1.0', licence: 'MIT', href: 'https://github.com/pmndrs/zustand' },
   { name: 'its-fine', version: '2.1.1', licence: 'MIT', href: 'https://github.com/pmndrs/its-fine' },
   { name: 'react-use-measure', version: '2.1.7', licence: 'MIT', href: 'https://github.com/pmndrs/react-use-measure' },
   { name: 'suspend-react', version: '0.1.3', licence: 'MIT', href: 'https://github.com/pmndrs/suspend-react' },
-  { name: 'use-sync-external-store', version: '1.7.0', licence: 'MIT', href: 'https://github.com/react/react' },
-  { name: '@babel/runtime', version: '7.29.15', licence: 'MIT', href: 'https://github.com/babel/babel' },
-  { name: 'buffer', version: '6.0.3', licence: 'MIT', href: 'https://github.com/feross/buffer' },
-  { name: 'base64-js', version: '1.5.1', licence: 'MIT', href: 'https://github.com/beatgammit/base64-js' },
-  { name: 'ieee754', version: '1.2.1', licence: 'BSD-3-Clause', href: 'https://github.com/feross/ieee754' },
+  {
+    name: 'use-sync-external-store',
+    version: '1.7.0',
+    licence: 'MIT',
+    href: 'https://github.com/react/react',
+    note: 'Part of React.',
+  },
 ];
 
 const fonts: Item[] = [
@@ -173,9 +188,13 @@ export function Notices() {
         </h2>
         <ItemList items={packages} label="JavaScript packages" />
         <p className="muted" style={{ ...text, fontSize: 15 }}>
-          react-three-fiber brings these packages with it. Some or all of them are in the site bundle.
+          react-three-fiber brings these with it, and they are in the site bundle.
         </p>
         <ItemList items={withFiber} label="Packages that come with react-three-fiber" />
+        <p className="muted" style={{ ...text, fontSize: 15 }}>
+          It also installs @babel/runtime, buffer, base64-js and ieee754. Only its React Native build uses them, so they
+          are not in the site bundle.
+        </p>
       </section>
 
       <section style={section} aria-labelledby="notices-fonts">

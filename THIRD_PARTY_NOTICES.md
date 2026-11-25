@@ -37,22 +37,21 @@ The build also contains other libraries, each under its own licence. Names found
 |---|---|---|---|
 | React (`react`, `react-dom`) | 19.3.1 | MIT | [github.com/react/react](https://github.com/react/react) |
 | scheduler (part of React) | 0.28.0 | MIT | [github.com/react/react](https://github.com/react/react) |
-| three.js | 0.187.0 | MIT | [github.com/mrdoob/three.js](https://github.com/mrdoob/three.js) |
+| three.js, with its OrbitControls add-on | 0.187.0 | MIT | [github.com/mrdoob/three.js](https://github.com/mrdoob/three.js) |
 | react-three-fiber (`@react-three/fiber`) | 9.8.2 | MIT | [github.com/pmndrs/react-three-fiber](https://github.com/pmndrs/react-three-fiber) |
 
-react-three-fiber brings these packages with it. Some or all of them end up in the bundle.
+react-three-fiber brings these with it, and they are in the bundle.
 
 | Package | Version | Licence | Source |
 |---|---|---|---|
+| react-reconciler (part of React), copied inside react-three-fiber's own files | built from React 19.3.0 | MIT | [github.com/react/react](https://github.com/react/react) |
 | zustand | 5.1.0 | MIT | [github.com/pmndrs/zustand](https://github.com/pmndrs/zustand) |
 | its-fine | 2.1.1 | MIT | [github.com/pmndrs/its-fine](https://github.com/pmndrs/its-fine) |
 | react-use-measure | 2.1.7 | MIT | [github.com/pmndrs/react-use-measure](https://github.com/pmndrs/react-use-measure) |
 | suspend-react | 0.1.3 | MIT | [github.com/pmndrs/suspend-react](https://github.com/pmndrs/suspend-react) |
 | use-sync-external-store (part of React) | 1.7.0 | MIT | [github.com/react/react](https://github.com/react/react) |
-| @babel/runtime | 7.29.15 | MIT | [github.com/babel/babel](https://github.com/babel/babel) |
-| buffer | 6.0.3 | MIT | [github.com/feross/buffer](https://github.com/feross/buffer) |
-| base64-js | 1.5.1 | MIT | [github.com/beatgammit/base64-js](https://github.com/beatgammit/base64-js) |
-| ieee754 | 1.2.1 | BSD-3-Clause | [github.com/feross/ieee754](https://github.com/feross/ieee754) |
+
+react-three-fiber also installs `@babel/runtime`, `buffer`, `base64-js` and `ieee754`. Only its React Native build uses them, so they are not in the site bundle.
 
 Versions are the ones in `package-lock.json` on the date above.
 
