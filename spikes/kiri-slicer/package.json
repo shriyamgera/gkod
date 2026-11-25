@@ -1,0 +1,14 @@
+{
+  "name": "kiri-slicer-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "./build-kiri.sh",
+    "stl": "node make-stl.mjs",
+    "serve": "node serve.mjs",
+    "test": "node run-headless.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

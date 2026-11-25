@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slicer spike: STL to G-code in the page</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; max-width: 980px; }
+  fieldset { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+  label { display: flex; flex-direction: column; font-size: 12px; }
+  textarea { width: 100%; height: 320px; font: 11px/1.3 ui-monospace, monospace; }
+  canvas { border: 1px solid #999; width: 480px; height: 260px; }
+  pre { background: #f3f3f3; padding: 8px; overflow: auto; }
+</style>
+</head>
+<body>
+<h1>Slicer spike</h1>
+<p>Loads <code>part.stl</code>, slices it in this page with a self-hosted Kiri:Moto engine build, and shows the G-code as text.</p>
+<fieldset>
+  <label>Printer <select id="printer"></select></label>
+  <label>Layer height (mm) <input id="layer" type="number" step="0.05" value="0.2"></label>
+  <label>Walls <input id="walls" type="number" value="2"></label>
+  <label>Infill % <input id="infill" type="number" value="20"></label>
+  <label>Supports <input id="supports" type="checkbox"></label>
+  <label>File <select id="file"><option>part.stl</option><option>overhang.stl</option></select></label>
+  <button id="go">Slice</button>
+</fieldset>
+<pre id="stats">not sliced yet</pre>
+<p>Layer preview drawn from the G-code text (top view, layer <input id="lay" type="range" min="0" max="0" value="0">):</p>
+<canvas id="cv" width="960" height="520"></canvas>
+<textarea id="gcode" readonly></textarea>
+<script type="module">
+import { sliceToGcode, devices } from './slicer.js';
+import { analyseGcode } from './gcode-stats.js';
+const $ = id => document.getElementById(id);
+let last;
+
+devices().then(d => {
+  for (const name of Object.keys(d).sort()) $('printer').add(new Option(name, name, false, name === 'Any.Generic.Marlin'));
+  document.body.dataset.ready = '1';
+});
+
+function draw() {
+  const cv = $('cv'), g = cv.getContext('2d'), L = last?.own.perLayer[+$('lay').value];
+  g.clearRect(0, 0, cv.width, cv.height);
+  if (!L) return;
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let i = 0; i < L.coords.length; i += 3) {
+    x0 = Math.min(x0, L.coords[i]); x1 = Math.max(x1, L.coords[i]);
+    y0 = Math.min(y0, L.coords[i + 1]); y1 = Math.max(y1, L.coords[i + 1]);
+  }
+  const s = Math.min((cv.width - 20) / (x1 - x0), (cv.height - 20) / (y1 - y0));
+  g.beginPath();
+  for (let i = 0; i < L.coords.length; i += 6) {
+    g.moveTo(10 + (L.coords[i] - x0) * s, cv.height - 10 - (L.coords[i + 1] - y0) * s);
+    g.lineTo(10 + (L.coords[i + 3] - x0) * s, cv.height - 10 - (L.coords[i + 4] - y0) * s);
+  }
+  g.strokeStyle = '#06c'; g.lineWidth = 1; g.stroke();
+}
+$('lay').oninput = draw;
+
+// window.runSlice is also what the headless test calls
+window.runSlice = async (opts = {}) => {
+  const file = opts.file || 'part.stl';
+  const format = opts.format || file.split('.').pop();
+  const res = await fetch(file);
+  const data = format === 'obj' ? await res.text() : await res.arrayBuffer();
+  const out = await sliceToGcode(data, { ...opts, format });
+  const own = analyseGcode(out.gcode, { keepSegments: true });
+  last = { ...out, own };
+  $('gcode').value = out.gcode;
+  $('lay').max = own.layers - 1; $('lay').value = Math.floor(own.layers / 2); draw();
+  const summary = {
+    gcodeChars: out.gcode.length, gcodeLines: out.gcode.split('\n').length,
+    kiri: out.kiri, filamentGrams: out.filamentGrams, ms: out.ms,
+    fromGcode: { layers: own.layers, firstZ: own.layerZ[0], lastZ: own.layerZ.at(-1), filamentMM: own.filamentMM,
+                 timeSecNoAccel: own.timeSecNoAccel, extrudeMoves: own.extrudeMoves,
+                 segmentsPerLayer: own.perLayer.map(l => l.segments),
+                 extrudedPathMMPerLayer: own.perLayer.map(l => Math.round(l.length)) },
+    settings: out.settings,
+  };
+  $('stats').textContent = JSON.stringify({ ...summary, fromGcode: { ...summary.fromGcode, segmentsPerLayer: undefined, extrudedPathMMPerLayer: undefined }, settings: undefined }, null, 1);
+  return { summary, gcode: out.gcode };
+};
+
+$('go').onclick = () => window.runSlice({
+  file: $('file').value, printer: $('printer').value, layerHeight: +$('layer').value,
+  walls: +$('walls').value, infill: +$('infill').value / 100, supports: $('supports').checked,
+});
+</script>
+</body>
+</html>

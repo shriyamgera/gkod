@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slicer spike: hosted Kiri:Moto in an iframe (frame message API)</title>
+<style>body { font: 14px system-ui, sans-serif; margin: 16px; } iframe { width: 900px; height: 500px; border: 1px solid #999; }</style>
+</head>
+<body>
+<h1>Hosted iframe route</h1>
+<p>This page needs grid.space to be online. It talks to the iframe with <code>postMessage</code> only.</p>
+<iframe id="kiri" src="https://grid.space/kiri/"></iframe>
+<pre id="log"></pre>
+<script>
+// nothing is loaded from grid.space but the iframe itself; messages use the shapes in upstream src/kiri/run/frame.js
+const frame = document.getElementById('kiri');
+const events = [];
+window.frameEvents = events;
+window.addEventListener('message', m => {
+  if (m.source !== frame.contentWindow) return;
+  const d = m.data || {};
+  events.push({ t: Math.round(performance.now()), event: d.event, keys: Object.keys(d), size: JSON.stringify(d.data ?? d)?.length });
+  document.getElementById('log').textContent = events.map(e => JSON.stringify(e)).join('\n');
+});
+frame.addEventListener('load', () => { window.frameLoaded = true; });
+
+// run-frame-headless.mjs posts the commands; this page only records what comes back
+</script>
+</body>
+</html>
