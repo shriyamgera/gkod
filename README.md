@@ -6,7 +6,31 @@ The name is a short form of G-code, the file a 3D printer runs.
 
 ## Status
 
-Day 2 (26 November 2026). The design is decided and four feasibility tests are done; their code and measured results are in [spikes/](spikes/). The app itself is not built yet. This section is updated as each piece lands.
+Build day 1 (26 November 2026). This section is updated as each piece lands.
+
+What works today:
+
+- The site opens with three example parts (phone stand, wall hook, cable clip), each written as OpenSCAD code with named sizes.
+- Each part's code can be read on its own page.
+- Tests, type checks and a build are set up to run on every push, with a deploy to GitHub Pages from `main`.
+
+In progress today, not finished: compiling the code in the browser, the 3D viewer, and the size sliders.
+
+Not built yet: making a part from a description, the fine-tuned model, the print checks and the slicer. Everything under "How it will work" below is the plan, not the current state.
+
+Four feasibility tests were done before the build started. Their code and measured results are in [spikes/](spikes/).
+
+## Run it locally
+
+Needs Node 22.
+
+```sh
+npm ci
+npm run fetch:openscad   # downloads the pinned OpenSCAD web build (about 3.4 MB) and checks its sha256
+npm run dev
+```
+
+Other commands: `npm test`, `npm run typecheck`, `npm run build`.
 
 ## What makes it different
 
@@ -26,7 +50,7 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 
 ## The fine-tuned model
 
-- **Training data is made by a program, not by another AI.** A generator builds parts from parametric templates, compiles each one, and keeps only those that pass the print checks. No output from Gemini, GPT or Claude is used for training.
+- **No model-written training examples.** A seeded generator builds every training part: it picks the features and sizes, writes the code, compiles it, and keeps only parts that pass the print checks. The request text for each part is put together by the same program.
 - **Training runs on a MacBook** (M4, 16 GB) with LoRA.
 - **Results will be measured, not claimed.** The same held-out prompts go to the untrained model, the fine-tuned model and Gemini, scored by code: does it compile, does it pass the print checks, are the sizes right. The numbers will be published here, including the ones that are not flattering.
 
@@ -40,7 +64,13 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 | Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) | MIT |
 | Training | [MLX LM](https://github.com/ml-explore/mlx-lm) | MIT |
 
+Only the pieces that are in the site today are listed, with exact versions and source links, in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Limits
 
 - Practical parts first: brackets, hooks, stands, boxes, clips. Moving parts such as hinges and threads come later.
 - The built-in slicer gives a good first result. Its time and filament numbers will not exactly match a desktop slicer.
+
+## Licence
+
+GKod is licensed under GPL-3.0-or-later; the text is in [LICENSE](LICENSE). It uses this licence because the site ships a compiled copy of OpenSCAD, which is GPL software. Third-party software and fonts are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and on the site's Notices page.
