@@ -1,0 +1,29 @@
+:root {
+  --bg: #edebe5;
+  --surface: #f7f6f2;
+  --white: #ffffff;
+  --ink: #121212;
+  --muted: #5c5952;
+  --accent: #c23c00;
+  --accent-fill: #f04a00;
+  --line: #d3cfc6;
+  --line-strong: #bdb8ad;
+  --ok-bg: #dce4d3;
+  --warn-bg: #f9dccb;
+
+  --font-sans: Archivo, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --condensed: 66%;
+
+  --rule: 2px solid var(--ink);
+  --rule-soft: 1px solid var(--line);
+
+  --page-pad: 32px;
+  --tap: 44px;
+}
+
+@media (max-width: 600px) {
+  :root {
+    --page-pad: 16px;
+  }
+}
