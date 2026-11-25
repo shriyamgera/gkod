@@ -1,0 +1,45 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>OpenSCAD WASM worker test</title>
+<pre id="out">running...</pre>
+<script type="module">
+const worker = new Worker('./worker.js', { type: 'module' });
+let seq = 0;
+const pending = new Map();
+worker.onmessage = (ev) => { pending.get(ev.data.id)(ev.data); pending.delete(ev.data.id); };
+worker.onerror = (e) => { window.__result = { error: String(e.message || e) }; };
+function compile(source, defines = {}, extraArgs = []) {
+  return new Promise((resolve) => {
+    const id = ++seq; const t0 = performance.now();
+    pending.set(id, (r) => resolve({ ...r, roundtripMs: performance.now() - t0 }));
+    worker.postMessage({ id, source, defines, extraArgs });
+  });
+}
+function triangles(buf) { return buf ? new DataView(buf).getUint32(80, true) : 0; }
+
+const names = ['box_hole', 'phone_stand', 'plate_40_holes', 'broken'];
+const src = {};
+for (const n of names) src[n] = await (await fetch(`./parts/${n}.scad`)).text();
+const rows = [];
+async function row(label, source, defines) {
+  const r = await compile(source, defines);
+  rows.push({ label, ok: r.ok, exitCode: r.exitCode, roundtripMs: Math.round(r.roundtripMs),
+    workerMs: Math.round(r.ms), wasmLoadMs: Math.round(r.loadMs), triangles: triangles(r.stl),
+    stlBytes: r.stl ? r.stl.byteLength : 0, firstError: r.log.find((l) => l.startsWith('ERROR')) || null });
+}
+await row('box_hole (first, includes wasm fetch+compile)', src.box_hole);
+await row('box_hole (warm)', src.box_hole);
+await row('phone_stand (warm)', src.phone_stand);
+await row('phone_stand -D width=90', src.phone_stand, { width: 90 });
+await row('phone_stand -D width=120', src.phone_stand, { width: 120 });
+await row('plate_40_holes (warm)', src.plate_40_holes);
+await row('broken', src.broken);
+const result = {
+  userAgent: navigator.userAgent,
+  crossOriginIsolated: self.crossOriginIsolated,
+  sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+  rows,
+};
+document.getElementById('out').textContent = JSON.stringify(result, null, 2);
+window.__result = result;
+</script>

@@ -1,0 +1,3 @@
+# Downloaded OpenSCAD builds (fetch with ./fetch.sh) and generated meshes
+vendor/
+out/

@@ -1,0 +1,16 @@
+{
+  "name": "openscad-wasm-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch": "./fetch.sh",
+    "bench": "node bench.mjs",
+    "liveedit": "node liveedit.mjs",
+    "errors": "node errors.mjs",
+    "throughput": "node throughput.mjs 8 12 mix",
+    "browser": "node browser/run_headless.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.50.0"
+  }
+}
