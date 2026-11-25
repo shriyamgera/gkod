@@ -21,3 +21,9 @@ adapters/
 
 # OS / editor noise
 .DS_Store
+
+# OpenSCAD web build (fetched by scripts/fetch-openscad.sh)
+app/public/openscad/
+
+# TypeScript build info
+*.tsbuildinfo
