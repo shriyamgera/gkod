@@ -1,24 +1,24 @@
-# Shilp
+# GKod
 
-Describe a part in words, a sketch or a photo. Shilp writes it as editable code, shows it in 3D, checks that it will print, and slices it for your printer, all in the browser.
+Describe a part in words, a sketch or a photo. GKod writes it as editable code, shows it in 3D, checks that it will print, and slices it for your printer, all in the browser.
 
-"Shilp" is the Hindi word for craft.
+The name is a short form of G-code, the file a 3D printer runs.
 
 ## Status
 
-Day 1 (25 November 2026). The repository is set up and the design is decided. Nothing runs yet. This section is updated as each piece lands.
+Day 2 (26 November 2026). The design is decided and four feasibility tests are done; their code and measured results are in [spikes/](spikes/). The app itself is not built yet. This section is updated as each piece lands.
 
 ## What makes it different
 
 Most "text to 3D" tools return a fixed mesh. If the hole is 2 mm too small, you start again.
 
-Shilp returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" changes one number, and nothing else moves. The same code can be re-opened and edited later.
+GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" changes one number, and nothing else moves. The same code can be re-opened and edited later.
 
 ## How it will work
 
 1. **You describe the part.** Words, a sketch or a photo.
 2. **A model writes OpenSCAD.** You choose the engine:
-   - **Shilp model**: a small open model, fine-tuned for this job on a laptop.
+   - **GKod model**: a small open model, fine-tuned for this job on a laptop.
    - **Your own Gemini key**: kept in your browser, never stored on a server.
 3. **The code compiles in the browser** and appears in a 3D viewer. You change it by typing, or with sliders.
 4. **Print checks run on the shape**: watertight, wall thickness, overhangs, fits the bed.
