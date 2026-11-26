@@ -12,7 +12,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "fixtures": "node scripts/make-fixtures.mjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
