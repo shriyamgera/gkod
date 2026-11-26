@@ -1,15 +1,16 @@
 import { plural } from '#checks/format';
 import { ZERO_VOLUME_MM3 } from '#checks/limits';
 import type { Mesh } from '#checks/mesh';
+import { pieceProblem } from '#checks/pieces';
 import type { CheckResult } from '#checks/types';
 
 const title = 'Solid, no holes';
 const fix =
-  'Change the design so it is one closed solid: no gaps in the surface, no pieces that touch only along an edge, ' +
-  'and every face pointing outwards; keep every named size.';
+  'Change the design so it is one closed solid: no gaps in the surface, no pieces that touch only along an edge ' +
+  'or sit inside another piece, and every face pointing outwards; keep every named size.';
 
 // Closed: every edge is shared by exactly two triangles that run along it in opposite directions,
-// and the enclosed volume is above zero.
+// the enclosed volume is above zero, and each separate piece faces the right way.
 export function checkClosed(mesh: Mesh, volume: number): CheckResult {
   if (mesh.triangles === 0) return failed('There is no shape: the file has no triangles.');
   let open = 0;
@@ -35,6 +36,9 @@ export function checkClosed(mesh: Mesh, volume: number): CheckResult {
   }
   if (volume < -ZERO_VOLUME_MM3) return failed('The shape is inside out: all of its faces point inwards.');
   if (volume <= ZERO_VOLUME_MM3) return failed('The shape has no volume, so there is nothing solid to print.');
+  const pieces = pieceProblem(mesh);
+  if (pieces === 'inside-out') return failed('A separate piece is inside out: its faces point inwards.');
+  if (pieces === 'inside-another') return failed('A piece sits inside another piece, so the solid overlaps itself.');
   return { id: 'closed', ok: true, title, detail: 'The surface is closed, so the slicer can tell inside from outside.' };
 }
 

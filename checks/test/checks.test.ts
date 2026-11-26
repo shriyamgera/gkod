@@ -145,6 +145,24 @@ describe('closed shape', () => {
   it('accepts several separate closed pieces', () => {
     expect(result(run([...cube, ...box([30, 0, 0], [40, 10, 10])]), 'closed').ok).toBe(true);
   });
+
+  it('finds a separate piece turned inside out, even beside a bigger piece that faces outwards', () => {
+    const closed = result(run([...cube, ...insideOut(box([30, 0, 0], [40, 10, 10]))]), 'closed');
+    expect(closed.ok).toBe(false);
+    expect(closed.detail).toBe('A separate piece is inside out: its faces point inwards.');
+  });
+
+  it('accepts a hollow, whose inner wall faces inwards, and fails a second solid inside the first', () => {
+    const outer = box([0, 0, 0], [40, 40, 40]);
+    const inner = box([10, 10, 10], [30, 30, 30]);
+    expect(result(run([...outer, ...insideOut(inner)]), 'closed').ok).toBe(true);
+    const overlap = result(run([...outer, ...inner]), 'closed');
+    expect(overlap.ok).toBe(false);
+    expect(overlap.detail).toBe('A piece sits inside another piece, so the solid overlaps itself.');
+    // a solid island inside the hollow is fine again
+    const island = box([15, 15, 15], [25, 25, 25]);
+    expect(result(run([...outer, ...insideOut(inner), ...island]), 'closed').ok).toBe(true);
+  });
 });
 
 describe('fits the bed', () => {

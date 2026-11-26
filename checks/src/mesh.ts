@@ -52,6 +52,16 @@ export function across(edges: Edges, edge: number, triangle: number): number {
   return first === triangle ? edges.second[edge]! : first;
 }
 
+/** The root of t in a forest of joined triangles, shortening the path on the way. */
+export function root(parent: Int32Array, t: number): number {
+  while (parent[t] !== t) {
+    const up = parent[parent[t]!]!;
+    parent[t] = up;
+    t = up;
+  }
+  return t;
+}
+
 /** Enclosed volume in mm³: positive when the faces point outwards. */
 export function signedVolume(mesh: Mesh): number {
   const p = mesh.positions;

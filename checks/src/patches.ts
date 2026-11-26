@@ -1,4 +1,4 @@
-import type { Mesh } from '#checks/mesh';
+import { type Mesh, root } from '#checks/mesh';
 import type { Vec3 } from '#checks/types';
 
 /** A connected patch of steep faces underneath. size is its area seen from below in mm², sum its area-weighted centre times size. */
@@ -30,15 +30,6 @@ export function findPatches(mesh: Mesh, steep: Uint8Array): Patch[] {
     for (let k = 0; k < 3; k++) patch.sum[k]! += (seen * (p[t * 9 + k]! + p[t * 9 + 3 + k]! + p[t * 9 + 6 + k]!)) / 3;
   }
   return [...patches.values()];
-}
-
-function root(parent: Int32Array, t: number): number {
-  while (parent[t] !== t) {
-    const up = parent[parent[t]!]!;
-    parent[t] = up;
-    t = up;
-  }
-  return t;
 }
 
 // Corner weights for the points a patch is sampled at: corners, edge middles and the centre of each triangle.
