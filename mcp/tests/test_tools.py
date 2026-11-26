@@ -27,10 +27,12 @@ def test_node_is_found_and_new_enough():
     assert Path(find_node()).is_absolute()
 
 
-def test_list_examples_gives_the_three_parts_with_the_sizes_the_compiler_reports():
+def test_list_examples_gives_every_built_in_part_with_the_sizes_the_compiler_reports():
     listed = server.list_examples()
-    assert [e["name"] for e in listed] == ["cable_clip", "phone_stand", "wall_hook"]
-    assert [e["title"] for e in listed] == ["Cable clip", "Phone stand", "Wall hook"]
+    on_disk = sorted(p.stem for p in (REPO / "app" / "src" / "examples").glob("*.scad"))
+    assert [e["name"] for e in listed] == on_disk
+    assert {"cable_clip", "phone_stand", "wall_hook", "test_cube"} <= set(on_disk)
+    assert all(e["title"] for e in listed)
     for example in listed:
         assert Path(example["path"]).is_file()
         compiled = server.compile_part(example_source(example["name"]))
@@ -186,7 +188,7 @@ def test_preview_example_does_everything_in_one_call():
 
 
 def test_preview_example_lists_the_examples_for_an_unknown_name():
-    with pytest.raises(GkodError, match="Examples: cable_clip, phone_stand, wall_hook"):
+    with pytest.raises(GkodError, match="Examples: cable_clip, phone_stand, test_cube, wall_hook"):
         server.preview_example("bracket")
 
 
