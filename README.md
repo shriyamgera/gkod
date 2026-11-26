@@ -6,7 +6,7 @@ The name is a short form of G-code, the file a 3D printer runs.
 
 ## Status
 
-Build day 3 (26 November 2026). This section is updated as each piece lands.
+Build day 4 (26 November 2026). This section is updated as each piece lands.
 
 What works today:
 
@@ -17,18 +17,24 @@ What works today:
 - **On your device.** The code compiles in a Web Worker (10 second limit) and is shown in a 3D viewer that works with the mouse or the keyboard. The STL file can be downloaded.
 - **Print checks.** After every compile, four checks run on the mesh in the same worker. They take about a millisecond for the examples and about 70 ms for a 160,000-triangle part:
   - the surface is closed, with no holes;
-  - it fits the printer bed, which is 256 x 256 x 256 mm for now (a printer picker comes with the slicer);
+  - it fits the bed of the printer chosen in the Print panel (the Anycubic Kobra 2 Neo, 220 x 220 x 250 mm, until you choose another);
   - it sits flat on the bed;
   - nothing underneath leans more than 45 degrees from vertical over an area that would sag. An area counts only if it is at least 20 mm² and reaches more than 5 mm from a wall that holds it up, so small holes and short bridges pass. A wall that hangs from another overhang only holds with what is left of that overhang's 5 mm, so steps that each reach out a little cannot add up to a flat overhang. An area with nothing holding it up, such as the bottom of a piece floating in the air, fails at any size.
 
   The box beside the part says "Ready to print" or names what to fix, the viewer marks where it would sag, and "What we checked" lists every check with a word and an icon. The details are in [checks/](checks/).
-- **Fix it for me.** Sends our own instruction for each failed check (never model text) to Gemini as a change of the code on screen. The result is a new version, checked again; if it still fails, the page says so and keeps both versions. On a built-in example, the fix becomes a new part of your own. "Print with supports instead" is remembered on that version: the box then says to turn on supports in your slicer and the viewer keeps marking where they go. The site does not add supports itself yet.
-- **No key needed for the examples.** Three built-in parts (phone stand, wall hook, cable clip) open without a key.
-- **Tests, type checks and a build** run on every push, with a deploy to GitHub Pages from `main`.
+- **Fix it for me.** Sends our own instruction for each failed check (never model text) to Gemini as a change of the code on screen. The result is a new version, checked again; if it still fails, the page says so and keeps both versions. On a built-in example, the fix becomes a new part of your own. "Print with supports instead" is remembered on that version and is the same choice as "Print with supports" in the Print panel: the part is then sliced with supports, and the viewer keeps marking where they go.
+- **Slice for your printer, in the browser.** The Print panel under the status box slices the part with the [Kiri:Moto](https://github.com/GridSpace/grid-apps) engine in a Web Worker (2 minute limit, with Stop) and offers the G-code file. Nothing is sent to a server.
+  - Printers: Anycubic Kobra 2 Neo (the default), Anycubic Kobra 2, Creality Ender-3 V2, Creality Ender-3 S1 Plus, and "Other printer, 220 x 220 mm, Marlin". Bed sizes come from the makers' own firmware source. Start and end code come from Anycubic Slicer Next or Cura for that printer. Bambu Lab and Prusa printers are not offered: their makers' start code moves outside the bed or saves settings, which the safety check refuses.
+  - Settings come from our code only, never from a model: PLA at 205 °C nozzle and 60 °C bed, Normal (0.2 mm layers) or Fine (0.12 mm), infill 10, 15, 20 or 30 %, supports on or off.
+  - The print time is the slicer's estimate and is labelled so; at our deliberately slow speeds it runs long. Filament is shown in metres. Grams are not shown, because the flow is not calibrated yet.
+  - **Every G-code file is checked before it can be downloaded:** every move inside the bed and above zero height, homing before the first move, temperatures inside the PLA ranges, only commands on an allow-list (nothing that saves settings or changes firmware), the extruder mode stated before the first extrusion, and the part fan on by layer 3. A file that fails is not offered.
+  - **Not yet proven by a real print.** The first real print, a 20 mm test cube on the owner's Kobra 2 Neo, is still to be measured.
+- **No key needed for the examples.** Four built-in parts (phone stand, wall hook, cable clip and a 20 mm test cube) open without a key.
+- **Tests, type checks and a build** run on every push, with a deploy to GitHub Pages from `main`. CI also slices the examples and a cube for every printer in the picker and checks each file, and one Playwright test opens the test cube on the built site, slices it for the Kobra 2 Neo, downloads the file and checks it.
 
 The Gemini engine uses **your own free Gemini key**. It stays in your browser: in memory by default, or on your device only if you tick "Remember on this device". It is sent only to Google, in a request header. Parts you make are kept in the browser tab that made them. Gemini's output is shown to you only; it is never used to train the GKod model.
 
-Not built yet: the fine-tuned model and the slicer. The print checks do not yet look at wall thickness or compare the sizes with your words, and the size check measures the part as it is placed, without trying to turn it on the bed. Everything under "How it will work" below is the plan, not the current state.
+Not built yet: the fine-tuned model. The slicer has no layer preview yet. The print checks do not yet look at wall thickness or compare the sizes with your words, and the size check measures the part as it is placed, without trying to turn it on the bed. Everything under "How it will work" below is the plan, not the current state.
 
 Four feasibility tests were done before the build started. Their code and measured results are in [spikes/](spikes/).
 
@@ -39,12 +45,13 @@ Needs Node 22.18 or later.
 ```sh
 npm ci
 npm run fetch:openscad   # downloads the pinned OpenSCAD web build (about 3.4 MB) and checks its sha256
+npm run fetch:kiri       # builds the Kiri:Moto engine from a pinned source commit (checks its sha256) into app/public/kiri/
 npm run dev
 ```
 
-Other commands: `npm test`, `npm run typecheck`, `npm run build`, and `npm run licenses` to rebuild the third-party licence texts the site ships.
+Other commands: `npm test`, `npm run typecheck`, `npm run build`, `npm run e2e` (after a build), `npm run slice:printers` to slice the examples for every printer and check each file, `npm run check:gcode <file>` to check a G-code file, and `npm run licenses` to rebuild the third-party licence texts the site ships.
 
-`npm test` also runs the print checks tests in Google Chrome, so Chrome must be installed (or run `npx playwright install chrome`).
+`npm test`, `npm run e2e` and `npm run slice:printers` run in Google Chrome, so Chrome must be installed (or run `npx playwright install chrome`).
 
 Deploying needs one manual step first: in the repository settings, set Pages > Build and deployment > Source to "GitHub Actions". After that, the Pages workflow publishes every push to `main`.
 
@@ -77,7 +84,7 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 | Part code | [OpenSCAD](https://openscad.org) compiled to WebAssembly | GPL-2.0-or-later | In use |
 | Engine option | [Gemini API](https://ai.google.dev/gemini-api/docs/interactions-overview), called with the visitor's own key | Google's API terms | In use |
 | 3D viewer | [three.js](https://threejs.org) with [react-three-fiber](https://github.com/pmndrs/react-three-fiber) | MIT | In use |
-| Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) | MIT | Planned |
+| Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) engine, built from a pinned commit | MIT | In use |
 | Training | [MLX LM](https://github.com/ml-explore/mlx-lm) | MIT | Planned |
 
 The print checks are our own code, in [checks/](checks/). The pieces that are in the site today are listed, with exact versions and source links, in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
@@ -85,7 +92,7 @@ The print checks are our own code, in [checks/](checks/). The pieces that are in
 ## Limits
 
 - Practical parts first: brackets, hooks, stands, boxes, clips. Moving parts such as hinges and threads come later.
-- The built-in slicer gives a good first result. Its time and filament numbers will not exactly match a desktop slicer.
+- The built-in slicer gives a good first result. Its time and filament numbers are estimates and will not exactly match a desktop slicer.
 
 ## Licence
 
