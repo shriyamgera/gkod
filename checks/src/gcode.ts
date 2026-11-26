@@ -251,8 +251,12 @@ export function createGcodeChecker(limits: GcodeLimits) {
   }
 
   function temperature(text: string, code: string, words: Words) {
-    const value = words.get('S') ?? (code === 'M109' || code === 'M190' ? words.get('R') : undefined);
-    if (value === undefined) return;
+    const why = heaterWordProblem(code, words);
+    if (why) {
+      problem(text, why, 'heater-word');
+      return;
+    }
+    const value = (words.get('S') ?? words.get('R'))!;
     if (code === 'M104' || code === 'M109') {
       remember(seenNozzle, value);
       const inRange = value >= limits.nozzleMin && value <= limits.nozzleMax;
@@ -441,6 +445,24 @@ export function createLineSplitter(line: (text: string) => void) {
       rest = '';
     },
   };
+}
+
+// The only words a heater line may have. On Marlin, I picks a stored preset (and wins over S), F turns on
+// automatic temperature and B sets its upper limit; the Kobra 2 Neo's firmware has both.
+const HEATER_WORDS: Record<string, string[]> = { M104: ['S', 'T'], M109: ['S', 'R', 'T'], M140: ['S'], M190: ['S', 'R'] };
+
+function heaterWordProblem(code: string, words: Words): string | null {
+  for (const [key, value] of words) {
+    if (!HEATER_WORDS[code]!.includes(key)) {
+      if (key === 'I') return `${code} I picks a stored preset temperature, which a print file must never use.`;
+      if (key === 'F' || key === 'B') return `${code} ${key} changes the temperature on its own while printing, which a print file must never use.`;
+      return `${code} ${key} is not allowed. A heater line may only give the temperature with S${HEATER_WORDS[code]!.includes('R') ? ' or R' : ''}.`;
+    }
+    if (key === 'T' && value !== 0) return `${code} T${value} heats another nozzle, and these printers have one.`;
+  }
+  if (words.has('S') && words.has('R')) return `${code} gives the temperature twice, with both S and R.`;
+  if (!words.has('S') && !words.has('R')) return `${code} gives no temperature.`;
+  return null;
 }
 
 // Control characters are written as \x08 so the report can be shown.

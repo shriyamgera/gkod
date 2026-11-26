@@ -198,6 +198,31 @@ describe('checkGcode', () => {
     ]);
   });
 
+  it('fails heater words that set a temperature some other way than S or R', () => {
+    const cases: [string, string][] = [
+      ['M104 I1', 'M104 I picks a stored preset temperature, which a print file must never use.'],
+      ['M140 I1', 'M140 I picks a stored preset temperature, which a print file must never use.'],
+      ['M190 I1', 'M190 I picks a stored preset temperature, which a print file must never use.'],
+      ['M109 S205 I1', 'M109 I picks a stored preset temperature, which a print file must never use.'],
+      ['M104 S205 F1', 'M104 F changes the temperature on its own while printing, which a print file must never use.'],
+      ['M109 S205 F2', 'M109 F changes the temperature on its own while printing, which a print file must never use.'],
+      ['M104 S205 B260 F1', 'M104 B changes the temperature on its own while printing, which a print file must never use.'],
+      ['M109 S205 B260', 'M109 B changes the temperature on its own while printing, which a print file must never use.'],
+      ['M104 S205 T1', 'M104 T1 heats another nozzle, and these printers have one.'],
+      ['M140 S60 P1', 'M140 P is not allowed. A heater line may only give the temperature with S.'],
+      ['M109 S205 R205', 'M109 gives the temperature twice, with both S and R.'],
+      ['M104', 'M104 gives no temperature.'],
+      ['M140 R60', 'M140 R is not allowed. A heater line may only give the temperature with S.'],
+    ];
+    for (const [extra, reason] of cases) {
+      const report = check(file(6, (l) => replace(l, 'M107', [extra, 'M107'])));
+      expect(reasons(report)).toEqual([reason]);
+      expect(report.stats.nozzle).toEqual([205, 0]);
+    }
+    expect(check(file(6, (l) => replace(l, 'M104 S205', ['M104 T0 S205']))).ok).toBe(true);
+    expect(check(file(6, (l) => replace(l, 'M109 S205', ['M109 R205 T0']))).ok).toBe(true);
+  });
+
   it('fails commands that change or save printer settings', () => {
     const report = check(file(6, (l) => l.push('M500', 'M502', 'M997', 'M999', 'G29', 'M92 E400')));
     expect(reasons(report)).toEqual([
