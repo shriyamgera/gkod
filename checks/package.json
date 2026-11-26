@@ -10,6 +10,9 @@
   "imports": {
     "#checks/*": "./src/*.ts"
   },
+  "bin": {
+    "gkod-check": "bin/gkod-check.mjs"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p .",
