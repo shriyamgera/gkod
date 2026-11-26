@@ -125,6 +125,20 @@ describe('overhang', () => {
     expect(overhang(arm(true)).detail).toMatch(/^2 areas underneath would sag while printing; the biggest is about 126 mm²/);
   });
 
+  it('gives the same answer whatever the order of the triangles', () => {
+    // an upside-down box whose 28 mm roof is 14 mm from the walls in the middle, cut finely near the walls only
+    const fine = Array.from({ length: 21 }, (_, i) => 1 + i * 0.25);
+    const xs = [...new Set([0, ...fine, ...fine.map((v) => 30 - v), 30])].sort((a, b) => a - b);
+    const n = xs.length - 1;
+    const roof = cells(xs, xs, [0, 20, 23], (i, j, k) => k === 1 || i === 0 || j === 0 || i === n - 1 || j === n - 1);
+    const middle = roof.filter((t) => t.every(([x, y, z]) => z === 20 && x >= 6 && x <= 24 && y >= 6 && y <= 24));
+    expect(middle).toHaveLength(2);
+    const rest = roof.filter((t) => !middle.includes(t));
+    for (let at = 0; at < 4000; at += 500) {
+      expect(overhang([...rest.slice(0, at), ...middle, ...rest.slice(at)]).ok).toBe(false);
+    }
+  });
+
   it('ignores a small patch underneath, even one that reaches out', () => {
     // a ledge 3 mm wide sticking out 6 mm: 18 mm² underneath
     const ledge = (width: number) =>

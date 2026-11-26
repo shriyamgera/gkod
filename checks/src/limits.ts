@@ -50,6 +50,3 @@ export const SUPPORT_DROP_MM = 0.01;
 
 // A long edge that holds an overhang up is measured in pieces this long, since what holds it up can change along it.
 export const WALL_PIECE_MM = 2;
-
-// The reach of a very large overhang area is measured on this many sample points at most, to keep the check fast.
-export const MAX_REACH_SAMPLES = 4000;

@@ -1,8 +1,9 @@
 import { mm, mm2 } from '#checks/format';
-import { MAX_REACH_MM, MAX_REACH_SAMPLES, MIN_OVERHANG_MM2, NEAR_BED_MM, OVERHANG_TOLERANCE_DEG } from '#checks/limits';
+import { MAX_REACH_MM, MIN_OVERHANG_MM2, NEAR_BED_MM, OVERHANG_TOLERANCE_DEG } from '#checks/limits';
 import type { Mesh } from '#checks/mesh';
+import { nearWall } from '#checks/near';
 import { findPatches, type Patch } from '#checks/patches';
-import { distanceSq, findSupport, WALL } from '#checks/support';
+import { findSupport, WALL } from '#checks/support';
 import type { CheckResult, Vec3 } from '#checks/types';
 
 const title = 'No steep overhangs';
@@ -94,42 +95,26 @@ function steepFaces(mesh: Mesh, resting: Uint8Array, deg: number): Uint8Array {
 // A patch that nothing holds up within reach, such as the bottom of a piece floating in the air, would start
 // printing in mid-air however small it is. Any other patch sags when it is big enough and reaches too far.
 function sags(mesh: Mesh, patch: Patch, walls: number[]): boolean {
-  const holding: number[] = [];
-  for (let o = 0; o < walls.length; o += WALL) {
-    if (walls[o + 6]! < MAX_REACH_MM) holding.push(...walls.slice(o, o + WALL));
-  }
-  if (holding.length === 0) return true;
-  return patch.size >= MIN_OVERHANG_MM2 && !heldUp(mesh, holding, patch.faces);
+  let held = false;
+  for (let o = 0; o < walls.length && !held; o += WALL) held = walls[o + 6]! < MAX_REACH_MM;
+  if (!held) return true;
+  return patch.size >= MIN_OVERHANG_MM2 && !heldUp(mesh, walls, patch.faces);
 }
 
-// True when every sampled point of the patch is within reach of an edge where a wall below holds it up.
+// True when every sampled point of every face of the patch is within reach of a wall that holds it up.
 function heldUp(mesh: Mesh, walls: number[], faces: number[]): boolean {
+  const near = nearWall(walls, mesh.min);
   const p = mesh.positions;
-  const step = Math.max(1, Math.ceil((faces.length * samples.length) / MAX_REACH_SAMPLES));
-  let hint = 0;
-  for (let i = 0; i < faces.length; i += step) {
-    const o = faces[i]! * 9;
+  for (const t of faces) {
+    const o = t * 9;
     for (const [a, b, c] of samples) {
       const x = a * p[o]! + b * p[o + 3]! + c * p[o + 6]!;
       const y = a * p[o + 1]! + b * p[o + 4]! + c * p[o + 7]!;
       const z = a * p[o + 2]! + b * p[o + 5]! + c * p[o + 8]!;
-      hint = nearWall(walls, x, y, z, hint);
-      if (hint < 0) return false;
+      if (!near(x, y, z)) return false;
     }
   }
   return true;
-}
-
-// Index of a wall within reach of the point, or -1: within 5 mm, less the reach the wall has already used.
-// Starts at the last hit, since neighbouring points share walls.
-function nearWall(walls: number[], x: number, y: number, z: number, hint: number): number {
-  const count = walls.length / WALL;
-  for (let k = 0; k < count; k++) {
-    const w = (hint + k) % count;
-    const left = MAX_REACH_MM - walls[w * WALL + 6]!;
-    if (distanceSq(walls, w * WALL, x, y, z) <= left * left) return w;
-  }
-  return -1;
 }
 
 // The sampled point of the patch nearest to its centre, so the marker sits on the patch even when it is a ring.
