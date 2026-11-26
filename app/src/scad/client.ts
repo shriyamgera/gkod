@@ -10,7 +10,8 @@ export type WorkerLike = {
   onerror: ((event: ErrorEvent) => void) | null;
 };
 
-export type CompileOptions = { timeoutMs?: number };
+// onStart runs once the compiler is loaded and this compile begins, so a page can tell loading apart from compiling.
+export type CompileOptions = { timeoutMs?: number; onStart?: () => void };
 
 export const TIMEOUT_MESSAGE = 'This took too long and was stopped.';
 export const CRASH_MESSAGE = 'The compiler stopped unexpectedly. Try again.';
@@ -29,7 +30,12 @@ export function createCompiler(makeWorker: () => WorkerLike) {
     worker = makeWorker();
   }
 
-  function runOne(source: string, overrides: Record<string, number>, timeoutMs: number): Promise<CompileResult> {
+  function runOne(
+    source: string,
+    overrides: Record<string, number>,
+    timeoutMs: number,
+    onStart?: () => void,
+  ): Promise<CompileResult> {
     return new Promise((resolve) => {
       const began = performance.now();
       const id = nextId++;
@@ -54,6 +60,7 @@ export function createCompiler(makeWorker: () => WorkerLike) {
         if (data.type === 'start') {
           clearTimeout(timer);
           timer = setTimeout(() => stop(TIMEOUT_MESSAGE), timeoutMs);
+          onStart?.();
         } else if (data.ok) {
           const params = applyOverrides(parseParams(data.paramExport), overrides);
           finish({ ok: true, stl: data.stl, params, log: data.log, ms: data.ms });
@@ -73,11 +80,11 @@ export function createCompiler(makeWorker: () => WorkerLike) {
   return function compile(
     source: string,
     overrides: Record<string, number> = {},
-    { timeoutMs = 10000 }: CompileOptions = {},
+    { timeoutMs = 10000, onStart }: CompileOptions = {},
   ): Promise<CompileResult> {
     const banned = findBannedCall(source);
     if (banned) return Promise.resolve({ ok: false, error: banned, log: [], ms: 0 });
-    const result = queue.then(() => runOne(source, overrides, timeoutMs));
+    const result = queue.then(() => runOne(source, overrides, timeoutMs, onStart));
     queue = result;
     return result;
   };

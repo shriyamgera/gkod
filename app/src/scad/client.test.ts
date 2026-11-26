@@ -103,6 +103,19 @@ describe('compile', () => {
     expect((await pending).ok).toBe(true);
   });
 
+  it('tells the caller when the compiler has loaded and the compile begins', async () => {
+    const { workers, compile } = setup();
+    const onStart = vi.fn();
+    const pending = compile('cube(1);', {}, { onStart });
+    await flush();
+    expect(onStart).not.toHaveBeenCalled();
+    workers[0]!.start();
+    expect(onStart).toHaveBeenCalledTimes(1);
+    workers[0]!.succeed();
+    await pending;
+    expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
   it('gives up when the compiler never loads', async () => {
     const { workers, compile } = setup();
     const pending = compile('cube(1);');
