@@ -128,8 +128,9 @@ export function createGeminiEngine({
         body: JSON.stringify(body),
         signal: controller.signal,
       });
-      const data: unknown = await response.json().catch(() => null);
-      if (!response.ok) return classify(response.status, data);
+      if (!response.ok) return classify(response.status, await response.json().catch(() => null));
+      // a body cut off by Stop, the time limit or a dropped connection goes to the catch below
+      const data: unknown = await response.json();
       return { text: answerText(data) };
     } catch {
       if (signal?.aborted) return { problem: 'cancelled', message: MESSAGES.cancelled };

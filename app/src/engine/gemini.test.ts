@@ -236,6 +236,41 @@ describe('gemini errors', () => {
     expect(result).toMatchObject({ ok: false, problem: 'cancelled' });
   });
 
+  describe('while the answer is still arriving', () => {
+    // The headers are in, the body is not. As with a real fetch, aborting the request errors the body.
+    const slowBody = ({ init }: Call) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"steps":[{"type":"model_output","content":['));
+          init.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')));
+        },
+      });
+      return new Response(stream, { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+
+    it('reports Stop as cancelled', async () => {
+      const controller = new AbortController();
+      const { engine: gemini } = engine([
+        (call) => {
+          setTimeout(() => controller.abort(), 10);
+          return slowBody(call);
+        },
+      ]);
+      const result = await gemini.run({ kind: 'create', prompt: 'A box' }, { signal: controller.signal });
+      expect(result).toMatchObject({ ok: false, problem: 'cancelled', message: MESSAGES.cancelled });
+    });
+
+    it('reports the time limit as too slow', async () => {
+      const { engine: gemini } = engine([slowBody], KEY, 30);
+      expect(await gemini.run({ kind: 'create', prompt: 'A box' })).toMatchObject({ problem: 'network', message: MESSAGES.timeout });
+    });
+
+    it('reports a body that cannot be read as a network problem', async () => {
+      const { engine: gemini } = engine([() => new Response('{"steps": [', { status: 200 })]);
+      expect(await gemini.run({ kind: 'create', prompt: 'A box' })).toMatchObject({ problem: 'network', message: MESSAGES.network });
+    });
+  });
+
   it('does not call Gemini when already cancelled', async () => {
     const controller = new AbortController();
     controller.abort();
