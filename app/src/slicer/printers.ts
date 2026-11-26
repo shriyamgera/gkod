@@ -84,7 +84,10 @@ const kobra2Neo: Facts = {
 
 // Anycubic Kobra 2. Bed 220 x 220 mm, 250 mm high, from Anycubic's own firmware source and slicer profile
 // (Kiri:Moto's own profile says 200 x 200 mm, which is wrong). Start and end code: Anycubic Slicer Next,
-// "Anycubic Kobra 2 0.4 nozzle" (AGPL-3.0). Only the temperatures are ours.
+// "Anycubic Kobra 2 0.4 nozzle" (AGPL-3.0). Ours: the temperatures, and X10 on the move to the purge point. After
+// homing, this printer's firmware leaves the head at a calibration point it keeps in its own memory
+// (home_z_safely in G28.cpp), so the purge line now starts at X10, as the Kobra 2 Neo's own code does, and is the
+// "5cm line" its comment describes.
 const kobra2: Facts = {
   id: 'anycubic-kobra-2',
   name: 'Anycubic Kobra 2',
@@ -103,7 +106,7 @@ const kobra2: Facts = {
     'G28 ;Move X/Y/Z to min endstops',
     'G1 Z0.28 ;Lift nozzle a bit',
     'G92 E0 ;Specify current extruder position as zero',
-    'G1 Y3 F1800 ;Move Y to purge point',
+    'G1 X10 Y3 F1800 ;Move to purge point',
     'G1 X60 E25 F500 ;Extrude 25mm of filament in a 5cm line',
     'G92 E0 ;Zero the extruded length again',
     'G1 E-2 F500 ;Retract a little',

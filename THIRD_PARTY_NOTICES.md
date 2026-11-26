@@ -77,7 +77,7 @@ Files copied into the grid-apps source (`src/ext`) and bundled with it:
 
 ## Printer profiles
 
-The bed sizes come from each maker's own firmware source. The start and end G-code of each printer is copied from an open-source slicer profile for that printer; only the temperatures (PLA, nozzle 205 °C, bed 60 °C) are filled in by GKod. The extruder mode line and the part fan lines in the sliced part are GKod's own. Every G-code file is checked by GKod's safety check before it is offered.
+The bed sizes come from each maker's own firmware source. The start and end G-code of each printer is copied from an open-source slicer profile for that printer; only the temperatures (PLA, nozzle 205 °C, bed 60 °C) are filled in by GKod. On the Anycubic Kobra 2, GKod also adds X10 to the move to the purge line (`G1 X10 Y3`), because that printer's firmware leaves the head at a calibration point it keeps in its own memory after homing, and the safety check only allows filament to be pushed from a known place. The extruder mode line and the part fan lines in the sliced part are GKod's own. Every G-code file is checked by GKod's safety check before it is offered.
 
 | Printer | Bed (mm) | Bed size from | Start and end code from | Licence of that code |
 |---|---|---|---|---|

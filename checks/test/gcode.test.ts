@@ -70,7 +70,7 @@ describe('checkGcode', () => {
   });
 
   it('reads Windows line ends, comments, line numbers and checksums', () => {
-    const text = file(6, (lines) => lines.splice(5, 0, '', '; only a comment', 'N12 G1 X50 Y50*71'));
+    const text = file(6, (lines) => lines.splice(8, 0, '', '; only a comment', 'N12 G1 X50 Y50*71'));
     expect(check(text.replace(/\n/g, '\r\n')).problems).toEqual([]);
   });
 
@@ -340,6 +340,25 @@ describe('checkGcode', () => {
   it('fails a relative move right after homing, when the position is not known', () => {
     expect(reasons(check(file(6, (l) => replace(l, 'G28', ['G28', 'G91', 'G1 Z5', 'G90']))))).toEqual([
       'Moves Z by a relative amount while its position is unknown, right after homing.',
+    ]);
+  });
+
+  it('fails filament pushed from a place homing left unknown', () => {
+    const where = 'Pushes filament from a place that is not known, right after homing (G28). Move to X, Y and Z first.';
+    // homing X and Y parks the head off the bed's edge on some printers, so a purge from there is refused
+    expect(reasons(check(file(6, (l) => replace(l, 'G1 X60 Y5 E20 F500 ; purge line', ['G28 X Y', 'G1 X100 E20 F500']))))).toContain(where);
+    expect(reasons(check(file(6, (l) => replace(l, 'G1 X10 Y5', ['G1 E20', 'G1 X200 E10']))))).toContain(where);
+    expect(reasons(check(file(6, (l) => replace(l, 'G1 X10 Y5', ['G1 Y3']))))).toEqual([where]);
+    // a travel move with one side still at its home position is fine, as at the end of the Kobra 2 Neo's code
+    expect(check(file(6, (l) => replace(l, 'G28 X Y', ['G28 X Y', 'G1 Y220']))).ok).toBe(true);
+  });
+
+  it('fails a move across the bed before the nozzle height is set after homing', () => {
+    expect(reasons(check(file(6, (l) => replace(l, 'G1 Z0.3 F3000', ['G1 X10 Y10', 'G1 Z0.3 F3000']))))).toEqual([
+      'Moves across the bed before the nozzle height is known, right after homing (G28).',
+    ]);
+    expect(reasons(check(file(6, (l) => replace(l, 'G1 Z0.3 F3000', ['G1 X10 Y10 Z5']))))).toEqual([
+      'Moves across the bed before the nozzle height is known, right after homing (G28).',
     ]);
   });
 

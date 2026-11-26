@@ -120,7 +120,7 @@ const profiles: Item[] = [
     name: 'Anycubic Kobra 2',
     licence: 'AGPL-3.0',
     href: `${ANYCUBIC_SLICER}/Anycubic%20Kobra%202%200.4%20nozzle.json`,
-    note: "Start and end code from Anycubic Slicer Next. Bed 220 x 220 x 250 mm, from Anycubic's firmware source.",
+    note: "Start and end code from Anycubic Slicer Next, with X10 added to the move to the purge line so it starts from a known place. Bed 220 x 220 x 250 mm, from Anycubic's firmware source.",
   },
   {
     name: 'Creality Ender-3 V2',

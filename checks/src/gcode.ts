@@ -135,7 +135,7 @@ export function createGcodeChecker(limits: GcodeLimits) {
     return from + value;
   }
 
-  function extrude(text: string, words: Words, movedXY: boolean) {
+  function extrude(text: string, words: Words, movedXY: boolean, from: Record<Axis, number | null>) {
     const value = words.get('E');
     if (value === undefined) return;
     const absolute = eMode === 'absolute';
@@ -145,6 +145,10 @@ export function createGcodeChecker(limits: GcodeLimits) {
       problem(text, `Moves ${round(Math.abs(de))} mm of filament in one move, so the extruder mode is probably wrong.`, 'e-big');
     }
     if (de <= 0) return;
+    // Homing leaves the head wherever the printer's firmware chooses, so filament may only go down from a known place.
+    if ([from.X, from.Y, from.Z, pos.X, pos.Y, pos.Z].includes(null)) {
+      problem(text, 'Pushes filament from a place that is not known, right after homing (G28). Move to X, Y and Z first.', 'e-unknown');
+    }
     if (!extruded) {
       extruded = true;
       extruderMode = eMode;
@@ -183,7 +187,12 @@ export function createGcodeChecker(limits: GcodeLimits) {
     if ((['X', 'Y', 'Z'] as Axis[]).some((axis) => words.has(axis) && !homed[axis])) {
       problem(text, 'Moves before the printer is homed (G28).', 'not-homed');
     }
-    const from = { X: pos.X, Y: pos.Y };
+    const movedXY = words.has('X') || words.has('Y') || isArc;
+    // After homing, the nozzle can rest on the bed until a move sets its height.
+    if (movedXY && pos.Z === null && homed.X && homed.Y) {
+      problem(text, 'Moves across the bed before the nozzle height is known, right after homing (G28).', 'z-unknown');
+    }
+    const from = { ...pos };
     const x = target(text, words, 'X');
     const y = target(text, words, 'Y');
     const z = target(text, words, 'Z');
@@ -194,7 +203,7 @@ export function createGcodeChecker(limits: GcodeLimits) {
     pos.X = x;
     pos.Y = y;
     pos.Z = z;
-    extrude(text, words, words.has('X') || words.has('Y') || isArc);
+    extrude(text, words, movedXY, from);
   }
 
   function arc(
