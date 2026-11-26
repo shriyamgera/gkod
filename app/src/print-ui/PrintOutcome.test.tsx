@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { Printer } from '../slicer/printers';
 import type { SliceResult, SliceSettings } from '../slicer/types';
 import { PrintOutcome, phaseAnnouncement, UNSAFE } from './PrintOutcome';
-import { PART_UPDATING, type Phase, phaseFrom, problemLine, SETTINGS_CHANGED, SHAPE_CHANGED, type Sliced, staleNote } from './run';
+import { PART_UPDATING, type Phase, phaseFrom, problemLine, SETTINGS_CHANGED, SHAPE_CHANGED, SLICE_AGAIN, type Sliced, staleNote } from './run';
 
 const kobra: Printer = {
   id: 'anycubic-kobra-2-neo',
@@ -85,14 +85,14 @@ describe('PrintOutcome', () => {
   });
 
   it('marks a result as out of date and takes the download away once anything changed', () => {
-    const html = outcome({ kind: 'done', sliced: job, result: finished }, SETTINGS_CHANGED);
+    const html = outcome({ kind: 'done', sliced: job, result: finished }, staleNote(job, stl, { ...settings, infill: 30 }));
     expect(visible(html)).toContain('Settings changed. Slice again.');
     expect(html).toContain('data-stale="true"');
     expect(html).not.toContain('Download G-code');
   });
 
   it('takes the download away while the part is updating, before the new shape is ready', () => {
-    const note = staleNote(job, stl, settings, { updating: true });
+    const note = staleNote(job, stl, settings, { updating: true, canSlice: false });
     expect(note).toBe('The part is updating.');
     const html = outcome({ kind: 'done', sliced: job, result: finished }, note);
     expect(visible(html)).toContain('The part is updating.');
@@ -170,9 +170,20 @@ describe('staleNote', () => {
   });
 
   it('says the part changed when the shape is different or gone', () => {
-    expect(staleNote(job, new Uint8Array([1, 2, 3, 5]).buffer, settings)).toBe(SHAPE_CHANGED);
-    expect(staleNote(job, new Uint8Array([1, 2, 3]).buffer, settings)).toBe(SHAPE_CHANGED);
-    expect(staleNote(job, null, settings)).toBe(SHAPE_CHANGED);
+    expect(staleNote(job, new Uint8Array([1, 2, 3, 5]).buffer, settings)).toBe('The part changed. Slice again.');
+    expect(staleNote(job, new Uint8Array([1, 2, 3]).buffer, settings)).toBe(`${SHAPE_CHANGED} ${SLICE_AGAIN}`);
+    expect(staleNote(job, null, settings)).toBe(`${SHAPE_CHANGED} ${SLICE_AGAIN}`);
+  });
+
+  it('says to slice again only when the slice button works', () => {
+    expect(staleNote(job, stl, { ...settings, supports: true }, { canSlice: false })).toBe('Settings changed.');
+    expect(staleNote(job, null, settings, { canSlice: false })).toBe('The part changed.');
+    expect(staleNote(job, stl, { ...settings, supports: true }, { canSlice: true })).toBe('Settings changed. Slice again.');
+  });
+
+  it('says the part is updating while it builds, even before anything differs', () => {
+    expect(staleNote(job, stl, settings, { updating: true })).toBe(PART_UPDATING);
+    expect(staleNote(job, stl, settings, { updating: false })).toBeNull();
   });
 
   it('says the settings changed when any one of them did', () => {
@@ -182,12 +193,7 @@ describe('staleNote', () => {
       { infill: 30 },
       { supports: true },
     ];
-    for (const change of changes) expect(staleNote(job, stl, { ...settings, ...change })).toBe(SETTINGS_CHANGED);
-  });
-
-  it('says the part is updating while it builds, even before anything differs', () => {
-    expect(staleNote(job, stl, settings, { updating: true })).toBe(PART_UPDATING);
-    expect(staleNote(job, stl, settings, { updating: false })).toBeNull();
+    for (const change of changes) expect(staleNote(job, stl, { ...settings, ...change })).toBe(`${SETTINGS_CHANGED} ${SLICE_AGAIN}`);
   });
 });
 

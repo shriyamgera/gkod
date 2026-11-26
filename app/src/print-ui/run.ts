@@ -23,12 +23,15 @@ export function phaseFrom(result: SliceResult, sliced: Sliced): Phase {
 }
 
 export const PART_UPDATING = 'The part is updating.';
-export const SHAPE_CHANGED = 'The part changed. Slice again.';
-export const SETTINGS_CHANGED = 'Settings changed. Slice again.';
+export const SHAPE_CHANGED = 'The part changed.';
+export const SETTINGS_CHANGED = 'Settings changed.';
+export const SLICE_AGAIN = 'Slice again.';
 
 type Now = {
   // the part is being built again, so the shape on screen is not settled yet
   updating?: boolean;
+  // the slice button works; otherwise its own reason says what to do
+  canSlice?: boolean;
 };
 
 /**
@@ -37,6 +40,12 @@ type Now = {
  */
 export function staleNote(sliced: Sliced, stl: ArrayBuffer | null, settings: SliceSettings, now: Now = {}): string | null {
   if (now.updating) return PART_UPDATING;
+  const why = changed(sliced, stl, settings);
+  if (!why) return null;
+  return now.canSlice === false ? why : `${why} ${SLICE_AGAIN}`;
+}
+
+function changed(sliced: Sliced, stl: ArrayBuffer | null, settings: SliceSettings): string | null {
   if (!stl || !sameBytes(sliced.stl, stl)) return SHAPE_CHANGED;
   const a = sliced.settings;
   const same =

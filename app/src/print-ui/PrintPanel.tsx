@@ -54,14 +54,15 @@ export function PrintPanel(props: PrintPanelProps) {
   const printer = pick(printers, props.printerId ?? remembered);
   const settings: SliceSettings = { printerId: printer?.id ?? '', quality, infill, supports };
   const sliced = 'sliced' in phase ? phase.sliced : null;
+  const reason = printer ? props.blocked || blockReason(stl !== null, checksOk) : 'No printer to slice for.';
   // the page is building the part again (or fixing it): the shape it passes is still the old one
   const updating = checksOk === null && stl !== null;
   // compares the shape byte by byte, so it runs only when one of these changes, not on every progress step
   const stale = useMemo(
-    () => (sliced && phase.kind !== 'slicing' ? staleNote(sliced, stl, settings, { updating }) : null),
-    [sliced, phase.kind, stl, settings.printerId, quality, infill, supports, updating],
+    () =>
+      sliced && phase.kind !== 'slicing' ? staleNote(sliced, stl, settings, { updating, canSlice: reason === null }) : null,
+    [sliced, phase.kind, stl, settings.printerId, quality, infill, supports, updating, reason],
   );
-  const reason = printer ? props.blocked || blockReason(stl !== null, checksOk) : 'No printer to slice for.';
   // progress and a fresh file take the place of the button
   const showButton = phase.kind !== 'slicing' && !(phase.kind === 'done' && !stale);
 
