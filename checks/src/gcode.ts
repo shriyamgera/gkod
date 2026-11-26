@@ -99,14 +99,16 @@ export function createGcodeChecker(limits: GcodeLimits) {
     if (list.length < 20 && !list.includes(value)) list.push(value);
   }
 
+  // The nozzle must stay above the bed: at Z 0 it touches it.
   function inside(axis: Axis, value: number): boolean {
     const max = axis === 'X' ? bed.x : axis === 'Y' ? bed.y : bed.z;
-    return value >= -EPS && value <= max + EPS;
+    return (axis === 'Z' ? value > EPS : value >= -EPS) && value <= max + EPS;
   }
 
   function place(text: string, axis: Axis, value: number) {
     if (!inside(axis, value)) {
-      if (axis === 'Z' && value < 0) problem(text, `Moves the nozzle below the bed (Z ${round(value)} mm).`, 'below');
+      if (axis === 'Z' && value < -EPS) problem(text, `Moves the nozzle below the bed (Z ${round(value)} mm).`, 'below');
+      else if (axis === 'Z' && value <= EPS) problem(text, `Moves the nozzle down onto the bed (Z ${round(value)} mm).`, 'below');
       else {
         const max = axis === 'X' ? bed.x : axis === 'Y' ? bed.y : bed.z;
         problem(text, `Moves outside the bed: ${axis} ${round(value)} mm, the printer allows 0 to ${max} mm.`, `out-${axis}`);

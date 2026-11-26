@@ -168,6 +168,19 @@ describe('checkGcode', () => {
     ]);
   });
 
+  it('fails a move down to Z 0, where the nozzle touches the bed', () => {
+    expect(reasons(check(file(6, (l) => replace(l, 'G1 Z0.3 F3000', ['G1 Z0 F3000', 'G1 Z0.3']))))).toEqual([
+      'Moves the nozzle down onto the bed (Z 0 mm).',
+    ]);
+    expect(reasons(check(file(6, (l) => replace(l, 'G1 X120 Y100 E1', ['G1 Z0', 'G1 X120 Y100 E1']))))).toEqual([
+      'Moves the nozzle down onto the bed (Z 0 mm).',
+    ]);
+    expect(reasons(check(file(6, (l) => replace(l, 'G1 Z0.3 F3000', ['G1 Z-0.000001 F3000', 'G1 Z0.3']))))).toEqual([
+      'Moves the nozzle down onto the bed (Z 0 mm).',
+    ]);
+    expect(check(file(6, (l) => replace(l, 'G1 Z0.3 F3000', ['G1 Z0.05 F3000', 'G1 Z0.3']))).ok).toBe(true);
+  });
+
   it('fails a move before the printer is homed', () => {
     const report = check(file(6, (l) => l.unshift('G1 X10 Y10')));
     expect(report.problems.map((p) => [p.line, p.reason])).toEqual([
