@@ -44,6 +44,8 @@ npm run dev
 
 Other commands: `npm test`, `npm run typecheck`, `npm run build`, and `npm run licenses` to rebuild the third-party licence texts the site ships.
 
+`npm test` also runs the print checks tests in Google Chrome, so Chrome must be installed (or run `npx playwright install chrome`).
+
 Deploying needs one manual step first: in the repository settings, set Pages > Build and deployment > Source to "GitHub Actions". After that, the Pages workflow publishes every push to `main`.
 
 ## What makes it different

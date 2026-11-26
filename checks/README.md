@@ -35,4 +35,4 @@ npx gkod-check part.stl [more.stl ...] [--bed 256x256x256] [--overhang 45] [--js
 
 ## Tests
 
-`npm test` runs the same test files in Node and in headless Chrome (Vitest browser mode). The STL files in `test/fixtures` are the built-in examples at their default sizes; `npm run fixtures` rebuilds them.
+`npm test` runs the same test files in Node and in headless Chrome (Vitest browser mode). It uses the Google Chrome installed on the machine and downloads no browser, so Chrome must be installed (or run `npx playwright install chrome`). The STL files in `test/fixtures` are the built-in examples at their default sizes; `npm run fixtures` rebuilds them.
