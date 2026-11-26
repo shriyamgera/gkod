@@ -11,21 +11,30 @@ export const TOO_LONG_MESSAGE = 'Gemini sent more code than a part needs, so it 
 
 const fenceOpen = /^[ \t]*```[ \t]*([\w+-]*)/;
 const fenceClose = /^[ \t]*```[ \t]*$/;
-const scadTags = new Set(['', 'openscad', 'scad']);
+const scadTags = new Set(['openscad', 'scad']);
 
-// The first fenced block marked as OpenSCAD or not marked at all. A block cut off at the end still counts.
-function firstBlock(text: string): string | null {
+type Block = { tag: string; body: string };
+
+// Every fenced block with its language tag. A block cut off at the end still counts.
+function fencedBlocks(text: string): Block[] {
   const lines = text.split('\n');
+  const blocks: Block[] = [];
   for (let i = 0; i < lines.length; i++) {
     const open = fenceOpen.exec(lines[i]!);
     if (!open) continue;
     let end = i + 1;
     while (end < lines.length && !fenceClose.test(lines[end]!)) end++;
-    if (scadTags.has(open[1]!.toLowerCase())) return lines.slice(i + 1, end).join('\n');
-    // a block in another language is skipped as a whole
+    blocks.push({ tag: open[1]!.toLowerCase(), body: lines.slice(i + 1, end).join('\n') });
     i = end;
   }
-  return null;
+  return blocks;
+}
+
+// The first block marked as OpenSCAD; failing that, the first one not marked at all.
+function codeBlock(text: string): string | null {
+  const blocks = fencedBlocks(text);
+  const block = blocks.find((item) => scadTags.has(item.tag)) ?? blocks.find((item) => item.tag === '');
+  return block ? block.body : null;
 }
 
 const shapes = /\b(cube|cylinder|sphere|polygon|polyhedron|square|circle|linear_extrude|rotate_extrude|hull|difference|union)\s*\(/;
@@ -39,7 +48,7 @@ function looksLikeScad(text: string): boolean {
 
 export function extractCode(answer: string): Extracted {
   const text = answer.replace(/\r\n?/g, '\n');
-  let code = firstBlock(text);
+  let code = codeBlock(text);
   if (code === null && looksLikeScad(text)) code = text;
   code = code?.trim() ?? '';
   if (!code) return { ok: false, problem: 'no-code', message: NO_CODE_MESSAGE };

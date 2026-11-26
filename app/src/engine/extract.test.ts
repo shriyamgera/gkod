@@ -25,6 +25,11 @@ describe('extractCode', () => {
     expect(extractCode(answer)).toMatchObject({ ok: true, code: `${part}\n` });
   });
 
+  it('prefers a block marked as openscad over an earlier unmarked one', () => {
+    const answer = `Sizes used:\n\`\`\`\nwidth: 40 mm\n\`\`\`\nCode:\n\`\`\`openscad\n${part}\n\`\`\``;
+    expect(extractCode(answer)).toMatchObject({ ok: true, code: `${part}\n` });
+  });
+
   it('keeps a block that was cut off before its closing fence', () => {
     expect(extractCode(`\`\`\`openscad\n${part}`)).toMatchObject({ ok: true, code: `${part}\n` });
   });
