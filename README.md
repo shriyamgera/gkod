@@ -48,6 +48,10 @@ Other commands: `npm test`, `npm run typecheck`, `npm run build`, and `npm run l
 
 Deploying needs one manual step first: in the repository settings, set Pages > Build and deployment > Source to "GitHub Actions". After that, the Pages workflow publishes every push to `main`.
 
+## Use GKod's tools from an MCP client
+
+The `mcp/` folder holds a small Python server that lets an MCP client compile parts, run the print checks and look at each part as a picture, with the same compiler and checks as the site. How to set it up and register it is in [mcp/README.md](mcp/README.md). The `gkod` command it calls also works on its own; see [tools/](tools/README.md).
+
 ## What makes it different
 
 Most "text to 3D" tools return a fixed mesh. If the hole is 2 mm too small, you start again.
