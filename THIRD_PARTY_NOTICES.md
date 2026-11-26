@@ -59,7 +59,7 @@ Versions are the ones in `package-lock.json` on the date above.
 
 ## Fonts
 
-The fonts are loaded from Google Fonts when the page opens. They are not copied into this repository or into the site files.
+The font files ship with the site, so a page load asks no other server for them. They are in `app/src/styles/fonts`, with each font's licence text beside them. The files are the Latin and Latin Extended subsets from the Fontsource packages `@fontsource-variable/archivo` 5.3.0 and `@fontsource/ibm-plex-mono` 5.3.0, which are built from the Google Fonts versions.
 
 | Font | Licence | Source |
 |---|---|---|

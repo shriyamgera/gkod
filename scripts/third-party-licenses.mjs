@@ -1,5 +1,5 @@
 // Writes app/public/third-party-licenses.txt: the full licence text of every piece of third-party
-// software the site ships. Package texts come from node_modules; the rest are fetched from pinned sources.
+// software and every font the site ships. Package texts come from node_modules; the rest are fetched from pinned sources.
 // usage: node scripts/third-party-licenses.mjs  (after npm ci)
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -39,6 +39,16 @@ const others = [
     title: 'Manifold 3.5.4, inside openscad.wasm',
     licence: 'Apache-2.0',
     url: 'https://raw.githubusercontent.com/elalish/manifold/v3.5.4/LICENSE',
+  },
+  {
+    title: 'Archivo font (Fontsource 5.3.0 files)',
+    licence: 'OFL-1.1',
+    file: join(root, 'app/src/styles/fonts/OFL-Archivo.txt'),
+  },
+  {
+    title: 'IBM Plex Mono font (Fontsource 5.3.0 files)',
+    licence: 'OFL-1.1',
+    file: join(root, 'app/src/styles/fonts/OFL-IBM-Plex-Mono.txt'),
   },
   {
     title: 'GKod, and the GPL-3.0-or-later parts of CGAL 6.0.1 inside openscad.wasm',
@@ -82,10 +92,10 @@ for (const other of others) {
 const parts = [
   'Third-party licences for the GKod site',
   '',
-  'The full licence text of each piece of software the site ships. The list, with versions and',
-  'source links, is on the Notices page and in THIRD_PARTY_NOTICES.md in the source repository.',
-  'react-reconciler, copied inside @react-three/fiber, is part of React and under the same MIT',
-  'licence as react below. Made by scripts/third-party-licenses.mjs.',
+  'The full licence text of each piece of software and each font the site ships. The list, with',
+  'versions and source links, is on the Notices page and in THIRD_PARTY_NOTICES.md in the source',
+  'repository. react-reconciler, copied inside @react-three/fiber, is part of React and under the',
+  'same MIT licence as react below. Made by scripts/third-party-licenses.mjs.',
 ];
 for (const entry of entries) {
   parts.push('', rule, entry.title, entry.licence, rule, '', entry.text.replace(/\r\n?/g, '\n').trim());

@@ -208,7 +208,8 @@ export function Notices() {
           Fonts
         </h2>
         <p style={text}>
-          The fonts load from Google Fonts when the page opens. They are not copied into the site files.
+          The font files ship with the site, so no other server is asked for them. They are the Fontsource 5.3.0
+          builds of the Google Fonts versions.
         </p>
         <ItemList items={fonts} label="Fonts" />
       </section>

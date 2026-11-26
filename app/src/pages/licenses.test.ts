@@ -14,4 +14,11 @@ describe('third-party licence texts', () => {
     expect(texts).toContain('GNU GENERAL PUBLIC LICENSE\n\t\t       Version 2, June 1991');
     expect(texts).toContain('Apache License\n                           Version 2.0, January 2004');
   });
+
+  it('has the font licences', () => {
+    expect(texts).toMatch(/^Archivo font .*\nOFL-1\.1\n/m);
+    expect(texts).toMatch(/^IBM Plex Mono font .*\nOFL-1\.1\n/m);
+    expect(texts).toContain('Copyright 2020 The Archivo Project Authors');
+    expect(texts).toContain('Copyright 2017 IBM Corp.');
+  });
 });
