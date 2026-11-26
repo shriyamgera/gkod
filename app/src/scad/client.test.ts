@@ -83,10 +83,10 @@ describe('compile', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(await slow).toMatchObject({ ok: false, error: TIMEOUT_MESSAGE });
     expect(workers[0]!.terminated).toBe(true);
-    expect(workers).toHaveLength(2);
 
     const next = compile('cube(1);');
     await flush();
+    expect(workers).toHaveLength(2);
     expect(workers[0]!.requests).toHaveLength(1);
     workers[1]!.start();
     workers[1]!.succeed();
@@ -131,7 +131,30 @@ describe('compile', () => {
     workers[0]!.onerror?.({ message: 'boom' } as ErrorEvent);
     expect(await pending).toMatchObject({ ok: false, error: CRASH_MESSAGE });
     expect(workers[0]!.terminated).toBe(true);
+
+    const next = compile('cube(1);');
+    await flush();
     expect(workers).toHaveLength(2);
+    workers[1]!.start();
+    workers[1]!.succeed();
+    expect((await next).ok).toBe(true);
+  });
+
+  it('reports a new worker that fails to start instead of waiting for it', async () => {
+    // as when the worker script is gone: each worker fires its error soon after it is made
+    const compile = createCompiler(() => {
+      const worker = new FakeWorker();
+      setTimeout(() => worker.onerror?.({ message: 'worker script missing' } as ErrorEvent), 0);
+      return worker;
+    });
+    const first = compile('cube(1);');
+    await flush();
+    expect(await first).toMatchObject({ error: CRASH_MESSAGE });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const second = compile('cube(1);');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await second).toMatchObject({ error: CRASH_MESSAGE });
   });
 
   it('passes on a failure reported by the compiler', async () => {

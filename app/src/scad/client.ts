@@ -25,9 +25,10 @@ export function createCompiler(makeWorker: () => WorkerLike) {
   let queue: Promise<unknown> = Promise.resolve();
   let nextId = 1;
 
+  // The next compile makes the new worker, so its error handler is in place before its script loads.
   function restart() {
     worker?.terminate();
-    worker = makeWorker();
+    worker = null;
   }
 
   function runOne(
