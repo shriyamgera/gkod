@@ -9,7 +9,8 @@
   "workspaces": [
     "app",
     "checks",
-    "tools"
+    "tools",
+    "datagen"
   ],
   "scripts": {
     "dev": "npm run dev --workspace app",
