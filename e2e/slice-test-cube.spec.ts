@@ -20,7 +20,11 @@ test('slices the test cube for the Kobra 2 Neo and the G-code passes the safety 
   await print.getByRole('button', { name: 'Slice for my printer' }).click();
   const download = print.getByRole('button', { name: 'Download G-code' });
   await expect(download).toBeVisible({ timeout: 90_000 });
-  await expect(print.getByText('(estimate, not exact)')).toBeVisible();
+  await expect(print.getByText('(estimate, not exact)', { exact: true })).toBeVisible();
+  // a screen reader hears the same words as the screen shows
+  await expect(print.locator('[aria-live="polite"]')).toHaveText(
+    /^Sliced\. About \d+ (h|min)[\w ]* \(estimate, not exact\), \d+\.\d m of filament\. Ready to download\.$/,
+  );
   await expect(print.getByText(/m of filament$/)).toBeVisible();
   await expect(print.getByText(/\bgrams?\b|\d g\b/)).toHaveCount(0);
 
