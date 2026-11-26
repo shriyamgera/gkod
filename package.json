@@ -8,7 +8,8 @@
   },
   "workspaces": [
     "app",
-    "checks"
+    "checks",
+    "tools"
   ],
   "scripts": {
     "dev": "npm run dev --workspace app",
