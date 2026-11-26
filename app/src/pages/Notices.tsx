@@ -176,7 +176,8 @@ export function Notices() {
         <ItemList items={insideOpenscad} label="Libraries inside the OpenSCAD build" />
         <p className="muted" style={{ ...text, fontSize: 15 }}>
           The build also contains other libraries, each under its own licence, such as lib3mf, Clipper2, FreeType,
-          HarfBuzz, Fontconfig, libxml2, libzip, zlib, GLib, cairo, GMP, MPFR, Boost and Eigen. Their licences have
+          HarfBuzz, Fontconfig, libxml2, libzip, zlib, GLib, cairo, GMP, MPFR, Boost, Eigen and double-conversion.
+          Their licences have
           not been checked one by one here.{' '}
           <a href={`${OPENSCAD_REPO}/blob/${OPENSCAD_COMMIT}/README.md#prerequisites`}>OpenSCAD's own list</a>
         </p>
