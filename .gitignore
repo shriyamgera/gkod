@@ -28,5 +28,9 @@ app/public/openscad/
 # TypeScript build info
 *.tsbuildinfo
 
+# Playwright output
+test-results/
+playwright-report/
+
 # Kiri:Moto engine build (made by scripts/fetch-kiri.sh)
 app/public/kiri/

@@ -68,6 +68,10 @@ jobs:
             test -s "app/dist/$f" || { echo "missing app/dist/$f"; exit 1; }
           done
 
+      # Opens the test cube in the built site, slices it for the Kobra 2 Neo in Chrome, downloads the G-code and
+      # checks the file.
+      - run: npm run e2e
+
       # Slices the example parts and a 20 mm cube for every printer in the picker, in headless Chrome against a
       # production build, then checks every G-code file again in Node. Any failed check fails the run.
       - name: Slice for every printer and check the G-code
