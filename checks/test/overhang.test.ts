@@ -66,13 +66,15 @@ describe('overhang', () => {
     expect(overhang(leaningWall(60)).ok).toBe(false);
   });
 
-  it('passes an exact 45 degree slope', () => {
+  it('passes an exact 45 degree slope and fails one just past it', () => {
     expect(overhang(leaningWall(45)).ok).toBe(true);
+    expect(overhang(leaningWall(45.5)).ok).toBe(false);
   });
 
   it('uses the limit it is given', () => {
     expect(overhang(leaningWall(60), 65).ok).toBe(true);
     expect(overhang(leaningWall(30), 20).ok).toBe(false);
+    expect(overhang(leaningWall(30.5), 30).ok).toBe(false);
   });
 
   it('fails a piece floating above another, with nothing holding it up', () => {

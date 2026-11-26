@@ -4,7 +4,7 @@ import {
   MAX_REACH_SAMPLES,
   MIN_OVERHANG_MM2,
   NEAR_BED_MM,
-  OVERHANG_SLACK_DEG,
+  OVERHANG_TOLERANCE_DEG,
   SUPPORT_DROP_MM,
 } from '#checks/limits';
 import { across, type Mesh } from '#checks/mesh';
@@ -91,7 +91,7 @@ function restingFaces(mesh: Mesh, onBed: Uint8Array): Uint8Array {
 }
 
 function steepFaces(mesh: Mesh, resting: Uint8Array, deg: number): Uint8Array {
-  const limit = -Math.sin((Math.min(90, deg + OVERHANG_SLACK_DEG) * Math.PI) / 180);
+  const limit = -Math.sin((Math.min(90, deg + OVERHANG_TOLERANCE_DEG) * Math.PI) / 180);
   const steep = new Uint8Array(mesh.triangles);
   for (let t = 0; t < mesh.triangles; t++) {
     if (!mesh.skipped[t] && !resting[t] && mesh.areas[t]! > 0 && mesh.normals[t * 3 + 2]! < limit) steep[t] = 1;

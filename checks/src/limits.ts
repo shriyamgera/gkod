@@ -30,8 +30,8 @@ export const POINT_CONTACT_MM2 = 5;
 // Most printers print walls leaning up to 45 degrees from vertical without supports.
 export const DEFAULT_OVERHANG_DEG = 45;
 
-// Faces within this many degrees of the limit pass, so an exact 45 degree chamfer and its facets are fine.
-export const OVERHANG_SLACK_DEG = 1;
+// Faces this little past the limit still pass: it only absorbs float rounding, so an exact 45 degree chamfer passes.
+export const OVERHANG_TOLERANCE_DEG = 0.01;
 
 // A surface underneath this close to the bed just sags onto it, which does no harm.
 export const NEAR_BED_MM = 1;
