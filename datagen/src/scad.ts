@@ -1,7 +1,7 @@
 // The pieces of OpenSCAD the generator writes: number expressions over named sizes, and calls of the basic shapes.
 // Every part's code is built from these and printed by the functions below, with one fixed number format.
 
-export type Expr = number | { ref: string } | { op: '+' | '-' | '*' | '/'; a: Expr; b: Expr } | { fn: 'max' | 'min'; args: Expr[] };
+export type Expr = number | { ref: string } | { op: '+' | '-' | '*' | '/'; a: Expr; b: Expr } | { fn: 'max' | 'min' | 'sin' | 'cos'; args: Expr[] };
 
 /** Numbers are rounded to 4 decimals and printed the same way every time. */
 export function num(value: number): string {
@@ -53,6 +53,17 @@ export function min(...args: Expr[]): Expr {
   return args.every((arg) => typeof arg === 'number') ? Math.min(...(args as number[])) : { fn: 'min', args };
 }
 
+// OpenSCAD's sin and cos take degrees.
+const radians = (deg: number) => (deg * Math.PI) / 180;
+
+export function sin(a: Expr): Expr {
+  return typeof a === 'number' ? tidy(Math.sin(radians(a))) : { fn: 'sin', args: [a] };
+}
+
+export function cos(a: Expr): Expr {
+  return typeof a === 'number' ? tidy(Math.cos(radians(a))) : { fn: 'cos', args: [a] };
+}
+
 export type Env = Record<string, number>;
 
 export function evaluate(expr: Expr, env: Env): number {
@@ -64,6 +75,8 @@ export function evaluate(expr: Expr, env: Env): number {
   }
   if ('fn' in expr) {
     const values = expr.args.map((arg) => evaluate(arg, env));
+    if (expr.fn === 'sin') return Math.sin(radians(values[0]!));
+    if (expr.fn === 'cos') return Math.cos(radians(values[0]!));
     return expr.fn === 'max' ? Math.max(...values) : Math.min(...values);
   }
   const a = evaluate(expr.a, env);
