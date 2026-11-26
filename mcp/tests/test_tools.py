@@ -155,6 +155,21 @@ def test_render_part_explains_wrong_calls():
         server.render_part(code="cube(10")
 
 
+def test_render_part_refuses_files_that_are_not_stl(out_folder):
+    stl = Path(server.compile_part("cube(10);")["stl_path"])
+    named = stl.with_suffix(".scad")
+    named.write_bytes(stl.read_bytes())
+    with pytest.raises(GkodError, match="Give an STL file inside the GKod repo"):
+        server.render_part(stl_path=str(named))
+
+
+def test_a_failed_render_says_why(tmp_path):
+    broken = tmp_path / "broken.scad"
+    broken.write_text("cube(10")
+    with pytest.raises(GkodError, match=r"The picture could not be drawn: Line \d+: Parser error"):
+        server._render(str(broken), "iso", False)
+
+
 def test_preview_example_does_everything_in_one_call():
     picture, text = server.preview_example("phone_stand", view="side")
     assert picture.data.startswith(PNG)

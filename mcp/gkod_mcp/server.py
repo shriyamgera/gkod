@@ -118,7 +118,9 @@ def _render(stl_path: str, view: str, mark_overhangs: bool) -> Path:
     args = ["render", stl_path, "-o", str(png), "--view", view, "--size", str(PICTURE_PX)]
     if mark_overhangs:
         args.append("--mark-overhangs")
-    run_gkod(args, RENDER_SECONDS)
+    result = run_gkod(args, RENDER_SECONDS)
+    if not result.get("ok") or not png.is_file():
+        raise GkodError(f"The picture could not be drawn: {result.get('error') or 'gkod render wrote no PNG'}")
     return png
 
 
