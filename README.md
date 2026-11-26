@@ -6,7 +6,7 @@ The name is a short form of G-code, the file a 3D printer runs.
 
 ## Status
 
-Build day 2 (26 November 2026). This section is updated as each piece lands.
+Build day 3 (26 November 2026). This section is updated as each piece lands.
 
 What works today:
 
@@ -15,18 +15,26 @@ What works today:
 - **Change it by typing.** "Make it 10 mm wider" sends the current code back and makes a new version. Every version is listed, with the model that wrote it. Undo and Redo (or Ctrl+Z and Shift+Ctrl+Z) move between them.
 - **Sizes.** A slider and a number box for each named size. The part recompiles as you change them.
 - **On your device.** The code compiles in a Web Worker (10 second limit) and is shown in a 3D viewer that works with the mouse or the keyboard. The STL file can be downloaded.
+- **Print checks.** After every compile, four checks run on the mesh in the same worker. They take about a millisecond for the examples and about 40 ms for a 160,000-triangle part:
+  - the surface is closed, with no holes;
+  - it fits the printer bed, which is 256 x 256 x 256 mm for now (a printer picker comes with the slicer);
+  - it sits flat on the bed;
+  - nothing underneath leans more than 45 degrees from vertical over an area that would sag. An area counts only if it is at least 20 mm² and reaches more than 5 mm from a wall that holds it up, so small holes and short bridges pass.
+
+  The box beside the part says "Ready to print" or names what to fix, the viewer marks where it would sag, and "What we checked" lists every check with a word and an icon. The details are in [checks/](checks/).
+- **Fix it for me.** Sends our own instruction for each failed check (never model text) to Gemini as a change of the code on screen. The result is a new version, checked again; if it still fails, the page says so and keeps both versions. On a built-in example, the fix becomes a new part of your own. "Print with supports instead" is remembered on that version, for the slicer.
 - **No key needed for the examples.** Three built-in parts (phone stand, wall hook, cable clip) open without a key.
 - **Tests, type checks and a build** run on every push, with a deploy to GitHub Pages from `main`.
 
 The Gemini engine uses **your own free Gemini key**. It stays in your browser: in memory by default, or on your device only if you tick "Remember on this device". It is sent only to Google, in a request header. Parts you make are kept in the browser tab that made them. Gemini's output is shown to you only; it is never used to train the GKod model.
 
-Not built yet: the fine-tuned model, the print checks and the slicer. Everything under "How it will work" below is the plan, not the current state.
+Not built yet: the fine-tuned model and the slicer. The print checks do not yet look at wall thickness or compare the sizes with your words, and the size check measures the part as it is placed, without trying to turn it on the bed. Everything under "How it will work" below is the plan, not the current state.
 
 Four feasibility tests were done before the build started. Their code and measured results are in [spikes/](spikes/).
 
 ## Run it locally
 
-Needs Node 22.
+Needs Node 22.18 or later.
 
 ```sh
 npm ci
@@ -70,7 +78,7 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 | Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) | MIT | Planned |
 | Training | [MLX LM](https://github.com/ml-explore/mlx-lm) | MIT | Planned |
 
-The print checks will be our own code. The pieces that are in the site today are listed, with exact versions and source links, in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The print checks are our own code, in [checks/](checks/). The pieces that are in the site today are listed, with exact versions and source links, in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Limits
 
