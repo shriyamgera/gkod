@@ -20,6 +20,10 @@ describe('overhang', () => {
       '2 areas underneath would sag while printing; the biggest is about 500 mm² and 30 mm above the bed.',
     );
     expect(result.fix).toMatch(/^Change the design so no surface underneath leans more than 45 degrees from vertical/);
+    // how far the biggest area reaches, so a fix holds up all of it
+    expect(result.fix).toMatch(
+      /There are 2 problem areas; the biggest is underneath at z = 30 mm and spans x = (0 to 25|35 to 60) mm and y = 0 to 20 mm\. Whatever holds it up, such as a slope of at most 45 degrees from vertical, must reach all of it\./,
+    );
     // both undersides are marked: two triangles each, flat at z = 30, facing down
     expect(result.triangles).toHaveLength(4);
     for (const t of result.triangles!) {
@@ -37,6 +41,7 @@ describe('overhang', () => {
     const long = overhang(bridge(20));
     expect(long.ok).toBe(false);
     expect(long.detail).toBe('An area underneath, about 400 mm² and 20 mm above the bed, would sag while printing.');
+    expect(long.fix).toContain('The problem area is underneath at z = 20 mm and spans x = 10 to 30 mm and y = 0 to 20 mm.');
   });
 
   it('passes a small hole through a block lying on its side', () => {

@@ -46,12 +46,37 @@ export function checkOverhang(mesh: Mesh, onBed: Uint8Array, deg: number): Check
     ok: false,
     title,
     detail,
-    fix:
-      `Change the design so no surface underneath leans more than ${mm(deg)} degrees from vertical; keep every named size. ` +
-      `The biggest problem area is around x = ${mm(at[0])}, y = ${mm(at[1])}, z = ${mm(at[2])} mm.`,
+    fix: fixText(mesh, worst, sagging.length, at, deg),
     triangles: sagging.flatMap((patch) => patch.faces).sort((a, b) => a - b),
     at,
   };
+}
+
+// Says how far the biggest area reaches, so a fix can hold all of it up instead of only its middle.
+function fixText(mesh: Mesh, worst: Patch, count: number, at: Vec3, deg: number): string {
+  const [lo, hi] = extent(mesh, worst.faces);
+  const height = hi[2] - lo[2] < 0.5 ? `z = ${mm(at[2])} mm` : `z = ${mm(lo[2])} to ${mm(hi[2])} mm`;
+  const which = count === 1 ? 'The problem area' : `There are ${count} problem areas; the biggest`;
+  return (
+    `Change the design so no surface underneath leans more than ${mm(deg)} degrees from vertical; keep every named size. ` +
+    `${which} is underneath at ${height} and spans x = ${mm(lo[0])} to ${mm(hi[0])} mm and y = ${mm(lo[1])} to ${mm(hi[1])} mm. ` +
+    `Whatever holds it up, such as a slope of at most ${mm(deg)} degrees from vertical, must reach all of it. ` +
+    'Turning the part so that surface rests on the bed also works.'
+  );
+}
+
+function extent(mesh: Mesh, faces: number[]): [Vec3, Vec3] {
+  const lo: Vec3 = [Infinity, Infinity, Infinity];
+  const hi: Vec3 = [-Infinity, -Infinity, -Infinity];
+  const p = mesh.positions;
+  for (const t of faces) {
+    for (let i = t * 9; i < t * 9 + 9; i++) {
+      const k = i % 3;
+      lo[k] = Math.min(lo[k]!, p[i]!);
+      hi[k] = Math.max(hi[k]!, p[i]!);
+    }
+  }
+  return [lo, hi];
 }
 
 // Faces on the bed, or so close to it that they sag onto it. Either way they hold up the faces next to them.
