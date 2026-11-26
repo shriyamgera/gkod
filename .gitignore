@@ -27,3 +27,6 @@ app/public/openscad/
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Kiri:Moto engine build (made by scripts/fetch-kiri.sh)
+app/public/kiri/

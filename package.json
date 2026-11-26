@@ -16,6 +16,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "fetch:openscad": "sh scripts/fetch-openscad.sh",
+    "fetch:kiri": "sh scripts/fetch-kiri.sh",
     "licenses": "node scripts/third-party-licenses.mjs"
   }
 }
