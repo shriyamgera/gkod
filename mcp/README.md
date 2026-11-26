@@ -16,7 +16,7 @@ Views: `iso` (front right, from above, like the site's viewer), `front`, `side` 
 
 Printers: `kobra2neo` (Anycubic Kobra 2 Neo, 220 x 220 x 250 mm, the default), `p1s` and `a1` (Bambu Lab, 256 x 256 x 256 mm), `ender3v2` (Creality Ender-3 V2, 220 x 220 x 250 mm) and `mk4` (Original Prusa MK4, 250 x 210 x 220 mm).
 
-The pictures use the site's paper and ink colours. The part sits on its patch of print bed with a 10 mm grid, sharp edges are inked, and its size in mm is written in the bottom left corner. Faces the overhang check flags are orange, and show through the part when they are underneath it.
+The pictures use the site's paper and ink colours. The part sits on its patch of print bed with a 10 mm grid (100 mm or more for a part far too big to print, and the one-line summary then says so), sharp edges are inked, and its size in mm is written in the bottom left corner. Faces the overhang check flags are orange, and show through the part when they are underneath it.
 
 Files go to `.gkod-out/` at the repository root (git-ignored), named by a short hash of the code and sizes. Set `GKOD_OUT` to use another folder.
 

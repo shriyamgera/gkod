@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseStl } from '../../app/src/viewer/stl.ts';
-import { renderMesh } from '../src/render/render.ts';
+import { gridStep, renderMesh } from '../src/render/render.ts';
 import { decodePng } from './png.test.ts';
 
 const fixture = (name: string) => {
@@ -9,9 +9,9 @@ const fixture = (name: string) => {
   return parseStl(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer).positions;
 };
 
-// a 10 mm cube standing on the bed, 12 triangles
-function cube(): Float32Array {
-  const c = (i: number) => [i & 1 ? 10 : 0, i & 2 ? 10 : 0, i & 4 ? 10 : 0];
+// a cube standing on the bed, 10 mm unless asked, 12 triangles
+function cube(edge = 10): Float32Array {
+  const c = (i: number) => [i & 1 ? edge : 0, i & 2 ? edge : 0, i & 4 ? edge : 0];
   const faces = [
     [0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5],
   ];
@@ -68,6 +68,24 @@ describe('renderMesh', () => {
     };
     expect(orange(plain)).toBe(0);
     expect(orange(marked)).toBeGreaterThan(1000);
+  });
+
+  it('keeps the grid 10 mm apart unless the lines would crowd together', () => {
+    expect(gridStep(100, 3)).toBe(10);
+    expect(gridStep(5000, 3)).toBe(100);
+    expect(gridStep(300, 0.2)).toBe(100);
+    expect(gridStep(1e7, 1e-4)).toBe(1e5);
+    expect(renderMesh(cube(), { size: 300 }).grid).toBe(10);
+  });
+
+  // with a line every 10 mm, a 1e6 mm cube took 11 s and a 1e8 mm one ran past a minute
+  it('draws a huge part as quickly as a small one', () => {
+    for (const edge of [1e6, 1e8, 1e20]) {
+      const picture = renderMesh(cube(edge), { size: 900 });
+      expect(picture.size[0] / edge).toBeCloseTo(1, 5);
+      expect(Math.log10(picture.grid) % 1).toBe(0);
+      expect(edge / picture.grid).toBeLessThan(200);
+    }
   });
 
   it('refuses a part with no triangles', () => {

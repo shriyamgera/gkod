@@ -143,6 +143,13 @@ def test_render_part_draws_an_stl_from_any_side():
         assert text.startswith(f"{view} view, 20 x 9.9 x 12 mm, 400 triangles, ready to print on the Anycubic Kobra 2 Neo.")
 
 
+def test_render_part_says_when_the_grid_is_coarser():
+    _, small = server.render_part(code="cube(10);")
+    assert "grid" not in small
+    _, huge = server.render_part(code="cube([w, w, w]);", sizes={"w": 1e6})
+    assert "1e+06 x 1e+06 x 1e+06 mm" in huge and "The grid lines are 10000 mm apart." in huge
+
+
 def test_render_part_explains_wrong_calls():
     with pytest.raises(GkodError, match="either code or stl_path"):
         server.render_part()

@@ -23,9 +23,13 @@ const TONES: [number, Rgb][] = [
 const EDGE_ANGLE_DEG = 28;
 // A see-through copy of the marked faces, so a mark underneath still shows from above, as in the viewer.
 const MARK_THROUGH = 0.3;
+// Grid lines at least this many pixels apart in the finished picture, and at most this many across the bed.
+const MIN_GRID_PX = 3;
+const MAX_GRID_LINES = 200;
 
 export type RenderOptions = { size?: number; view?: View; marked?: readonly number[] };
-export type Picture = { png: Buffer; width: number; height: number; size: Vec3; triangles: number };
+// grid: millimetres between the bed's grid lines
+export type Picture = { png: Buffer; width: number; height: number; size: Vec3; triangles: number; grid: number };
 
 function hex(code: string): Rgb {
   const n = Number.parseInt(code.slice(1), 16);
@@ -107,6 +111,13 @@ function edgesOf(positions: Float32Array, triangles: number): Map<number, number
 
 const mm = (value: number) => String(Math.round(value * 10) / 10);
 
+/** Millimetres between grid lines: 10, or 100, 1000 and so on for a bed patch so big that 10 mm lines would crowd together. */
+export function gridStep(spanMm: number, pxPerMm: number): number {
+  let step = GRID_MM;
+  while (step < 1e300 && (spanMm / step > MAX_GRID_LINES || step * pxPerMm < MIN_GRID_PX)) step *= 10;
+  return step;
+}
+
 /** Draws the part on its patch of print bed as a PNG. `marked` faces are drawn in the accent colour. */
 export function renderMesh(positions: Float32Array, opts: RenderOptions = {}): Picture {
   const size = opts.size ?? 900;
@@ -186,10 +197,15 @@ export function renderMesh(positions: Float32Array, opts: RenderOptions = {}): P
     for (let i = 0; i < mask.length; i++) if (mask[i] && !marked.has(raster.face[i]!)) raster.blend(i, MARK, MARK_THROUGH);
   }
 
-  // the bed grid, one line every 10 mm, hidden where the part is in front of it
+  // the bed grid, hidden where the part is in front of it; a coarser grid keeps a huge part as quick to draw as a small one
+  const span = Math.max(bed.max[0] - bed.min[0], bed.max[1] - bed.min[1]);
+  const step = gridStep(span, frame.scale / ss);
   const gridLine = (a: Vec3, b: Vec3, color: Rgb) => raster.line(px(a), px(b), line * 0.8, color, 'pixel', bedPush / 2);
-  for (let x = bed.min[0] + GRID_MM; x < bed.max[0] - 1e-6; x += GRID_MM) gridLine([x, bed.min[1], z], [x, bed.max[1], z], GRID);
-  for (let y = bed.min[1] + GRID_MM; y < bed.max[1] - 1e-6; y += GRID_MM) gridLine([bed.min[0], y, z], [bed.max[0], y, z], GRID);
+  const first = (min: number) => Math.floor(min / step) * step + step;
+  if (Number.isFinite(span)) {
+    for (let x = first(bed.min[0]); x < bed.max[0] - step * 1e-6; x += step) gridLine([x, bed.min[1], z], [x, bed.max[1], z], GRID);
+    for (let y = first(bed.min[1]); y < bed.max[1] - step * 1e-6; y += step) gridLine([bed.min[0], y, z], [bed.max[0], y, z], GRID);
+  }
   const outline: Vec3[] = [
     [bed.min[0], bed.min[1], z],
     [bed.max[0], bed.min[1], z],
@@ -218,5 +234,5 @@ export function renderMesh(positions: Float32Array, opts: RenderOptions = {}): P
   const rowsOut = height / ss;
   const textY = rowsOut - Math.round(size * 0.05) - GLYPH_HEIGHT * labelScale;
   drawText(rgb, size, rowsOut, label, Math.round(size * 0.05), textY, labelScale, MUTED);
-  return { png: encodePng(size, rowsOut, rgb), width: size, height: rowsOut, size: partSize, triangles };
+  return { png: encodePng(size, rowsOut, rgb), width: size, height: rowsOut, size: partSize, triangles, grid: step };
 }

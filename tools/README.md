@@ -10,7 +10,7 @@ npx gkod render part.stl|part.scad [-o out.png] [--size 900] [--view iso|front|s
 
 - **compile** uses the same OpenSCAD web build and rules as the site's compile worker: Manifold backend, `--hardwarnings`, no `minkowski()` or `text()`, a 10 second limit, and the same plain error messages. A path of `-` reads the code from standard input. Without `-o` the STL goes beside the code. `--json` prints `{ok, stl, triangles, params, log, ms, error}`, where `params` are the named sizes from OpenSCAD's parameter export.
 - **check** runs [the print checks](../checks/README.md) for a printer's bed; the Anycubic Kobra 2 Neo is the default. The bed sizes are from each maker's spec page.
-- **render** draws a PNG with a small rasterizer of our own (depth buffer, flat shading from two lights, drawn at three times the size and shrunk for smooth edges), encoded with `node:zlib`. `--mark-overhangs` paints the faces the overhang check flags in the accent colour.
+- **render** draws a PNG with a small rasterizer of our own (depth buffer, flat shading from two lights, drawn at three times the size and shrunk for smooth edges), encoded with `node:zlib`. `--mark-overhangs` paints the faces the overhang check flags in the accent colour. The bed grid has a line every 10 mm; for a part so big that those lines would crowd together it uses 100 mm, 1 m and so on, so drawing time does not grow with the part's size. `--json` gives the spacing in mm as `grid`.
 
 Exit codes: 0 done, 1 the part failed to compile or a check failed, 2 wrong options or a file that cannot be read.
 

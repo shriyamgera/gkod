@@ -39,7 +39,7 @@ server = MCPServer(
         "such as `width = 80; // [50:1:160]`. preview_example shows a built-in part; compile_part, check_part "
         "and render_part work on any code. The checks test that the part is closed, fits the printer bed, sits "
         "flat and has no overhang steeper than 45 degrees that would sag. Pictures show the part on a 10 mm bed "
-        "grid with its size in mm; faces that would sag are orange. minkowski() and text() are not supported: "
+        "grid (coarser for a part far too big to print) with its size in mm; faces that would sag are orange. minkowski() and text() are not supported: "
         "round corners with hull(). The default printer is an Anycubic Kobra 2 Neo (220 x 220 x 250 mm)."
     ),
 )
@@ -136,7 +136,7 @@ def _check(stl_path: str, printer: str) -> dict[str, Any]:
     }
 
 
-def _render(stl_path: str, view: str, mark_overhangs: bool) -> Path:
+def _render(stl_path: str, view: str, mark_overhangs: bool) -> tuple[Path, dict[str, Any]]:
     png = out_dir() / f"{Path(stl_path).stem}-{view}.png"
     args = ["render", stl_path, "-o", str(png), "--view", view, "--size", str(PICTURE_PX)]
     if mark_overhangs:
@@ -144,10 +144,10 @@ def _render(stl_path: str, view: str, mark_overhangs: bool) -> Path:
     result = run_gkod(args, RENDER_SECONDS)
     if not result.get("ok") or not png.is_file():
         raise GkodError(f"The picture could not be drawn: {result.get('error') or 'gkod render wrote no PNG'}")
-    return png
+    return png, result
 
 
-def _one_line(report: dict[str, Any], view: str, mark_overhangs: bool) -> str:
+def _one_line(report: dict[str, Any], view: str, mark_overhangs: bool, grid: float = 10) -> str:
     failed = [check for check in report["checks"] if not check["ok"]]
     if failed:
         verdict = "needs changes: " + " ".join(f"{check['title']}: {check['detail']}" for check in failed)
@@ -157,6 +157,7 @@ def _one_line(report: dict[str, Any], view: str, mark_overhangs: bool) -> str:
     return (
         f"{view} view, {_mm(report['size_mm'])} mm, {report['triangles']} triangles, {verdict}"
         f"{' Orange shows where it would sag.' if marked else ''}"
+        f"{f' The grid lines are {grid:g} mm apart.' if grid != 10 else ''}"
     )
 
 
@@ -215,8 +216,8 @@ def render_part(
     elif sizes:
         raise GkodError("sizes only work with code; an STL file has its sizes fixed.")
     report = _check(stl_path, printer)
-    png = _render(report["stl_path"], view, mark_overhangs)
-    text = f"{_one_line(report, view, mark_overhangs)}\nSTL: {report['stl_path']}\nPicture: {png}"
+    png, drawn = _render(report["stl_path"], view, mark_overhangs)
+    text = f"{_one_line(report, view, mark_overhangs, drawn.get('grid', 10))}\nSTL: {report['stl_path']}\nPicture: {png}"
     return [Image(data=png.read_bytes(), format="png"), text]
 
 
@@ -236,7 +237,7 @@ def preview_example(name: str, view: View = "iso", printer: Printer = "kobra2neo
     if not compiled["ok"]:
         raise GkodError(f"The example did not compile: {compiled['error']}")
     report = _check(compiled["stl_path"], printer)
-    png = _render(compiled["stl_path"], view, mark_overhangs=True)
+    png, _ = _render(compiled["stl_path"], view, mark_overhangs=True)
     info = examples()[name]
     sizes = "\n".join(
         f"- {p['name']} = {p['value']:g} ({p.get('caption', 'no caption')}; {p['min']:g} to {p['max']:g})"

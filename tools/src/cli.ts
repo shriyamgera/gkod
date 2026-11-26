@@ -93,7 +93,8 @@ async function renderCommand(args: RenderArgs): Promise<number> {
   write(args.out, picture.png);
   const size = picture.size.map((value) => Math.round(value * 10) / 10);
   if (args.json) {
-    console.log(JSON.stringify({ ok: true, png: args.out, view: args.view, size, triangles: picture.triangles, marked: marked.length }));
+    const { triangles, grid } = picture;
+    console.log(JSON.stringify({ ok: true, png: args.out, view: args.view, size, triangles, grid, marked: marked.length }));
   } else {
     console.log(`${args.out}: ${args.view} view, ${size.join(' x ')} mm, ${picture.triangles} triangles${marked.length ? `, ${marked.length} marked` : ''}`);
   }
