@@ -1529,7 +1529,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 <http://www.gnu.org/licenses/>.
 
 ------------------------------------------------------------------------
-Cura printer definitions (start and end G-code of the Creality Ender-3 V2)
+Cura printer definitions (start and end G-code of the Creality Ender-3 V2 and Ender-3 S1 Plus)
 LGPL-3.0
 ------------------------------------------------------------------------
 

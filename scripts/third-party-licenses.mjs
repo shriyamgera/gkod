@@ -54,7 +54,7 @@ const others = [
     url: `https://raw.githubusercontent.com/ANYCUBIC-3D/AnycubicSlicerNext/${ANYCUBIC_SLICER_COMMIT}/LICENSE.txt`,
   },
   {
-    title: 'Cura printer definitions (start and end G-code of the Creality Ender-3 V2)',
+    title: 'Cura printer definitions (start and end G-code of the Creality Ender-3 V2 and Ender-3 S1 Plus)',
     licence: 'LGPL-3.0',
     url: `https://raw.githubusercontent.com/Ultimaker/Cura/${CURA_COMMIT}/LICENSE`,
   },

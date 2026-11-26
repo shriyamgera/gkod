@@ -170,6 +170,46 @@ const ender3v2: Facts = {
   ],
 };
 
+// Creality Ender-3 S1 Plus. Bed 300 x 300 mm, 300 mm high: X_BED_SIZE, Y_BED_SIZE and Z_MAX_POS under
+// ENDER_3S1_PLUS in Creality's own firmware source (branch s1_pro_plus), and machine_width, machine_depth and
+// machine_height in Cura. Start code: Cura's "Creality Ender-3 S1 Plus" (creality_ender3s1plus.def.json), end code
+// from creality_base.def.json (LGPL-3.0). Cura writes M82 itself before its start code, so it is written out here.
+// {depth} is the bed depth. Retraction 0.8 mm is Cura's setting for this direct drive extruder.
+const ender3s1plus: Facts = {
+  id: 'creality-ender-3-s1-plus',
+  name: 'Creality Ender-3 S1 Plus',
+  bed: { x: 300, y: 300, z: 300 },
+  source: 'https://github.com/CrealityOfficial/Ender-3S1/blob/7fffa9270ff8fb5ee208a5b04f832e20bab19c60/Marlin/Configuration.h',
+  gcodeSource: `${CURA}/creality_ender3s1plus.def.json`,
+  extrudeAbs: true,
+  retractMm: 0.8,
+  start: [
+    'M82 ;absolute extrusion mode',
+    '; Ender 3 S1 Plus Start G-code',
+    'G92 E0 ; Reset Extruder',
+    '',
+    '; Prep surfaces before auto home for better accuracy',
+    'M140 S{bed}',
+    'M104 S{nozzle}',
+    '',
+    'G28 ; Home all axes',
+    'G1 Z10.0 F3000 ; Move Z Axis up little to prevent scratching of Heat Bed',
+    'G1 X0 Y0',
+    '',
+    'M190 S{bed}',
+    'M109 S{nozzle}',
+    '',
+    'G1 X0.1 Y20 Z0.3 F5000.0 ; Move to start position',
+    'G1 X0.1 Y200.0 Z0.3 F1500.0 E15 ; Draw the first line',
+    'G1 X0.4 Y200.0 Z0.3 F5000.0 ; Move to side a little',
+    'G1 X0.4 Y20 Z0.3 F1500.0 E30 ; Draw the second line',
+    'G92 E0 ; Reset Extruder',
+    'G1 Z2.0 F3000 ; Move Z Axis up little to prevent scratching of Heat Bed',
+    'G1 X5 Y20 Z0.3 F5000.0 ; Move over to prevent blob squish',
+  ],
+  end: ender3v2.end,
+};
+
 // Any other Marlin printer with at least a 220 x 220 mm bed. The height is kept to 200 mm to leave room.
 // Start and end code: the Kobra 2 Neo code above without its Anycubic-only lines (M420 levelling and M300 beeps).
 const other: Facts = {
@@ -186,7 +226,8 @@ const other: Facts = {
 
 // Not offered: Bambu Lab A1 and P1S, and Prusa MK4. Their makers' start code moves outside the bed (the A1 wipes
 // at X -48, the MK4 purges at Y -4) and the Bambu code saves settings with M500. Our check refuses all of these.
-const facts: Facts[] = [kobra2Neo, kobra2, ender3v2, other];
+// The Ender-3 S1 Plus is the larger bed on offer instead.
+const facts: Facts[] = [kobra2Neo, kobra2, ender3v2, ender3s1plus, other];
 
 function fill(lines: string[], bed: Bed): string[] {
   return lines.map((line) =>

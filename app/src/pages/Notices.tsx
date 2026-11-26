@@ -129,6 +129,12 @@ const profiles: Item[] = [
     note: "Start and end code from Cura's Creality Ender-3 profile. Bed 220 x 220 x 250 mm, from Creality's firmware source.",
   },
   {
+    name: 'Creality Ender-3 S1 Plus',
+    licence: 'LGPL-3.0',
+    href: `${CURA}/creality_ender3s1plus.def.json`,
+    note: "Start and end code from Cura's Creality Ender-3 S1 Plus profile. Bed 300 x 300 x 300 mm, from Creality's firmware source.",
+  },
+  {
     name: 'Other printer, 220 x 220 mm, Marlin',
     licence: 'AGPL-3.0',
     href: `${ANYCUBIC_SLICER}/Anycubic%20Kobra%202%20Neo%200.4%20nozzle.json`,
