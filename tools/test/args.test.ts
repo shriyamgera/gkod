@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { outputBeside, parseCommand, parseDefines, UsageError } from '../src/args.ts';
+import { outputBeside, parseBed, parseCommand, parseDefines, pickPrinter, UsageError } from '../src/args.ts';
 
 describe('compile options', () => {
   it('reads the file, output and sizes', () => {
@@ -42,5 +42,33 @@ describe('outputBeside', () => {
     expect(outputBeside('a/b.c/part.stl', '.png')).toBe('a/b.c/part.png');
     expect(outputBeside('part', '.stl')).toBe('part.stl');
     expect(outputBeside('-', '.stl')).toBeNull();
+  });
+});
+
+describe('check options', () => {
+  it('uses the Kobra 2 Neo unless told otherwise', () => {
+    expect(parseCommand(['check', 'part.stl'])).toEqual({
+      command: 'check',
+      input: 'part.stl',
+      printer: 'kobra2neo',
+      bed: { x: 220, y: 220, z: 250 },
+      json: false,
+    });
+  });
+
+  it('takes a known printer or a bed size', () => {
+    expect(parseCommand(['check', 'p.stl', '--printer', 'mk4', '--json'])).toMatchObject({
+      printer: 'mk4',
+      bed: { x: 250, y: 210, z: 220 },
+      json: true,
+    });
+    expect(pickPrinter(undefined, '300')).toEqual({ printer: 'custom', bed: { x: 300, y: 300, z: 300 } });
+    expect(parseBed('250x210x220')).toEqual({ x: 250, y: 210, z: 220 });
+  });
+
+  it('refuses unknown printers, both options at once and bad beds', () => {
+    expect(() => pickPrinter('x9')).toThrow(/Known printers: kobra2neo, p1s, a1, ender3v2, mk4/);
+    expect(() => pickPrinter('p1s', '200')).toThrow(/not both/);
+    for (const bad of ['200x200', '0', 'axbxc', '-5x10x10', '']) expect(() => parseBed(bad)).toThrow(UsageError);
   });
 });

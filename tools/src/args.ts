@@ -1,9 +1,12 @@
 import { type ParseArgsOptionsConfig, parseArgs } from 'node:util';
+import type { Bed } from '@gkod/checks';
+import { DEFAULT_PRINTER, PRINTERS } from './printers.ts';
 
 export class UsageError extends Error {}
 
 export const USAGE = `Usage:
-  gkod compile <file.scad|-> [-o out.stl] [-D name=value ...] [--json]`;
+  gkod compile <file.scad|-> [-o out.stl] [-D name=value ...] [--json]
+  gkod check <file.stl> [--printer ${Object.keys(PRINTERS).join('|')} | --bed 220x220x250] [--json]`;
 
 export type CompileArgs = {
   command: 'compile';
@@ -13,7 +16,16 @@ export type CompileArgs = {
   json: boolean;
 };
 
-export type Args = { command: 'help' } | CompileArgs;
+export type CheckArgs = {
+  command: 'check';
+  input: string;
+  // the printer's key, or "custom" for a --bed size
+  printer: string;
+  bed: Bed;
+  json: boolean;
+};
+
+export type Args = { command: 'help' } | CompileArgs | CheckArgs;
 
 const NAME = /^[A-Za-z_]\w*$/;
 
@@ -30,6 +42,26 @@ export function parseDefines(list: string[] = []): Record<string, number> {
     defines[name] = value;
   }
   return defines;
+}
+
+// "256" or "250x210x220", in mm.
+export function parseBed(text: string): Bed {
+  const sides = text.split('x').map(Number);
+  const [x = NaN, y = x, z = x] = sides;
+  if (sides.length !== 1 && sides.length !== 3) throw new UsageError(`--bed takes one size or three, like 220x220x250, not "${text}".`);
+  if (![x, y, z].every((side) => Number.isFinite(side) && side > 0)) {
+    throw new UsageError(`--bed sizes must be numbers above zero, not "${text}".`);
+  }
+  return { x, y, z };
+}
+
+export function pickPrinter(printer?: string, bed?: string): { printer: string; bed: Bed } {
+  if (printer !== undefined && bed !== undefined) throw new UsageError('Give --printer or --bed, not both.');
+  if (bed !== undefined) return { printer: 'custom', bed: parseBed(bed) };
+  const key = printer ?? DEFAULT_PRINTER;
+  const known = PRINTERS[key];
+  if (!known) throw new UsageError(`Unknown printer "${key}". Known printers: ${Object.keys(PRINTERS).join(', ')}.`);
+  return { printer: key, bed: known.bed };
 }
 
 // Without -o the output goes beside the input with a new extension; standard input has no such place.
@@ -69,6 +101,16 @@ export function parseCommand(argv: string[]): Args {
       defines: parseDefines(values.define as string[] | undefined),
       json: values.json === true,
     };
+  }
+  if (command === 'check') {
+    const { values, positionals } = read(rest, {
+      printer: { type: 'string' },
+      bed: { type: 'string' },
+      json: { type: 'boolean', default: false },
+    });
+    const input = onePath(positionals, 'an STL file');
+    const picked = pickPrinter(values.printer as string | undefined, values.bed as string | undefined);
+    return { command, input, ...picked, json: values.json === true };
   }
   throw new UsageError(`Unknown command "${command}".`);
 }

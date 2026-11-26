@@ -1,6 +1,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { type CompileArgs, parseCommand, USAGE, UsageError } from './args.ts';
+import { checkStl } from '@gkod/checks';
+import { type CheckArgs, type CompileArgs, parseCommand, USAGE, UsageError } from './args.ts';
+import { bedText, reportLines } from './check.ts';
 import { compileScad } from './compile.ts';
+import { PRINTERS } from './printers.ts';
 
 // Exit codes: 0 done, 1 the part failed (compile or checks), 2 wrong options or a file that cannot be read or written.
 export async function main(argv: string[]): Promise<number> {
@@ -10,6 +13,7 @@ export async function main(argv: string[]): Promise<number> {
       console.log(USAGE);
       return 0;
     }
+    if (args.command === 'check') return checkCommand(args);
     return await compileCommand(args);
   } catch (error) {
     if (error instanceof UsageError) {
@@ -21,9 +25,12 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
-function readInput(path: string): string {
+function readInput(path: string): string;
+function readInput(path: string, binary: true): Uint8Array;
+function readInput(path: string, binary = false): string | Uint8Array {
   try {
-    return readFileSync(path === '-' ? 0 : path, 'utf8');
+    const file = path === '-' ? 0 : path;
+    return binary ? readFileSync(file) : readFileSync(file, 'utf8');
   } catch (error) {
     throw new Error(`Could not read ${path}: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`);
   }
@@ -51,4 +58,15 @@ async function compileCommand(args: CompileArgs): Promise<number> {
     console.error(`${args.input}: ${result.error}`);
   }
   return result.ok ? 0 : 1;
+}
+
+function checkCommand(args: CheckArgs): number {
+  const printer = PRINTERS[args.printer]?.name ?? `a ${bedText(args.bed)} bed`;
+  const report = checkStl(readInput(args.input, true), { bed: args.bed });
+  if (args.json) {
+    console.log(JSON.stringify({ file: args.input, printer: args.printer, bed: args.bed, ...report }));
+  } else {
+    console.log(reportLines(args.input, report, printer).join('\n'));
+  }
+  return report.ok ? 0 : 1;
 }
