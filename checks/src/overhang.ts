@@ -1,5 +1,12 @@
 import { mm, mm2 } from '#checks/format';
-import { MAX_REACH_MM, MAX_REACH_SAMPLES, MIN_OVERHANG_MM2, OVERHANG_SLACK_DEG, SUPPORT_DROP_MM } from '#checks/limits';
+import {
+  MAX_REACH_MM,
+  MAX_REACH_SAMPLES,
+  MIN_OVERHANG_MM2,
+  NEAR_BED_MM,
+  OVERHANG_SLACK_DEG,
+  SUPPORT_DROP_MM,
+} from '#checks/limits';
 import { across, type Mesh } from '#checks/mesh';
 import type { CheckResult, Vec3 } from '#checks/types';
 
@@ -20,9 +27,10 @@ const samples = [
  * and fails patches that are big enough to matter and reach too far from anything that holds them up.
  */
 export function checkOverhang(mesh: Mesh, onBed: Uint8Array, deg: number): CheckResult {
-  const steep = steepFaces(mesh, onBed, deg);
+  const resting = restingFaces(mesh, onBed);
+  const steep = steepFaces(mesh, resting, deg);
   const sagging = findPatches(mesh, steep)
-    .filter((patch) => patch.size >= MIN_OVERHANG_MM2 && !heldUp(mesh, steep, onBed, patch.faces))
+    .filter((patch) => patch.size >= MIN_OVERHANG_MM2 && !heldUp(mesh, steep, resting, patch.faces))
     .sort((a, b) => b.size - a.size);
   const worst = sagging[0];
   if (!worst) return { id: 'overhang', ok: true, title, detail: 'Nothing underneath would need supports.' };
@@ -46,11 +54,22 @@ export function checkOverhang(mesh: Mesh, onBed: Uint8Array, deg: number): Check
   };
 }
 
-function steepFaces(mesh: Mesh, onBed: Uint8Array, deg: number): Uint8Array {
+// Faces on the bed, or so close to it that they sag onto it. Either way they hold up the faces next to them.
+function restingFaces(mesh: Mesh, onBed: Uint8Array): Uint8Array {
+  const top = mesh.min[2] + NEAR_BED_MM;
+  const p = mesh.positions;
+  const resting = Uint8Array.from(onBed);
+  for (let t = 0; t < mesh.triangles; t++) {
+    if (p[t * 9 + 2]! <= top && p[t * 9 + 5]! <= top && p[t * 9 + 8]! <= top) resting[t] = 1;
+  }
+  return resting;
+}
+
+function steepFaces(mesh: Mesh, resting: Uint8Array, deg: number): Uint8Array {
   const limit = -Math.sin((Math.min(90, deg + OVERHANG_SLACK_DEG) * Math.PI) / 180);
   const steep = new Uint8Array(mesh.triangles);
   for (let t = 0; t < mesh.triangles; t++) {
-    if (!mesh.skipped[t] && !onBed[t] && mesh.areas[t]! > 0 && mesh.normals[t * 3 + 2]! < limit) steep[t] = 1;
+    if (!mesh.skipped[t] && !resting[t] && mesh.areas[t]! > 0 && mesh.normals[t * 3 + 2]! < limit) steep[t] = 1;
   }
   return steep;
 }
@@ -91,8 +110,8 @@ function root(parent: Int32Array, t: number): number {
 }
 
 // True when every sampled point of the patch is within reach of an edge where a wall below holds it up.
-function heldUp(mesh: Mesh, steep: Uint8Array, onBed: Uint8Array, faces: number[]): boolean {
-  const walls = holdingEdges(mesh, steep, onBed, faces);
+function heldUp(mesh: Mesh, steep: Uint8Array, resting: Uint8Array, faces: number[]): boolean {
+  const walls = holdingEdges(mesh, steep, resting, faces);
   if (walls.length === 0) return false;
   const p = mesh.positions;
   const step = Math.max(1, Math.ceil((faces.length * samples.length) / MAX_REACH_SAMPLES));
@@ -110,8 +129,8 @@ function heldUp(mesh: Mesh, steep: Uint8Array, onBed: Uint8Array, faces: number[
   return true;
 }
 
-// Edges of the patch whose neighbour is on the bed or goes down from the edge. Six numbers per edge.
-function holdingEdges(mesh: Mesh, steep: Uint8Array, onBed: Uint8Array, faces: number[]): number[] {
+// Edges of the patch whose neighbour rests on the bed or goes down from the edge. Six numbers per edge.
+function holdingEdges(mesh: Mesh, steep: Uint8Array, resting: Uint8Array, faces: number[]): number[] {
   const p = mesh.positions;
   const walls: number[] = [];
   for (const t of faces) {
@@ -121,7 +140,7 @@ function holdingEdges(mesh: Mesh, steep: Uint8Array, onBed: Uint8Array, faces: n
       if (other === -1 || steep[other]) continue;
       const i = t * 9 + side * 3;
       const j = t * 9 + ((side + 1) % 3) * 3;
-      if (onBed[other] || goesBelow(p, other, Math.min(p[i + 2]!, p[j + 2]!) - SUPPORT_DROP_MM)) {
+      if (resting[other] || goesDown(p, other, i, j)) {
         walls.push(p[i]!, p[i + 1]!, p[i + 2]!, p[j]!, p[j + 1]!, p[j + 2]!);
       }
     }
@@ -129,8 +148,16 @@ function holdingEdges(mesh: Mesh, steep: Uint8Array, onBed: Uint8Array, faces: n
   return walls;
 }
 
-function goesBelow(p: Float32Array, t: number, z: number): boolean {
-  return p[t * 9 + 2]! < z || p[t * 9 + 5]! < z || p[t * 9 + 8]! < z;
+// True when a corner of triangle t is below the edge from corner i to corner j, measured at the nearest point of the edge.
+function goesDown(p: Float32Array, t: number, i: number, j: number): boolean {
+  const dx = p[j]! - p[i]!, dy = p[j + 1]! - p[i + 1]!, dz = p[j + 2]! - p[i + 2]!;
+  const length = dx * dx + dy * dy + dz * dz;
+  for (let c = t * 9; c < t * 9 + 9; c += 3) {
+    let k = length > 0 ? ((p[c]! - p[i]!) * dx + (p[c + 1]! - p[i + 1]!) * dy + (p[c + 2]! - p[i + 2]!) * dz) / length : 0;
+    k = Math.max(0, Math.min(1, k));
+    if (p[c + 2]! < p[i + 2]! + k * dz - SUPPORT_DROP_MM) return true;
+  }
+  return false;
 }
 
 // Index of a wall edge within reach of the point, or -1. Starts at the last hit, since neighbouring points share walls.

@@ -19,7 +19,7 @@ report.results; // closed, fits-bed, flat-base, overhang, always in that order
 | Solid, no holes | After joining corners closer than 0.0001 mm, every edge is shared by exactly two triangles that run along it in opposite directions, and the enclosed volume is above zero. |
 | Fits your printer | The part's size in X, Y and Z is within the bed. |
 | Sits flat on the bed | The downward faces in the lowest 0.05 mm add up to at least 20 mm² and at least 1% of the footprint. A small part passes if half its footprint is flat. The lowest point counts as the bed, since the slicer drops a part onto it. |
-| No steep overhangs | No patch of faces underneath that leans more than 45 degrees from vertical is both at least 20 mm² and more than 5 mm from a wall that holds it up. So a 10 mm bridge and the top of a hole up to about 13 mm across pass. |
+| No steep overhangs | No patch of faces underneath that leans more than 45 degrees from vertical is both at least 20 mm² and more than 5 mm from a wall that holds it up. So a 10 mm bridge and the top of a hole up to about 13 mm across pass. Faces within 1 mm of the bed are left out: they sag onto it. |
 
 Every threshold, with the reason for its value, is in [src/limits.ts](src/limits.ts).
 

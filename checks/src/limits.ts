@@ -33,6 +33,9 @@ export const DEFAULT_OVERHANG_DEG = 45;
 // Faces within this many degrees of the limit pass, so an exact 45 degree chamfer and its facets are fine.
 export const OVERHANG_SLACK_DEG = 1;
 
+// A surface underneath this close to the bed just sags onto it, which does no harm.
+export const NEAR_BED_MM = 1;
+
 // Overhang areas smaller than this are ignored: a tiny patch droops a little but does not fail.
 export const MIN_OVERHANG_MM2 = 20;
 

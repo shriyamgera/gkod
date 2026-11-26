@@ -49,6 +49,13 @@ describe('overhang', () => {
     expect(overhang(blockWithHole(20, 30, 20)).ok).toBe(false);
   });
 
+  it('ignores a shallow recess in the bottom, which sags onto the bed', () => {
+    const recessed = (depth: number) =>
+      cells([0, 1, 39, 40], [0, 1, 39, 40], [0, depth, 10], (i, j, k) => k === 1 || i !== 1 || j !== 1);
+    expect(overhang(recessed(0.5)).ok).toBe(true);
+    expect(overhang(recessed(3)).ok).toBe(false);
+  });
+
   it('passes a wall leaning 30 degrees and fails one leaning 60', () => {
     expect(overhang(leaningWall(30)).ok).toBe(true);
     expect(overhang(leaningWall(60)).ok).toBe(false);
