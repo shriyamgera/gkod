@@ -5,8 +5,8 @@
 cable_d = 6; // [3:0.5:12]
 // Ring wall thickness (mm)
 wall = 1.6; // [1.2:0.2:3]
-// Opening the cable is pushed through (mm)
-opening = 4; // [1:0.5:10]
+// How much narrower the opening is than the cable (mm)
+grip = 2; // [0.5:0.5:2.5]
 // Clip length along the cable (mm)
 length = 12; // [6:1:30]
 // Pad width (mm)
@@ -18,8 +18,8 @@ pad_thickness = 2; // [1.5:0.5:5]
 $fn = 64;
 
 outer_r = cable_d / 2 + wall;
-// the opening is always a little smaller than the cable, so the cable stays in
-slot = min(opening, cable_d - 0.5);
+// the opening is narrower than the cable, so the cable snaps in and stays in
+slot = cable_d - grip;
 ring_y = pad_thickness + outer_r - wall / 2;
 
 module profile() {
