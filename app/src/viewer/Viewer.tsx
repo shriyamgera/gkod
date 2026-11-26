@@ -1,21 +1,28 @@
-import { type KeyboardEvent, lazy, Suspense, useId, useMemo, useRef, useSyncExternalStore } from 'react';
+import { type KeyboardEvent, lazy, Suspense, useEffect, useId, useMemo, useRef, useSyncExternalStore } from 'react';
 import { GRID_MM } from './grid';
 import type { ViewHandle } from './Scene';
 import { describeMesh, type Mesh, parseStl } from './stl';
 import './viewer.css';
 
-const View3D = lazy(() => import('./View3D'));
+const loadView3D = () => import('./View3D');
+const View3D = lazy(loadView3D);
 
 const TURN_STEP = Math.PI / 24;
 const ZOOM_STEP = 0.85;
 
 type Loaded = { mesh: Mesh | null; error: string | null };
 
-export function Viewer({ stl, busy = false }: { stl: ArrayBuffer | null; busy?: boolean }) {
+// note: shown in place of the model while there is none, e.g. while the compiler loads
+export function Viewer({ stl, busy = false, note }: { stl: ArrayBuffer | null; busy?: boolean; note?: string }) {
   const { mesh, error } = useMemo(() => load(stl), [stl]);
   const view = useRef<ViewHandle | null>(null);
   const summaryId = useId();
   const spin = !useReducedMotion();
+
+  // fetch three.js while the first model is still being made
+  useEffect(() => {
+    void loadView3D();
+  }, []);
 
   function onKeyDown(event: KeyboardEvent) {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -46,7 +53,7 @@ export function Viewer({ stl, busy = false }: { stl: ArrayBuffer | null; busy?: 
 
         {!mesh && (
           <p className="viewer-note" role={error ? 'alert' : undefined}>
-            {error ? `This model could not be shown. ${error}` : busy ? 'Making the model' : 'No model yet'}
+            {error ? `This model could not be shown. ${error}` : (note ?? (busy ? 'Making the model' : 'No model yet'))}
           </p>
         )}
         {mesh && busy && (

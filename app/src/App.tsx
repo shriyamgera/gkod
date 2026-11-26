@@ -11,7 +11,8 @@ function Page({ route }: { route: Route }) {
     case 'start':
       return <StartPage />;
     case 'part':
-      return <PartPage exampleId={route.exampleId} />;
+      // a new key per part gives each one a fresh compile and a freshly framed view
+      return <PartPage key={route.exampleId} exampleId={route.exampleId} />;
     case 'notices':
       return <NoticesPage />;
     case 'notFound':

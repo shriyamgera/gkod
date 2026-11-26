@@ -30,6 +30,11 @@ export const initialState: LiveState = { status: 'idle', shown: null, defaults: 
 // The compiler is shared by every part screen, so once it has loaded it stays loaded.
 const sharedEngine = { ready: false };
 
+// What a part screen shows before its first compile is sent.
+export function startState(): LiveState {
+  return { ...initialState, status: sharedEngine.ready ? 'working' : 'loading' };
+}
+
 // Recompiles a part as its sizes change. Changes are debounced, only one compile runs at a time,
 // and a result is shown only if no newer change came in while it was being made.
 export function createLiveCompile({ source, compile, onChange, delayMs = 150, engine = sharedEngine }: Options) {
