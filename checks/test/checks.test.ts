@@ -127,6 +127,13 @@ describe('closed shape', () => {
     expect(result(run(nudged), 'closed').ok).toBe(true);
   });
 
+  it('joins close corners on either side of a 0.0001 mm grid line', () => {
+    // 0.0000499 and 0.0000501 are 0.0000002 mm apart, but round to different multiples of 0.0001
+    let k = 0;
+    const split = cube.map((t) => t.map(([x, y, z]): [number, number, number] => [x === 0 ? (k++ % 2 ? 0.0000499 : 0.0000501) : x, y, z]) as Triangle);
+    expect(result(run(split), 'closed').ok).toBe(true);
+  });
+
   it('accepts every test shape built in code', () => {
     const shapes: [Triangle[], number][] = [
       [tShape(), 60 * 20 * 5 + 10 * 20 * 30],

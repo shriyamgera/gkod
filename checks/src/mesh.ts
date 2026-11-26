@@ -77,33 +77,56 @@ export function signedVolume(mesh: Mesh): number {
   return sum / 6;
 }
 
+// Gives corners closer than WELD_MM the same id. Corners are sorted into a grid of that size; a corner joins one
+// in its own cell, or else one closer than WELD_MM in a neighbouring cell, just across a grid line.
 function weld(positions: Float32Array, count: number): Int32Array {
   const mask = tableSize(count) - 1;
   const table = new Int32Array(mask + 1).fill(-1);
-  const keys = new Float64Array(count * 3);
+  const cellKeys = new Float64Array(count * 3);
+  const cellIds = new Int32Array(count);
+  const firstCorner = new Int32Array(count);
   const ids = new Int32Array(count);
+  let cells = 0;
   let next = 0;
+  const slotOf = (x: number, y: number, z: number) => {
+    let slot = mix(Math.imul(x | 0, 73856093) ^ Math.imul(y | 0, 19349663) ^ Math.imul(z | 0, 83492791)) & mask;
+    for (;;) {
+      const cell = table[slot]!;
+      if (cell === -1 || (cellKeys[cell * 3] === x && cellKeys[cell * 3 + 1] === y && cellKeys[cell * 3 + 2] === z)) return slot;
+      slot = (slot + 1) & mask;
+    }
+  };
+  const near = (c: number, d: number) => {
+    const dx = positions[c * 3]! - positions[d * 3]!;
+    const dy = positions[c * 3 + 1]! - positions[d * 3 + 1]!;
+    const dz = positions[c * 3 + 2]! - positions[d * 3 + 2]!;
+    return dx * dx + dy * dy + dz * dz <= WELD_MM * WELD_MM;
+  };
   for (let c = 0; c < count; c++) {
     const x = Math.round(positions[c * 3]! / WELD_MM);
     const y = Math.round(positions[c * 3 + 1]! / WELD_MM);
     const z = Math.round(positions[c * 3 + 2]! / WELD_MM);
-    let slot = mix(Math.imul(x | 0, 73856093) ^ Math.imul(y | 0, 19349663) ^ Math.imul(z | 0, 83492791)) & mask;
-    for (;;) {
-      const id = table[slot]!;
-      if (id === -1) {
-        table[slot] = next;
-        keys[next * 3] = x;
-        keys[next * 3 + 1] = y;
-        keys[next * 3 + 2] = z;
-        ids[c] = next++;
-        break;
-      }
-      if (keys[id * 3] === x && keys[id * 3 + 1] === y && keys[id * 3 + 2] === z) {
-        ids[c] = id;
-        break;
-      }
-      slot = (slot + 1) & mask;
+    const slot = slotOf(x, y, z);
+    if (table[slot] !== -1) {
+      ids[c] = cellIds[table[slot]!]!;
+      continue;
     }
+    let id = -1;
+    for (let k = 0; k < 27 && id === -1; k++) {
+      if (k === 13) continue;
+      const cell = table[slotOf(x + (k % 3) - 1, y + (((k / 3) | 0) % 3) - 1, z + ((k / 9) | 0) - 1)]!;
+      if (cell !== -1 && near(c, firstCorner[cellIds[cell]!]!)) id = cellIds[cell]!;
+    }
+    if (id === -1) {
+      id = next++;
+      firstCorner[id] = c;
+    }
+    table[slot] = cells;
+    cellKeys[cells * 3] = x;
+    cellKeys[cells * 3 + 1] = y;
+    cellKeys[cells * 3 + 2] = z;
+    cellIds[cells++] = id;
+    ids[c] = id;
   }
   return ids;
 }
