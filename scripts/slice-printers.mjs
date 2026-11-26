@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Slices the example parts and a 20 mm cube for every printer in the picker, in headless Chrome against a
 // production build of the site, with the site's own slicer worker. Then checks every G-code file again in Node.
+// Each printer also slices a bar as wide as the space the print checks allow and a column as tall, which must pass.
 //   npm run fetch:kiri && node scripts/slice-printers.mjs [output folder]
 // The site is built into a temporary folder with the slicer client as an extra entry, so the worker is in it
 // whatever the pages import. Uses the Google Chrome installed on the machine.
@@ -38,9 +39,9 @@ const assets = join(dist, 'assets');
 const worker = readdirSync(assets).find((name) => name.endsWith('.js') && readFileSync(join(assets, name), 'utf8').includes('kiri-eng.js'));
 if (!worker) throw new Error('No slicer worker in app/dist/assets');
 
-// 20 mm cube as a binary STL
-function cube(size = 20) {
-  const v = (x, y, z) => [x * size, y * size, z * size];
+// a box as a binary STL
+function box(sx, sy, sz) {
+  const v = (x, y, z) => [x * sx, y * sy, z * sz];
   const quads = [
     [v(0, 0, 0), v(0, 1, 0), v(1, 1, 0), v(1, 0, 0)],
     [v(0, 0, 1), v(1, 0, 1), v(1, 1, 1), v(0, 1, 1)],
@@ -60,8 +61,13 @@ const parts = {
   phone_stand: readFileSync(join(root, 'checks/test/fixtures/phone_stand.stl')),
   wall_hook: readFileSync(join(root, 'checks/test/fixtures/wall_hook.stl')),
   cable_clip: readFileSync(join(root, 'checks/test/fixtures/cable_clip.stl')),
-  cube_20mm: cube(),
+  cube_20mm: box(20, 20, 20),
 };
+for (const printer of printers) {
+  const { x, z } = printer.printable;
+  parts[`${printer.id}__edge_bar`] = box(x, 20, 4);
+  parts[`${printer.id}__edge_column`] = box(10, 10, z);
+}
 
 const page = `<!doctype html><meta charset="utf-8"><title>slice</title><script type="module">
 let worker = null;
@@ -111,7 +117,8 @@ await tab.waitForFunction(() => typeof window.runSlice === 'function');
 
 const runs = [];
 for (const printer of printers) {
-  for (const part of Object.keys(parts)) runs.push({ printer, part, settings: { printerId: printer.id, quality: 'normal', infill: 15, supports: false } });
+  const own = ['phone_stand', 'wall_hook', 'cable_clip', 'cube_20mm', `${printer.id}__edge_bar`, `${printer.id}__edge_column`];
+  for (const part of own) runs.push({ printer, part, settings: { printerId: printer.id, quality: 'normal', infill: 15, supports: false } });
 }
 const first = printers[0];
 runs.push({ printer: first, part: 'phone_stand', tag: 'fine-20-supports', settings: { printerId: first.id, quality: 'fine', infill: 20, supports: true } });
@@ -119,7 +126,7 @@ runs.push({ printer: first, part: 'phone_stand', tag: 'fine-20-supports', settin
 const rows = [];
 let failed = 0;
 for (const run of runs) {
-  const name = `${run.printer.id}__${run.part}${run.tag ? `__${run.tag}` : ''}.gcode`;
+  const name = `${run.printer.id}__${run.part.replace(`${run.printer.id}__`, '')}${run.tag ? `__${run.tag}` : ''}.gcode`;
   const result = await tab.evaluate(([part, settings, file]) => window.runSlice(part, settings, file), [run.part, run.settings, name]);
   let node = null;
   if (result.ok) node = await checkGcodeFile(join(out, name), run.printer);

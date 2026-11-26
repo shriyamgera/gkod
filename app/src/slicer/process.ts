@@ -1,4 +1,4 @@
-import { PLA, printerFacts } from './printers';
+import { PLA, printerFacts, Z_HOP_MM } from './printers';
 import { INFILLS, LAYER_MM, QUALITIES, type SliceSettings } from './types';
 
 // Thick enough top and bottom skins at either layer height.
@@ -44,7 +44,10 @@ export function kiriProcess(settings: SliceSettings) {
     firstLayerFillRate: 35,
     outputRetractDist: facts.retractMm,
     outputRetractSpeed: 40,
-    zHopDistance: 0.2,
+    zHopDistance: Z_HOP_MM,
+    // No skirt: Anycubic's own Kobra 2 Neo profile has none (skirt_loops 0), the purge line in the start code primes
+    // the nozzle, and a part as wide as the bed still fits. Kiri's default draws two loops 2 mm outside the part.
+    outputBrimCount: 0,
     firstLayerBrim: 0,
     outputRaft: false,
     outputDraftShield: false,

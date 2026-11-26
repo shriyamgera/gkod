@@ -10,6 +10,7 @@ const kobra: Printer = {
   id: 'anycubic-kobra-2-neo',
   name: 'Anycubic Kobra 2 Neo',
   bed: { x: 220, y: 220, z: 250 },
+  printable: { x: 220, y: 220, z: 249.1 },
   source: '',
   device: {},
 };

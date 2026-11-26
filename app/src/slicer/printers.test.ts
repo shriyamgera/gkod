@@ -1,7 +1,7 @@
 import { checkGcode, DEFAULT_ALLOWED, PLA_LIMITS } from '@gkod/checks';
 import { describe, expect, it } from 'vitest';
 import { createPostProcessor, END_BEGINS, kiriExtrudeAbs, START_DONE } from './postprocess';
-import { DEFAULT_PRINTER_ID, findPrinter, type KiriDevice, PLA, printerFacts, printers } from './printers';
+import { DEFAULT_PRINTER_ID, endLiftMm, findPrinter, type KiriDevice, PLA, printerFacts, printers } from './printers';
 
 // Output in the shape Kiri:Moto writes it: preamble, start code, a retract, numbered layers, end code.
 function fakeKiri(device: KiriDevice, layers: number): string[] {
@@ -42,6 +42,19 @@ describe('printers', () => {
     expect(findPrinter(DEFAULT_PRINTER_ID)).toBe(printers[0]);
     expect(new Set(printers.map((p) => p.id)).size).toBe(printers.length);
     expect(printers.map((p) => p.name)).toContain('Other printer, 220 x 220 mm, Marlin');
+  });
+
+  it('leaves room above the part for the top layer, the z-hop and the end code’s lift', () => {
+    const space = Object.fromEntries(printers.map((p) => [p.id, p.printable]));
+    expect(space).toEqual({
+      'anycubic-kobra-2-neo': { x: 220, y: 220, z: 249.1 },
+      'anycubic-kobra-2': { x: 220, y: 220, z: 249.3 },
+      'creality-ender-3-v2': { x: 220, y: 220, z: 239.4 },
+      'creality-ender-3-s1-plus': { x: 300, y: 300, z: 289.4 },
+      'other-220-marlin': { x: 220, y: 220, z: 199.1 },
+    });
+    expect(endLiftMm(['G91', 'G1 E-2 Z0.2 F2400', 'G1 X5 Y5', 'G1 Z10 ;Raise Z more', 'G90', 'G1 Z5'])).toBe(10.2);
+    expect(endLiftMm(['G1 Z+0.5'])).toBe(0);
   });
 
   it('prints PLA inside the safe ranges', () => {

@@ -8,6 +8,7 @@ export const LOAD_MESSAGE = 'The slicer could not be loaded. Check your connecti
 export const CANCEL_MESSAGE = 'Slicing was stopped.';
 export const SLICE_MESSAGE = 'The slicer could not slice this part.';
 export const TOO_BIG_MESSAGE = 'This part is bigger than the printer’s bed.';
+export const TOO_TALL_MESSAGE = 'This part is too tall for this printer, which needs room to lift the nozzle at the end.';
 export const UNSAFE_MESSAGE = 'The G-code failed the safety check, so it is not offered for download.';
 
 export type SliceRequest = { type: 'slice'; id: number; stl: ArrayBuffer; settings: SliceSettings };

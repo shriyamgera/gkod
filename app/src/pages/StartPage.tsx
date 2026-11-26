@@ -99,7 +99,7 @@ export function StartPage() {
     const compileFn: typeof compile = async (source, overrides, opts) => {
       compiles += 1;
       setStage('Building the shape');
-      const result = await compile(source, overrides, { ...opts, bed: getPrinter().bed });
+      const result = await compile(source, overrides, { ...opts, bed: getPrinter().printable });
       if (!result.ok && compiles === 1 && !BROWSER_FAILURES.includes(result.error)) {
         setStage('Fixing a mistake and trying again');
       }

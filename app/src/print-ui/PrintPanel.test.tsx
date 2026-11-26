@@ -8,6 +8,7 @@ const printer = (id: string, name: string, x: number, y: number, z: number): Pri
   id,
   name,
   bed: { x, y, z },
+  printable: { x, y, z: z - 1 },
   source: '',
   device: {},
 });

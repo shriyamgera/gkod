@@ -1,12 +1,25 @@
 // No imports but types, so Node scripts can read this file as it is.
 import type { Bed } from '@gkod/checks';
 
-export type Printer = { id: string; name: string; bed: Bed; source: string; device: unknown /* the Kiri device JSON we build */ };
+export type Printer = {
+  id: string;
+  name: string;
+  bed: Bed;
+  // the space a part may fill: the bed, less the room the print needs above the part (printableBed below)
+  printable: Bed;
+  source: string;
+  device: unknown /* the Kiri device JSON we build */;
+};
 
 /** PLA only. Every printer prints with these; the G-code check holds them to PLA_LIMITS. */
 export const PLA = { nozzle: 205, bed: 60 };
 
 export const DEFAULT_PRINTER_ID = 'anycubic-kobra-2-neo';
+
+/** How far the slicer lifts the nozzle for a travel move. */
+export const Z_HOP_MM = 0.2;
+// The slicer's top layer can end up to one layer above the part.
+const TOP_LAYER_MM = 0.2;
 
 /** The last line of every start code and the first line of every end code we give the slicer. */
 export const START_DONE = '; gkod: start code done';
@@ -241,6 +254,29 @@ function fill(lines: string[], bed: Bed): string[] {
   );
 }
 
+/** How far an end code lifts the nozzle with relative moves (after G91), in mm. */
+export function endLiftMm(lines: string[]): number {
+  let relative = false;
+  let lift = 0;
+  for (const line of lines) {
+    const code = (line.split(';')[0] ?? '').trim().toUpperCase();
+    if (/^G91\b/.test(code)) relative = true;
+    else if (/^G90\b/.test(code)) relative = false;
+    const z = /^G[01]\b.*\sZ([+-]?\d*\.?\d+)/.exec(code);
+    if (relative && z) lift += Math.max(0, Number(z[1]));
+  }
+  return lift;
+}
+
+/**
+ * The space a part may fill, so the print checks and the slicer agree. The height leaves room for the top layer,
+ * the slicer's z-hop and the end code's lift, which must all stay under the printer's height.
+ */
+function printableBed(f: Facts): Bed {
+  const room = TOP_LAYER_MM + Z_HOP_MM + endLiftMm(f.end);
+  return { x: f.bed.x, y: f.bed.y, z: Math.round((f.bed.z - room) * 100) / 100 };
+}
+
 // Kiri:Moto's FDM device format. Kiri writes no fan, progress or layer lines of its own; we add the fan ourselves.
 function kiriDevice(f: Facts) {
   return {
@@ -281,14 +317,15 @@ export const printers: Printer[] = facts.map((f) => ({
   id: f.id,
   name: f.name,
   bed: { ...f.bed },
+  printable: printableBed(f),
   source: f.source,
   device: kiriDevice(f),
 }));
 
 /** Everything our code knows about a printer, or undefined for an unknown id. */
-export function printerFacts(id: string): (Facts & { device: KiriDevice }) | undefined {
+export function printerFacts(id: string): (Facts & { device: KiriDevice; printable: Bed }) | undefined {
   const f = facts.find((item) => item.id === id);
-  return f && { ...f, device: kiriDevice(f) };
+  return f && { ...f, device: kiriDevice(f), printable: printableBed(f) };
 }
 
 export function findPrinter(id: string): Printer | undefined {

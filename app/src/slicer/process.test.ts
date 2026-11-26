@@ -39,6 +39,10 @@ describe('kiriProcess', () => {
     expect(process.outputRetractDist).toBe(2.5);
   });
 
+  it('draws no skirt, so a part as wide as the bed stays on it', () => {
+    expect(kiriProcess(base)).toMatchObject({ outputBrimCount: 0, firstLayerBrim: 0, outputRaft: false });
+  });
+
   it('refuses settings outside the menus', () => {
     expect(() => kiriProcess({ ...base, printerId: 'bambu-lab-x1' })).toThrow('Unknown printer');
     expect(() => kiriProcess({ ...base, infill: 80 as Infill })).toThrow('Infill must be one of 10, 15, 20, 30 percent.');

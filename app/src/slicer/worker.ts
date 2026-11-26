@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
-import { createGcodeChecker, createLineSplitter, DEFAULT_ALLOWED, type GcodeReport, PLA_LIMITS } from '@gkod/checks';
-import { LOAD_MESSAGE, SLICE_MESSAGE, type SliceReply, type SliceRequest, TOO_BIG_MESSAGE, UNSAFE_MESSAGE } from './messages';
+import { createGcodeChecker, createLineSplitter, DEFAULT_ALLOWED, type GcodeReport, limits, PLA_LIMITS } from '@gkod/checks';
+import { LOAD_MESSAGE, SLICE_MESSAGE, type SliceReply, type SliceRequest, TOO_BIG_MESSAGE, TOO_TALL_MESSAGE, UNSAFE_MESSAGE } from './messages';
 import { createPostProcessor, kiriExtrudeAbs } from './postprocess';
 import { printerFacts } from './printers';
 import { kiriProcess } from './process';
@@ -133,8 +133,10 @@ async function handle({ id, stl, settings }: SliceRequest): Promise<void> {
     await engine.parse(stl);
     const { min, max } = engine.widget.getBoundingBox();
     const size = { x: max.x - min.x, y: max.y - min.y, z: max.z - min.z };
-    if (size.x > facts.bed.x || size.y > facts.bed.y || size.z > facts.bed.z) {
-      reply({ type: 'done', id, ok: false, error: TOO_BIG_MESSAGE });
+    // the same space and slack as the print checks' "Fits your printer"
+    const over = (side: 'x' | 'y' | 'z') => size[side] > facts.printable[side] + limits.FIT_SLACK_MM;
+    if (over('x') || over('y') || over('z')) {
+      reply({ type: 'done', id, ok: false, error: over('x') || over('y') ? TOO_BIG_MESSAGE : TOO_TALL_MESSAGE });
       return;
     }
     engine.setDevice(facts.device);

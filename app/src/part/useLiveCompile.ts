@@ -4,7 +4,8 @@ import { compile } from '../scad/client';
 import { getPrinter } from '../slicer/printerChoice';
 import { createLiveCompile, type LiveState, type Shown, type Sizes, startState } from './liveCompile';
 
-const chosenBed = () => getPrinter().bed;
+// the space a part may fill on the chosen printer, as the slicer measures it
+const chosenBed = () => getPrinter().printable;
 
 export function useLiveCompile(source: string) {
   const [state, setState] = useState<LiveState>(startState);
