@@ -83,6 +83,16 @@ describe('overhang', () => {
     expect(result.at![2]).toBeCloseTo(15, 6);
   });
 
+  it('fails a small piece floating in the air, however small its underside', () => {
+    const cube = box([0, 0, 0], [20, 20, 20]);
+    // a 4 x 4 mm rod 10 mm above the bed: 16 mm² underneath, under the 20 mm² that counts for a held-up patch
+    const rod = overhang([...cube, ...box([30, 0, 10], [34, 4, 50])]);
+    expect(rod.ok).toBe(false);
+    expect(rod.detail).toBe('An area underneath, about 16 mm² and 10 mm above the bed, would sag while printing.');
+    const beads = Array.from({ length: 10 }, (_, i) => box([30 + i * 6, 0, 40], [32 + i * 6, 2, 42])).flat();
+    expect(overhang([...cube, ...beads]).detail).toMatch(/^10 areas underneath would sag while printing/);
+  });
+
   it('counts a plate below as holding an overhang that meets it at an inside corner', () => {
     // a 5 mm plate; above it, a slope leaning 73 degrees rises from the plate's top and reaches `run` mm out over it
     const plate = (run: number) =>

@@ -19,7 +19,7 @@ What works today:
   - the surface is closed, with no holes;
   - it fits the printer bed, which is 256 x 256 x 256 mm for now (a printer picker comes with the slicer);
   - it sits flat on the bed;
-  - nothing underneath leans more than 45 degrees from vertical over an area that would sag. An area counts only if it is at least 20 mm² and reaches more than 5 mm from a wall that holds it up, so small holes and short bridges pass.
+  - nothing underneath leans more than 45 degrees from vertical over an area that would sag. An area counts only if it is at least 20 mm² and reaches more than 5 mm from a wall that holds it up, so small holes and short bridges pass. An area with nothing holding it up, such as the bottom of a piece floating in the air, fails at any size.
 
   The box beside the part says "Ready to print" or names what to fix, the viewer marks where it would sag, and "What we checked" lists every check with a word and an icon. The details are in [checks/](checks/).
 - **Fix it for me.** Sends our own instruction for each failed check (never model text) to Gemini as a change of the code on screen. The result is a new version, checked again; if it still fails, the page says so and keeps both versions. On a built-in example, the fix becomes a new part of your own. "Print with supports instead" is remembered on that version, for the slicer.

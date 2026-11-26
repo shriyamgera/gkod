@@ -36,7 +36,7 @@ export const OVERHANG_TOLERANCE_DEG = 0.01;
 // A surface underneath this close to the bed just sags onto it, which does no harm.
 export const NEAR_BED_MM = 1;
 
-// Overhang areas smaller than this are ignored: a tiny patch droops a little but does not fail.
+// Overhang areas smaller than this are ignored when something holds them up: a tiny patch droops a little but does not fail.
 export const MIN_OVERHANG_MM2 = 20;
 
 // A point underneath can be this far from a wall that holds it up before it sags.

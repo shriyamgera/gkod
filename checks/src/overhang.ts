@@ -24,13 +24,13 @@ const samples = [
 
 /**
  * Finds faces underneath that lean more than `deg` from vertical, groups them into patches by shared edges,
- * and fails patches that are big enough to matter and reach too far from anything that holds them up.
+ * and fails patches that nothing holds up, and patches big enough to matter that reach too far from what holds them up.
  */
 export function checkOverhang(mesh: Mesh, onBed: Uint8Array, deg: number): CheckResult {
   const resting = restingFaces(mesh, onBed);
   const steep = steepFaces(mesh, resting, deg);
   const sagging = findPatches(mesh, steep)
-    .filter((patch) => patch.size >= MIN_OVERHANG_MM2 && !heldUp(mesh, steep, resting, patch.faces))
+    .filter((patch) => sags(mesh, steep, resting, patch))
     .sort((a, b) => b.size - a.size);
   const worst = sagging[0];
   if (!worst) return { id: 'overhang', ok: true, title, detail: 'Nothing underneath would need supports.' };
@@ -134,10 +134,16 @@ function root(parent: Int32Array, t: number): number {
   return t;
 }
 
+// A patch with nothing at all holding it up, such as the bottom of a piece floating in the air, would start
+// printing in mid-air however small it is. Any other patch sags when it is big enough and reaches too far.
+function sags(mesh: Mesh, steep: Uint8Array, resting: Uint8Array, patch: Patch): boolean {
+  const walls = holdingEdges(mesh, steep, resting, patch.faces);
+  if (walls.length === 0) return true;
+  return patch.size >= MIN_OVERHANG_MM2 && !heldUp(mesh, walls, patch.faces);
+}
+
 // True when every sampled point of the patch is within reach of an edge where a wall below holds it up.
-function heldUp(mesh: Mesh, steep: Uint8Array, resting: Uint8Array, faces: number[]): boolean {
-  const walls = holdingEdges(mesh, steep, resting, faces);
-  if (walls.length === 0) return false;
+function heldUp(mesh: Mesh, walls: number[], faces: number[]): boolean {
   const p = mesh.positions;
   const step = Math.max(1, Math.ceil((faces.length * samples.length) / MAX_REACH_SAMPLES));
   let hint = 0;
