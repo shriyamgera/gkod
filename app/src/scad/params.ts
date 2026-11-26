@@ -32,7 +32,9 @@ function guessRange(value: number): { min: number; max: number; step: number } {
   return { min: tidy(low), max: tidy(high), step };
 }
 
-function optionRange(options: unknown): { min: number; max: number; step: number } | null {
+type Range = { min: number; max: number; step: number; options?: number[] };
+
+function optionRange(options: unknown): Range | null {
   if (!Array.isArray(options)) return null;
   const values = options
     .map((option) => (option as { value?: unknown } | null)?.value)
@@ -45,7 +47,8 @@ function optionRange(options: unknown): { min: number; max: number; step: number
     if (gap > 0) step = Math.min(step, gap);
   }
   if (!Number.isFinite(step)) return null;
-  return { min: values[0]!, max: values[values.length - 1]!, step: tidy(step) };
+  const listed = values.filter((value, i) => i === 0 || value !== values[i - 1]);
+  return { min: listed[0]!, max: listed[listed.length - 1]!, step: tidy(step), options: listed };
 }
 
 function toParam(entry: ExportedParam): Param | null {
@@ -53,7 +56,7 @@ function toParam(entry: ExportedParam): Param | null {
   // $fn and the other special variables set how finely curves are drawn; they are not sizes
   if (entry.name.startsWith('$')) return null;
   const value = entry.initial;
-  let range: { min: number; max: number; step: number };
+  let range: Range;
   if (isNumber(entry.min) && isNumber(entry.max) && entry.min < entry.max) {
     const step = isNumber(entry.step) && entry.step > 0 ? entry.step : 1;
     range = { min: entry.min, max: entry.max, step };

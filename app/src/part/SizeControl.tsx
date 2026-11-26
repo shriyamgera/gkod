@@ -1,6 +1,6 @@
 import { type ChangeEvent, type KeyboardEvent, useId, useState } from 'react';
 import type { Param } from '../scad/types';
-import { describeParam, fitToParam, formatValue } from './sizes';
+import { describeParam, fitToParam, formatValue, optionIndex } from './sizes';
 
 type Props = { param: Param; value: number; onChange: (value: number) => void };
 
@@ -11,6 +11,11 @@ export function SizeControl({ param, value, onChange }: Props) {
   // what is typed in the number box, kept apart so a half-typed number is not clamped mid-way
   const [draft, setDraft] = useState<string | null>(null);
   const helpId = info.help ? `${id}help` : undefined;
+  // a size with listed values gets a slider over their positions, so it only ever lands on one of them
+  const options = param.options?.length ? param.options : null;
+  const slider = options
+    ? { min: 0, max: options.length - 1, step: 1, value: optionIndex(value, options) }
+    : { min: param.min, max: param.max, step: param.step, value };
 
   function set(next: number) {
     const fitted = fitToParam(next, param);
@@ -70,13 +75,16 @@ export function SizeControl({ param, value, onChange }: Props) {
         id={`${id}range`}
         className="size-range"
         type="range"
-        min={param.min}
-        max={param.max}
-        step={param.step}
-        value={value}
+        min={slider.min}
+        max={slider.max}
+        step={slider.step}
+        value={slider.value}
         aria-valuetext={`${formatValue(value)} ${info.unitName}`}
         aria-describedby={helpId}
-        onChange={(event) => set(Number(event.target.value))}
+        onChange={(event) => {
+          const picked = Number(event.target.value);
+          set(options ? (options[picked] ?? value) : picked);
+        }}
       />
     </div>
   );

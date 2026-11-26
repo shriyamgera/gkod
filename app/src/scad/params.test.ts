@@ -24,6 +24,21 @@ describe('parseParams', () => {
     expect(byName.choice).toMatchObject({ min: 1, max: 3, step: 1 });
   });
 
+  it('keeps the listed values of a dropdown, even when they are unevenly spaced', () => {
+    const exported = {
+      parameters: [
+        {
+          name: 'screw',
+          type: 'number',
+          initial: 3,
+          options: [3, 4, 5, 6, 8].map((value) => ({ name: String(value), value })),
+        },
+      ],
+    };
+    expect(parseParams(exported)[0]).toMatchObject({ min: 3, max: 8, step: 1, options: [3, 4, 5, 6, 8] });
+    expect(parseParams(mixed).find((p) => p.name === 'choice')?.options).toEqual([1, 2, 3]);
+  });
+
   it('makes a range around a number that has none', () => {
     const byName = Object.fromEntries(parseParams(mixed).map((p) => [p.name, p]));
     expect(byName.plain).toMatchObject({ value: 12, min: 6, max: 24, step: 1 });

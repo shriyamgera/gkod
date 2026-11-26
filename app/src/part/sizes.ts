@@ -45,12 +45,22 @@ export function describeParam(param: Pick<Param, 'name' | 'caption'>): SizeInfo 
 
 const tidy = (value: number) => Number(value.toFixed(6));
 
-// Snaps a typed or dragged value onto the slider's steps and keeps it inside the range.
-export function fitToParam(value: number, param: Pick<Param, 'min' | 'max' | 'step'>): number {
+// Snaps a typed or dragged value onto the slider's steps, or onto the nearest listed value, and keeps it inside the range.
+export function fitToParam(value: number, param: Pick<Param, 'min' | 'max' | 'step' | 'options'>): number {
   if (!Number.isFinite(value)) return param.min;
+  if (param.options?.length) return nearestOption(value, param.options);
   const steps = param.step > 0 ? Math.round((value - param.min) / param.step) : 0;
   const snapped = param.step > 0 ? param.min + steps * param.step : value;
   return tidy(Math.min(param.max, Math.max(param.min, snapped)));
+}
+
+function nearestOption(value: number, options: number[]): number {
+  return options.reduce((best, option) => (Math.abs(option - value) < Math.abs(best - value) ? option : best));
+}
+
+// Where a value sits among the listed values, for a slider that steps through them in order.
+export function optionIndex(value: number, options: number[]): number {
+  return options.indexOf(nearestOption(value, options));
 }
 
 export function formatValue(value: number): string {

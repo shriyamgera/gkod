@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import phoneStand from '../examples/phone_stand.scad?raw';
 import { parseParams } from '../scad/params';
 import exported from '../scad/fixtures/phone_stand.param.json?raw';
-import { describeParam, fitToParam, labelOf, stlFileName, withValues } from './sizes';
+import { describeParam, fitToParam, labelOf, optionIndex, stlFileName, withValues } from './sizes';
 
 const params = parseParams(exported);
 
@@ -70,6 +70,23 @@ describe('fitToParam', () => {
 
   it('falls back to the low end for a value that is not a number', () => {
     expect(fitToParam(Number.NaN, thickness)).toBe(3);
+  });
+
+  it('only gives values from the list when the code lists them', () => {
+    const teeth = { min: 12, max: 32, step: 4, options: [12, 16, 20, 32] };
+    expect(fitToParam(24, teeth)).toBe(20);
+    expect(fitToParam(28, teeth)).toBe(32);
+    expect(fitToParam(100, teeth)).toBe(32);
+    const results = [12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32].map((value) => fitToParam(value, teeth));
+    expect(results.every((value) => teeth.options.includes(value))).toBe(true);
+  });
+});
+
+describe('optionIndex', () => {
+  it('finds the position of the nearest listed value', () => {
+    expect(optionIndex(8, [3, 4, 5, 6, 8])).toBe(4);
+    expect(optionIndex(7.9, [3, 4, 5, 6, 8])).toBe(4);
+    expect(optionIndex(3, [3, 4, 5, 6, 8])).toBe(0);
   });
 });
 
