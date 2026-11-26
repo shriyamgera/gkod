@@ -21,6 +21,10 @@ function readable(line: string): string {
   return where ? `Line ${where[1]}: ${text}` : text;
 }
 
+// Deep recursion stops the compiler as a JavaScript error, a WebAssembly trap, or a bare number (a C++ exception
+// the web build does not catch), depending on where the stack runs out.
+const outOfRoom = /call stack|out of memory|memory access|table index is out of bounds|unreachable|^EXCEPTION:\s*\d+\s*$/i;
+
 // Picks one short message for a failed compile, or returns null when the compile is fine.
 // Compiles run with --hardwarnings, so a warning stops the compile and is the cause to report.
 export function findFailure(exitCode: number, log: string[], triangles: number): string | null {
@@ -28,12 +32,14 @@ export function findFailure(exitCode: number, log: string[], triangles: number):
   if (error) return readable(error);
   const thrown = log.find((line) => line.startsWith('EXCEPTION:'));
   if (thrown) {
-    return /call stack|out of memory|memory access/i.test(thrown)
-      ? 'The code ran out of room, most likely from endless recursion.'
+    return outOfRoom.test(thrown)
+      ? 'The code ran out of room, most likely from recursion that never ends or goes too deep.'
       : `The compiler stopped: ${readable(thrown)}`;
   }
   const warning = exitCode !== 0 ? log.find((line) => line.startsWith('WARNING:')) : undefined;
-  if (warning) return readable(warning);
+  if (warning) {
+    return /didn't fit into cache/i.test(warning) ? 'The part is too detailed to build; lower $fn or use fewer pieces.' : readable(warning);
+  }
   if (log.some((line) => /top level object is empty/i.test(line))) return 'The code does not make any solid shape.';
   if (log.some((line) => /not a 3D object/i.test(line))) return 'The code makes a flat 2D shape, not a 3D part.';
   if (exitCode !== 0) {

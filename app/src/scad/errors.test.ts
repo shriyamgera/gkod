@@ -22,8 +22,17 @@ describe('findFailure', () => {
     expect(findFailure(0, [], 0)).toMatch(/solid shape/);
   });
 
-  it('explains a stack overflow', () => {
-    expect(findFailure(-1, ['EXCEPTION: Maximum call stack size exceeded'], 0)).toMatch(/recursion/);
+  it('explains a stack overflow in each form it takes', () => {
+    for (const thrown of ['Maximum call stack size exceeded', 'memory access out of bounds', 'table index is out of bounds', 'unreachable', '1393976']) {
+      expect(findFailure(-1, [`EXCEPTION: ${thrown}`], 0)).toMatch(/ran out of room.*recursion/);
+    }
+    expect(findFailure(-1, ['EXCEPTION: something else 12'], 0)).toBe('The compiler stopped: something else 12');
+  });
+
+  it('explains a part too detailed to build', () => {
+    expect(findFailure(1, ["WARNING: GeometryEvaluator: Node didn't fit into cache."], 0)).toBe(
+      'The part is too detailed to build; lower $fn or use fewer pieces.',
+    );
   });
 
   it('reports the warning that stopped the compile', () => {

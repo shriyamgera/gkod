@@ -14,4 +14,4 @@ npx gkod render part.stl|part.scad [-o out.png] [--size 900] [--view iso|front|s
 
 Exit codes: 0 done, 1 the part failed to compile or a check failed, 2 wrong options or a file that cannot be read.
 
-`npm test` covers the option parsing, the PNG file, the view and framing maths, the rasterizer, and full pictures of the examples.
+`npm test` covers the option parsing, compiles that fail from deep recursion or too much detail, the PNG file, the view and framing maths, the rasterizer, and full pictures of the examples.
