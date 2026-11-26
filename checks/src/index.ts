@@ -11,6 +11,17 @@ export type { Bed, CheckId, CheckOptions, CheckResult, Report, Vec3 } from '#che
 export { DEFAULT_BED } from '#checks/types';
 export { bedLabel } from '#checks/fits';
 export * as limits from '#checks/limits';
+export {
+  checkGcode,
+  createGcodeChecker,
+  DEFAULT_ALLOWED,
+  FAN_BY_LAYER,
+  MAX_E_PER_MOVE_MM,
+  PLA_LIMITS,
+  type GcodeLimits,
+  type GcodeProblem,
+  type GcodeReport,
+} from '#checks/gcode';
 
 /**
  * Runs the print checks on a mesh.
