@@ -11,7 +11,7 @@ from mcp.server.mcpserver import Image, MCPServer
 
 from gkod_mcp.examples import example_source, examples
 from gkod_mcp.node import GkodError, run_gkod
-from gkod_mcp.paths import out_dir
+from gkod_mcp.paths import REPO, out_dir
 
 View = Literal["iso", "front", "side", "top"]
 # the printers gkod check knows (tools/src/printers.ts); the Kobra 2 Neo is the owner's
@@ -69,10 +69,19 @@ def _mm(values: list[float]) -> str:
     return " x ".join(f"{round(v, 1):g}" for v in values)
 
 
-def _check(stl_path: str, printer: str) -> dict[str, Any]:
-    path = Path(stl_path).expanduser()
+def _stl_file(stl_path: str) -> Path:
+    """The STL to read: relative paths start at the repo, symlinks are followed, and it must be inside the repo or the output folder."""
+    path = (REPO / Path(stl_path).expanduser()).resolve()
+    folder = out_dir()
+    if path.suffix.lower() != ".stl" or not (path.is_relative_to(REPO) or path.is_relative_to(folder)):
+        raise GkodError(f"Give an STL file inside the GKod repo or its output folder ({folder}); {stl_path} is not one.")
     if not path.is_file():
         raise GkodError(f"There is no STL file at {stl_path}.")
+    return path
+
+
+def _check(stl_path: str, printer: str) -> dict[str, Any]:
+    path = _stl_file(stl_path)
     report = run_gkod(["check", str(path), "--printer", printer], CHECK_SECONDS)
     size = [round(v, 1) for v in report["stats"]["size"]]
     checks = []
@@ -146,7 +155,8 @@ def compile_part(code: str, sizes: dict[str, float] | None = None) -> dict[str, 
 def check_part(stl_path: str, printer: Printer = "kobra2neo") -> dict[str, Any]:
     """Runs GKod's print checks on an STL file: closed, fits the printer, sits flat, no steep overhangs.
 
-    Returns the report in plain words (summary) and as JSON (checks), with a fix for each failed check.
+    stl_path is an STL file inside the GKod repo (relative paths start there) or its output folder, such as one
+    from compile_part. Returns the report in plain words (summary) and as JSON (checks), with a fix for each failed check.
     """
     return _check(stl_path, printer)
 
@@ -161,6 +171,8 @@ def render_part(
     printer: Printer = "kobra2neo",
 ) -> list[Image | str]:
     """Draws a part as a PNG picture to look at, from OpenSCAD code (compiled first, with optional sizes) or an STL file.
+
+    stl_path, like check_part's, is an STL inside the GKod repo or its output folder.
 
     The part sits on a 10 mm bed grid with its size in mm in the corner. With mark_overhangs, faces that would sag
     are orange (seen through the part when they are underneath). Also returns a one-line summary: size, triangles,

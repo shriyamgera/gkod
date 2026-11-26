@@ -106,9 +106,16 @@ def test_check_part_names_what_to_fix():
     assert server.check_part(too_big, "p1s")["ready"] is True
 
 
-def test_check_part_needs_a_real_file():
-    with pytest.raises(GkodError, match="There is no STL file at /no/such.stl"):
-        server.check_part("/no/such.stl")
+def test_check_part_needs_a_real_file(out_folder):
+    with pytest.raises(GkodError, match="There is no STL file at "):
+        server.check_part(str(out_folder / "no_such.stl"))
+
+
+def test_check_part_reads_only_stl_files_in_the_repo_or_the_output_folder(tmp_path):
+    for path in ["/no/such.stl", str(tmp_path / "part.stl"), "README.md", str(REPO / "checks" / "README.md")]:
+        with pytest.raises(GkodError, match="Give an STL file inside the GKod repo or its output folder"):
+            server.check_part(path)
+    assert server.check_part("checks/test/fixtures/cable_clip.stl")["ready"] is True
 
 
 def test_the_printers_offered_are_the_ones_gkod_knows():

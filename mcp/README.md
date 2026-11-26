@@ -20,6 +20,8 @@ The pictures use the site's paper and ink colours. The part sits on its patch of
 
 Files go to `.gkod-out/` at the repository root (git-ignored), named by a short hash of the code and sizes. Set `GKOD_OUT` to use another folder.
 
+`check_part` and `render_part` only read `.stl` files inside the repository or that output folder. A relative path starts at the repository root, and symlinks are followed before the test, so a link that points elsewhere is refused.
+
 ## Set up
 
 Needs Python 3.12 and Node 22.18 or later, with the repository's Node packages and the OpenSCAD web build in place:
