@@ -8,10 +8,15 @@ dist/
 coverage/
 .venv/
 __pycache__/
+*.egg-info/
+.pytest_cache/
 
 # Secrets and logs
 .env
 *.log
+
+# Parts and pictures made by the gkod tools and the MCP server
+.gkod-out/
 
 # Generated training data, model weights and adapters (rebuilt by scripts)
 data/
