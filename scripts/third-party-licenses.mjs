@@ -23,6 +23,9 @@ const packages = [
 ];
 
 const OPENSCAD_COMMIT = '77a103b912c69e86f6b1217bd68500d2926ed1b2';
+const KIRI_COMMIT = '47efc37eca9a387dfdcd2990273fae6b9680cb64';
+const ANYCUBIC_SLICER_COMMIT = '6103ed8b511609658d00d0538cc7f0609cdb57da';
+const CURA_COMMIT = '1a221ec29a86960d16a412940becc1f63534c41f';
 
 const fetched = {
   // the npm package has no licence file, so it is taken from the same version's source
@@ -39,6 +42,21 @@ const others = [
     title: 'Manifold 3.5.4, inside openscad.wasm',
     licence: 'Apache-2.0',
     url: 'https://raw.githubusercontent.com/elalish/manifold/v3.5.4/LICENSE',
+  },
+  {
+    title: 'Kiri:Moto 4.7.4, grid-apps commit 47efc37 (the slicer in kiri/; its libraries are in kiri/LICENSES.txt)',
+    licence: 'MIT',
+    url: `https://raw.githubusercontent.com/GridSpace/grid-apps/${KIRI_COMMIT}/license.md`,
+  },
+  {
+    title: 'Anycubic Slicer Next printer profiles (start and end G-code of the Anycubic printers)',
+    licence: 'AGPL-3.0',
+    url: `https://raw.githubusercontent.com/ANYCUBIC-3D/AnycubicSlicerNext/${ANYCUBIC_SLICER_COMMIT}/LICENSE.txt`,
+  },
+  {
+    title: 'Cura printer definitions (start and end G-code of the Creality Ender-3 V2)',
+    licence: 'LGPL-3.0',
+    url: `https://raw.githubusercontent.com/Ultimaker/Cura/${CURA_COMMIT}/LICENSE`,
   },
   {
     title: 'Archivo font (Fontsource 5.3.0 files)',
@@ -95,7 +113,8 @@ const parts = [
   'The full licence text of each piece of software and each font the site ships. The list, with',
   'versions and source links, is on the Notices page and in THIRD_PARTY_NOTICES.md in the source',
   'repository. react-reconciler, copied inside @react-three/fiber, is part of React and under the',
-  'same MIT licence as react below. Made by scripts/third-party-licenses.mjs.',
+  'same MIT licence as react below. The libraries inside the Kiri:Moto slicer build have their full',
+  'licence texts in kiri/LICENSES.txt, which ships next to that build. Made by scripts/third-party-licenses.mjs.',
 ];
 for (const entry of entries) {
   parts.push('', rule, entry.title, entry.licence, rule, '', entry.text.replace(/\r\n?/g, '\n').trim());
