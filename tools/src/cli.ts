@@ -67,7 +67,7 @@ function checkCommand(args: CheckArgs): number {
   const printer = PRINTERS[args.printer]?.name ?? `a ${bedText(args.bed)} bed`;
   const report = checkStl(readInput(args.input, true), { bed: args.bed });
   if (args.json) {
-    console.log(JSON.stringify({ file: args.input, printer: args.printer, bed: args.bed, ...report }));
+    console.log(JSON.stringify({ file: args.input, printer: args.printer, printerName: printer, bed: args.bed, ...report }));
   } else {
     console.log(reportLines(args.input, report, printer).join('\n'));
   }
