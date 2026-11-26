@@ -1,4 +1,4 @@
-import { type CompileOptions, TIMEOUT_MESSAGE } from '../scad/client';
+import { CANCEL_MESSAGE, type CompileOptions, TIMEOUT_MESSAGE } from '../scad/client';
 import type { CompileResult, Param } from '../scad/types';
 
 export type Sizes = Record<string, number>;
@@ -22,6 +22,9 @@ type Options = {
   compile: CompileFn;
   onChange: (state: LiveState) => void;
   delayMs?: number;
+  // an out-of-date compile is cancelled once it has run this long; quicker ones are left to finish,
+  // because cancelling a running compile restarts the compiler
+  cancelAfterMs?: number;
   engine?: { ready: boolean };
 };
 
@@ -37,12 +40,20 @@ export function startState(): LiveState {
 
 // Recompiles a part as its sizes change. Changes are debounced, only one compile runs at a time,
 // and a result is shown only if no newer change came in while it was being made.
-export function createLiveCompile({ source, compile, onChange, delayMs = 150, engine = sharedEngine }: Options) {
+export function createLiveCompile({
+  source,
+  compile,
+  onChange,
+  delayMs = 150,
+  cancelAfterMs = 300,
+  engine = sharedEngine,
+}: Options) {
   let state = initialState;
   let wanted: Sizes | null = null;
   let latest = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let running = false;
+  let running: { ticket: number; began: number; controller: AbortController } | null = null;
+  let cancelTimer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
 
   function set(patch: Partial<LiveState>) {
@@ -65,23 +76,41 @@ export function createLiveCompile({ source, compile, onChange, delayMs = 150, en
     }
   }
 
+  // Its result would be thrown away, so a slow compile is not left to hold up the next one.
+  function cancelIfOutdated() {
+    if (!running || (!stopped && running.ticket === latest)) return;
+    const age = performance.now() - running.began;
+    if (age >= cancelAfterMs) {
+      running.controller.abort();
+    } else if (!cancelTimer) {
+      cancelTimer = setTimeout(() => {
+        cancelTimer = null;
+        cancelIfOutdated();
+      }, cancelAfterMs - age);
+    }
+  }
+
   function run() {
     timer = null;
     if (running || !wanted || stopped) return;
     const sizes = wanted;
     const ticket = latest;
+    const controller = new AbortController();
     wanted = null;
-    running = true;
+    running = { ticket, began: performance.now(), controller };
     set({ status: engine.ready ? 'working' : 'loading' });
 
     const onStart = () => {
       engine.ready = true;
       if (!stopped && state.status === 'loading') set({ status: 'working' });
     };
-    void compile(source, sizes, { onStart }).then((result) => {
-      running = false;
+    void compile(source, sizes, { onStart, signal: controller.signal }).then((result) => {
+      running = null;
+      if (cancelTimer) clearTimeout(cancelTimer);
+      cancelTimer = null;
       if (stopped) return;
-      if (ticket === latest) apply(result, sizes);
+      const cancelled = !result.ok && result.error === CANCEL_MESSAGE;
+      if (ticket === latest && !cancelled) apply(result, sizes);
       else if (wanted && !timer) run();
     });
   }
@@ -94,6 +123,7 @@ export function createLiveCompile({ source, compile, onChange, delayMs = 150, en
     timer = null;
     if (now) run();
     else timer = setTimeout(run, delayMs);
+    cancelIfOutdated();
     if (state.status === 'idle') set({ status: engine.ready ? 'working' : 'loading' });
   }
 
@@ -101,6 +131,7 @@ export function createLiveCompile({ source, compile, onChange, delayMs = 150, en
     stopped = true;
     if (timer) clearTimeout(timer);
     timer = null;
+    cancelIfOutdated();
   }
 
   return { request, dispose };

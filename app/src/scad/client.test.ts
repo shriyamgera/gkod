@@ -1,16 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE, createCompiler, type WorkerLike } from './client';
+import { CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE, createCompiler, type WorkerLike } from './client';
 import phoneStand from './fixtures/phone_stand.param.json?raw';
-import type { WorkerReply, WorkerRequest } from './messages';
+import type { CompileRequest, WorkerReply, WorkerRequest } from './messages';
 
 class FakeWorker implements WorkerLike {
   onmessage: ((event: MessageEvent<WorkerReply>) => void) | null = null;
   onerror: ((event: ErrorEvent) => void) | null = null;
-  requests: WorkerRequest[] = [];
+  requests: CompileRequest[] = [];
+  cancels: number[] = [];
   terminated = false;
 
   postMessage(message: WorkerRequest) {
-    this.requests.push(message);
+    if (message.type === 'cancel') this.cancels.push(message.id);
+    else this.requests.push(message);
   }
   terminate() {
     this.terminated = true;
@@ -166,6 +168,63 @@ describe('compile', () => {
     workers[0]!.send({ type: 'done', id: 1, ok: false, error: 'Line 1: Parser error: syntax error', log, ms: 4 });
     expect(await pending).toEqual({ ok: false, error: 'Line 1: Parser error: syntax error', log, ms: 4 });
     expect(workers).toHaveLength(1);
+  });
+
+  it('drops a cancelled compile that is still waiting for the compiler, without ending the worker', async () => {
+    const { workers, compile } = setup();
+    const controller = new AbortController();
+    const pending = compile('cube(1);', {}, { signal: controller.signal });
+    await flush();
+    controller.abort();
+    expect(workers[0]!.cancels).toEqual([workers[0]!.last().id]);
+    workers[0]!.send({ type: 'cancelled', id: workers[0]!.last().id });
+    expect(await pending).toMatchObject({ ok: false, error: CANCEL_MESSAGE });
+    expect(workers[0]!.terminated).toBe(false);
+  });
+
+  it('ends the worker to stop a cancelled compile that is running, and uses a new one next', async () => {
+    const { workers, compile } = setup();
+    const controller = new AbortController();
+    const pending = compile('slow();', {}, { signal: controller.signal });
+    await flush();
+    workers[0]!.start();
+    controller.abort();
+    expect(await pending).toMatchObject({ ok: false, error: CANCEL_MESSAGE });
+    expect(workers[0]!.terminated).toBe(true);
+
+    const next = compile('cube(1);');
+    await flush();
+    expect(workers).toHaveLength(2);
+    workers[1]!.start();
+    workers[1]!.succeed();
+    expect((await next).ok).toBe(true);
+  });
+
+  it('ends the worker when the compile began just as it was cancelled', async () => {
+    const { workers, compile } = setup();
+    const controller = new AbortController();
+    const onStart = vi.fn();
+    const pending = compile('slow();', {}, { signal: controller.signal, onStart });
+    await flush();
+    controller.abort();
+    workers[0]!.start();
+    expect(await pending).toMatchObject({ error: CANCEL_MESSAGE });
+    expect(workers[0]!.terminated).toBe(true);
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  it('skips a queued compile that is cancelled before its turn', async () => {
+    const { workers, compile } = setup();
+    const controller = new AbortController();
+    const first = compile('cube(1);');
+    const second = compile('cube(2);', {}, { signal: controller.signal });
+    await flush();
+    controller.abort();
+    workers[0]!.start();
+    workers[0]!.succeed();
+    await first;
+    expect(await second).toMatchObject({ error: CANCEL_MESSAGE });
+    expect(workers[0]!.requests.map((r) => r.source)).toEqual(['cube(1);']);
   });
 
   it('runs requests one at a time, in order', async () => {

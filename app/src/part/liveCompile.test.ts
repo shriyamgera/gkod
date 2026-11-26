@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TIMEOUT_MESSAGE, type CompileOptions } from '../scad/client';
+import { CANCEL_MESSAGE, TIMEOUT_MESSAGE, type CompileOptions } from '../scad/client';
 import type { CompileResult } from '../scad/types';
 import { createLiveCompile, type LiveState, type Sizes } from './liveCompile';
 
@@ -20,7 +20,12 @@ function setup(ready = false) {
   const engine = { ready };
   const live = createLiveCompile({
     source: 'cube(width);',
-    compile: (_source, sizes, opts) => new Promise((resolve) => calls.push({ sizes, opts, resolve })),
+    // like the real compiler, a cancelled compile resolves at once
+    compile: (_source, sizes, opts) =>
+      new Promise((resolve) => {
+        calls.push({ sizes, opts, resolve });
+        opts.signal?.addEventListener('abort', () => resolve(bad(CANCEL_MESSAGE)));
+      }),
     onChange: (state) => states.push(state),
     engine,
   });
@@ -132,6 +137,53 @@ describe('createLiveCompile', () => {
     live.request({ width: 120 }, { now: true });
     await answer(good(120));
     expect(last().defaults).toBeNull();
+  });
+
+  it('cancels an out-of-date compile that has run for a while, and runs the newest change next', async () => {
+    const { calls, live, last, answer } = setup(true);
+    live.request({}, { now: true });
+    await answer(good(80));
+
+    live.request({ width: 90 }, { now: true });
+    await vi.advanceTimersByTimeAsync(2000);
+    live.request({ width: 100 });
+    expect(calls[1]!.opts.signal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(calls.map((call) => call.sizes)).toEqual([{}, { width: 90 }, { width: 100 }]);
+    expect(last()).toMatchObject({ status: 'working', problem: null });
+    expect(last().shown?.params[0]?.value).toBe(80);
+
+    await answer(good(100));
+    expect(last()).toMatchObject({ status: 'idle', problem: null });
+    expect(last().shown?.params[0]?.value).toBe(100);
+  });
+
+  it('lets a quick out-of-date compile finish, but cancels it if it is still running later', async () => {
+    const { calls, live } = setup(true);
+    live.request({ width: 90 }, { now: true });
+    await vi.advanceTimersByTimeAsync(100);
+    live.request({ width: 100 }, { now: true });
+    expect(calls[0]!.opts.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(calls[0]!.opts.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(calls[0]!.opts.signal?.aborted).toBe(true);
+    expect(calls.map((call) => call.sizes)).toEqual([{ width: 90 }, { width: 100 }]);
+  });
+
+  it('never cancels the compile of the latest change', async () => {
+    const { calls, live } = setup(true);
+    live.request({ width: 90 }, { now: true });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(calls[0]!.opts.signal?.aborted).toBe(false);
+  });
+
+  it('cancels its compile when the part is closed', async () => {
+    const { calls, live } = setup(true);
+    live.request({}, { now: true });
+    await vi.advanceTimersByTimeAsync(1000);
+    live.dispose();
+    expect(calls[0]!.opts.signal?.aborted).toBe(true);
   });
 
   it('ignores results and pending changes after it is stopped', async () => {

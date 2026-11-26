@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { cleanLog, findFailure, stlTriangles } from './errors';
-import type { WorkerReply, WorkerRequest } from './messages';
+import type { CompileRequest, WorkerReply, WorkerRequest } from './messages';
 
 type OpenScadInstance = {
   FS: { writeFile(path: string, data: string): void; readFile(path: string): Uint8Array };
@@ -107,16 +107,23 @@ async function exportParams(compiler: Compiler, source: string): Promise<string>
   return json;
 }
 
-async function handle({ id, source, overrides }: WorkerRequest): Promise<void> {
-  const reply = (message: WorkerReply, transfer: Transferable[] = []) => scope.postMessage(message, transfer);
+const reply = (message: WorkerReply, transfer: Transferable[] = []) => scope.postMessage(message, transfer);
+
+// compiles waiting for the compiler to load; a cancel message takes one out before it begins
+const waiting = new Set<number>();
+
+async function handle({ id, source, overrides }: CompileRequest): Promise<void> {
+  waiting.add(id);
   let compiler: Compiler;
   try {
     compiler = await load();
   } catch (thrown) {
+    if (!waiting.delete(id)) return;
     const detail = thrown instanceof Error ? thrown.message : String(thrown);
     reply({ type: 'done', id, ok: false, error: 'The compiler could not be loaded.', log: [detail], ms: 0 });
     return;
   }
+  if (!waiting.delete(id)) return;
   reply({ type: 'start', id });
   const started = performance.now();
   try {
@@ -140,8 +147,12 @@ async function handle({ id, source, overrides }: WorkerRequest): Promise<void> {
   }
 }
 
-scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
-  void handle(event.data);
+scope.onmessage = ({ data }: MessageEvent<WorkerRequest>) => {
+  if (data.type === 'cancel') {
+    if (waiting.delete(data.id)) reply({ type: 'cancelled', id: data.id });
+    return;
+  }
+  void handle(data);
 };
 
 void load().catch(() => {});
