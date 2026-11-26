@@ -457,8 +457,21 @@ describe('checkGcode', () => {
       for (let i = 0; i < 10000; i++) l.push('G1 X300');
       l.push('M500');
     }));
-    expect(report.problems).toHaveLength(6);
+    expect(report.problems).toHaveLength(7);
     expect(report.problems[5]!.reason).toContain('M500');
+    expect(report.problems[6]).toEqual({ line: 0, text: '', reason: '9995 more problems were found.' });
+  });
+
+  it('keeps a few dozen problems in all, however many different lines fail', () => {
+    for (const bad of [(i: number) => `M${1000 + i}`, (i: number) => `M104 S${300 + i}`, (i: number) => `G1 X${300 + i}`]) {
+      const report = check(file(6, (l) => {
+        for (let i = 0; i < 100000; i++) l.push(bad(i));
+      }));
+      expect(report.ok).toBe(false);
+      expect(report.problems.length).toBeLessThanOrEqual(41);
+      expect(report.problems.at(-1)!.reason).toMatch(/^\d+ more problems were found\.$/);
+      expect(Number(report.problems.at(-1)!.reason.split(' ')[0]) + report.problems.length - 1).toBe(100000);
+    }
   });
 
   it('reads a large file one line at a time', () => {

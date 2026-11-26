@@ -44,10 +44,12 @@ export const MAX_LINE_CHARS = 95;
 // Marlin ends a line at "\r" as well as "\n", and a backspace (0x08) erases what it read before it. Tab is harmless.
 const CONTROL = /[\x00-\x08\x0a-\x1f\x7f]/;
 const NOT_ASCII = /[^\x00-\x7f]/;
-// Only the first few problems of each kind are kept, so a broken file of millions of lines cannot fill memory.
+// Only the first few problems of each kind, and a few dozen in all, are kept; the rest are only counted. So a broken
+// file of millions of lines cannot fill memory.
 const MAX_PER_KIND = 5;
+const MAX_PROBLEMS = 40;
 
-const known: Record<string, string> = {
+const known = {
   M500: 'saves settings to the printer’s memory',
   M501: 'loads saved settings from the printer’s memory',
   M502: 'resets the printer’s settings to factory defaults',
@@ -59,16 +61,25 @@ const known: Record<string, string> = {
   M92: 'changes the motor steps per millimetre',
   M851: 'changes the nozzle height offset',
   M206: 'changes the home position',
-};
+} as const;
+type Known = keyof typeof known;
 
 type Axis = 'X' | 'Y' | 'Z';
 type Words = Map<string, number>;
+// A fixed set, so the count of each kind takes no more memory as the file grows.
+type Kind =
+  | 'below' | `out-${Axis}` | 'unknown' | 'not-homed' | 'z-unknown' | 'g92'
+  | 'arc-unknown' | 'arc-radius' | 'arc-out'
+  | 'e-big' | 'e-unknown' | 'e-mode' | 'e-total' | 'cold'
+  | 'nozzle' | 'bed' | 'heater-word' | 'fan' | 'fan-word'
+  | 'control' | 'not-ascii' | 'too-long' | 'command' | Known | 'unreadable' | 'm420' | 'no-moves';
 
 export function createGcodeChecker(limits: GcodeLimits) {
   const allowed = new Set((limits.allowed ?? DEFAULT_ALLOWED).map(normalize));
   const { bed } = limits;
   const problems: GcodeProblem[] = [];
-  const kinds = new Map<string, number>();
+  const kinds = new Map<Kind, number>();
+  let found = 0;
   const seenNozzle: number[] = [];
   const seenBed: number[] = [];
 
@@ -98,10 +109,11 @@ export function createGcodeChecker(limits: GcodeLimits) {
   let printed = 0;
   let stated: { mm: number; line: number } | null = null;
 
-  function problem(text: string, reason: string, kind = reason) {
+  function problem(text: string, reason: string, kind: Kind) {
+    found++;
     const count = kinds.get(kind) ?? 0;
     kinds.set(kind, count + 1);
-    if (count < MAX_PER_KIND) problems.push({ line: lineNo, text: shown(text), reason });
+    if (count < MAX_PER_KIND && problems.length < MAX_PROBLEMS) problems.push({ line: lineNo, text: shown(text), reason });
   }
 
   function remember(list: number[], value: number) {
@@ -227,7 +239,7 @@ export function createGcodeChecker(limits: GcodeLimits) {
     y: number | null,
   ) {
     if (from.X === null || from.Y === null || x === null || y === null) {
-      problem(text, 'Draws an arc from a position that is not known.');
+      problem(text, 'Draws an arc from a position that is not known.', 'arc-unknown');
       return;
     }
     const clockwise = code === 'G2';
@@ -240,7 +252,7 @@ export function createGcodeChecker(limits: GcodeLimits) {
       const d = Math.hypot(dx, dy);
       const h2 = (r - d / 2) * (r + d / 2);
       if (d === 0 || h2 < -EPS) {
-        problem(text, 'Draws an arc whose radius is too small for its two ends.');
+        problem(text, 'Draws an arc whose radius is too small for its two ends.', 'arc-radius');
         return;
       }
       const h = Math.sqrt(Math.max(0, h2));
@@ -284,13 +296,13 @@ export function createGcodeChecker(limits: GcodeLimits) {
       remember(seenNozzle, value);
       const inRange = value >= limits.nozzleMin && value <= limits.nozzleMax;
       if (value !== 0 && !inRange) {
-        problem(text, `Sets the nozzle to ${value} °C. PLA must be ${limits.nozzleMin} to ${limits.nozzleMax} °C.`);
+        problem(text, `Sets the nozzle to ${value} °C. PLA must be ${limits.nozzleMin} to ${limits.nozzleMax} °C.`, 'nozzle');
       }
       if (code === 'M109') heated = inRange;
     } else {
       remember(seenBed, value);
       if (value < 0 || value > limits.bedMax) {
-        problem(text, `Sets the bed to ${value} °C. PLA needs at most ${limits.bedMax} °C.`);
+        problem(text, `Sets the bed to ${value} °C. PLA needs at most ${limits.bedMax} °C.`, 'bed');
       }
     }
   }
@@ -319,7 +331,7 @@ export function createGcodeChecker(limits: GcodeLimits) {
     for (const axis of ['X', 'Y', 'Z'] as Axis[]) {
       const value = words.get(axis);
       if (value === undefined) continue;
-      problem(text, `G92 gives ${axis} a new position, so the moves after it cannot be checked against the bed.`);
+      problem(text, `G92 gives ${axis} a new position, so the moves after it cannot be checked against the bed.`, 'g92');
       pos[axis] = value;
     }
   }
@@ -358,14 +370,14 @@ export function createGcodeChecker(limits: GcodeLimits) {
     }
     const cmd = normalize(head);
     if (!allowed.has(cmd)) {
-      const why = known[cmd];
-      problem(text, why ? `${cmd} ${why}, which a print file must never do.` : `${cmd} is not on the list of allowed commands.`);
+      if (Object.hasOwn(known, cmd)) problem(text, `${cmd} ${known[cmd as Known]}, which a print file must never do.`, cmd as Known);
+      else problem(text, `${cmd} is not on the list of allowed commands.`, 'command');
       return;
     }
     if (cmd === 'M117') return;
     const words = parseWords(parts.slice(first));
     if (words === null) {
-      problem(text, 'This line could not be read.');
+      problem(text, 'This line could not be read.', 'unreadable');
       return;
     }
     switch (cmd) {
@@ -409,7 +421,7 @@ export function createGcodeChecker(limits: GcodeLimits) {
         break;
       case 'M420':
         if ([...words.keys()].some((key) => key !== 'S') || ![0, 1].includes(words.get('S') ?? -1)) {
-          problem(text, 'M420 may only turn bed levelling on or off (S1 or S0).');
+          problem(text, 'M420 may only turn bed levelling on or off (S1 or S0).', 'm420');
         }
         break;
     }
@@ -429,9 +441,10 @@ export function createGcodeChecker(limits: GcodeLimits) {
       lineNo = 0;
       problem('', 'The file has no moves.', 'no-moves');
     }
+    const more = found - problems.length;
     return {
-      ok: problems.length === 0,
-      problems: [...problems],
+      ok: found === 0,
+      problems: more > 0 ? [...problems, { line: 0, text: '', reason: `${more} more ${more === 1 ? 'problem was' : 'problems were'} found.` }] : [...problems],
       stats: {
         lines,
         moves,
