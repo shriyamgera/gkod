@@ -44,7 +44,12 @@ export const MIN_OVERHANG_MM2 = 20;
 export const MAX_REACH_MM = 5;
 
 // A neighbouring face holds an overhang up when it goes at least this far below their shared edge.
+// A wall only holds as well as it is held up itself: one that hangs from another overhang carries on that overhang's reach,
+// less the height it rises.
 export const SUPPORT_DROP_MM = 0.01;
+
+// A long edge that holds an overhang up is measured in pieces this long, since what holds it up can change along it.
+export const WALL_PIECE_MM = 2;
 
 // The reach of a very large overhang area is measured on this many sample points at most, to keep the check fast.
 export const MAX_REACH_SAMPLES = 4000;

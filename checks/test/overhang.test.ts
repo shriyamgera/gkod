@@ -101,6 +101,30 @@ describe('overhang', () => {
     expect(overhang(plate(10)).ok).toBe(false);
   });
 
+  // a 10 mm stem with steps that each reach `tread` mm further out and sit `riser` mm higher, under a 3 mm top
+  function staircase(tread: number, riser: number, steps: number) {
+    const xs = [0, 10, ...Array.from({ length: steps }, (_, i) => 10 + (i + 1) * tread)];
+    const zs = [0, 10, ...Array.from({ length: steps }, (_, i) => 10 + (i + 1) * riser), 10 + steps * riser + 3];
+    return cells(xs, [0, 20], zs, (i, _j, k) => k >= i);
+  }
+
+  it('adds up the reach of steps that each hang from the one below', () => {
+    // each step reaches 4.9 mm, under the 5 mm limit, but together they lean about 88 degrees
+    const flat = overhang(staircase(4.9, 0.2, 8));
+    expect(flat.ok).toBe(false);
+    expect(flat.detail).toMatch(/^7 areas underneath would sag/);
+    // steps as tall as they are deep make a 45 degree slope
+    expect(overhang(staircase(2, 2, 8)).ok).toBe(true);
+  });
+
+  it('does not count a wall that hangs in the air as holding anything up', () => {
+    // a 10 mm arm from a post, with a 1 mm lip hanging 3 mm from its free end
+    const arm = (lip: boolean) =>
+      cells([0, 10, 19, 20], [0, 14], [0, 23, 26, 30], (i, _j, k) => i === 0 || k === 2 || (lip && i === 2 && k === 1));
+    expect(overhang(arm(false)).detail).toBe('An area underneath, about 140 mm² and 26 mm above the bed, would sag while printing.');
+    expect(overhang(arm(true)).detail).toMatch(/^2 areas underneath would sag while printing; the biggest is about 126 mm²/);
+  });
+
   it('ignores a small patch underneath, even one that reaches out', () => {
     // a ledge 3 mm wide sticking out 6 mm: 18 mm² underneath
     const ledge = (width: number) =>
