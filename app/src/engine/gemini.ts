@@ -18,7 +18,8 @@ export const MESSAGES = {
   noKey: 'Add your Gemini key to make a part.',
   badKey: 'Gemini did not accept this key. Check it and try again.',
   rateLimit: 'Your free key hit its limit. Wait a minute, or try another model.',
-  busy: 'Gemini is busy right now. Try again in a minute.',
+  // busy is only reported once every model on the menu has been tried
+  busy: 'All Gemini models are busy right now. Try again in a minute.',
   missingModel: 'This model is not open to your key. Pick another model.',
   network: 'Could not reach Gemini. Check your connection and try again.',
   timeout: 'Gemini took too long to answer. Try again.',

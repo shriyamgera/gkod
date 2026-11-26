@@ -116,7 +116,12 @@ describe('makePart', () => {
   it('passes an engine problem straight through', async () => {
     const { engine } = fakeEngine([{ ok: false, problem: 'rate-limit', message: 'Wait a minute.', model: 'm' }]);
     const { compileFn, sources } = fakeCompile([]);
-    expect(await makePart(engine, create, { compileFn })).toEqual({ ok: false, problem: 'rate-limit', message: 'Wait a minute.' });
+    expect(await makePart(engine, create, { compileFn })).toEqual({
+      ok: false,
+      problem: 'rate-limit',
+      message: 'Wait a minute.',
+      model: 'm',
+    });
     expect(sources).toHaveLength(0);
   });
 

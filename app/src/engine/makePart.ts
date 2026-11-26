@@ -7,7 +7,7 @@ type Compiled = Extract<CompileResult, { ok: true }>;
 
 export type MakeResult =
   | { ok: true; code: string; result: Compiled; model: string; attempts: number; ms: number }
-  | { ok: false; message: string; problem: EngineProblem | 'compile'; code?: string; compileError?: string };
+  | { ok: false; message: string; problem: EngineProblem | 'compile'; code?: string; compileError?: string; model?: string };
 
 export const COMPILE_FAILED = 'The code from Gemini would not compile, even after one fix. Try again, or say it another way.';
 
@@ -58,7 +58,8 @@ export async function makePart(engine: Engine, req: EngineRequest, opts: Options
     error = first.message;
     model = first.model ?? model;
   } else {
-    return { ok: false, problem: first.problem, message: first.message };
+    // model: the one that hit a limit, so another can be offered
+    return { ok: false, problem: first.problem, message: first.message, model: first.model };
   }
 
   // the repair goes to the model that wrote the code, so a busy first choice is not asked again
@@ -72,6 +73,7 @@ export async function makePart(engine: Engine, req: EngineRequest, opts: Options
       message: second.message,
       code: second.code ?? code,
       compileError: blocked ? second.message : error,
+      model: second.model,
     };
   }
   const compiled = await compileFn(second.code, {}, { signal });

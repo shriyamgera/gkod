@@ -46,7 +46,7 @@ export function keyProblem(input: string): string | null {
   return null;
 }
 
-// The first other model on the list, to suggest when the chosen one is busy.
+// The first other model on the list, to suggest when one has hit its limit.
 export function otherModel<T extends { id: string }>(models: T[], current: string | undefined): T | undefined {
   return models.find((model) => model.id !== current);
 }

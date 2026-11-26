@@ -126,7 +126,7 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
       if (result.problem === 'bad-key') keyStore.forget();
       askForKey(result.problem === 'bad-key' ? result.message : undefined);
     } else {
-      setFailure({ problem: result.problem, message: result.message, model });
+      setFailure({ problem: result.problem, message: result.message, model: result.model ?? model });
     }
   }
 
@@ -144,7 +144,8 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
   }
 
   const busy = stage !== null;
-  const other = failure?.problem === 'busy' ? otherModel(gemini.models, failure.model) : undefined;
+  // A limit is per model, so another may still work. Busy is only reported once every model was tried.
+  const other = failure?.problem === 'rate-limit' ? otherModel(gemini.models, failure.model) : undefined;
 
   return (
     <ChangeBox value={text} onChange={setText} onSubmit={submit} busy={busy} inputRef={field}>
