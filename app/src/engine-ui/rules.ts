@@ -50,3 +50,12 @@ export function keyProblem(input: string): string | null {
 export function otherModel<T extends { id: string }>(models: T[], current: string | undefined): T | undefined {
   return models.find((model) => model.id !== current);
 }
+
+export const NOT_REMEMBERED = 'This browser would not let the key be remembered, so it is kept for this tab only.';
+
+// What the key panel says after a new key or a click on the remember box, from what the key store really did.
+export function rememberMessage(change: 'new-key' | 'box', asked: boolean, remembered: boolean): string {
+  if (asked && !remembered) return change === 'new-key' ? `Key set. ${NOT_REMEMBERED}` : NOT_REMEMBERED;
+  if (change === 'new-key') return remembered ? 'Key set and remembered on this device' : 'Key set for this tab';
+  return remembered ? 'Key remembered on this device' : 'Key kept for this tab only';
+}

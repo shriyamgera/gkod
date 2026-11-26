@@ -5,7 +5,9 @@ import {
   keyHint,
   keyProblem,
   otherModel,
+  NOT_REMEMBERED,
   PHOTO_ONLY_REQUEST,
+  rememberMessage,
   requestText,
   titleFromRequest,
 } from './rules';
@@ -117,5 +119,22 @@ describe('otherModel', () => {
 
   it('has nothing to suggest when there is one model', () => {
     expect(otherModel([{ id: 'a' }], 'a')).toBeUndefined();
+  });
+});
+
+describe('rememberMessage', () => {
+  it('says what happened to a new key', () => {
+    expect(rememberMessage('new-key', true, true)).toBe('Key set and remembered on this device');
+    expect(rememberMessage('new-key', false, false)).toBe('Key set for this tab');
+  });
+
+  it('says when the browser would not store the key', () => {
+    expect(rememberMessage('new-key', true, false)).toBe(`Key set. ${NOT_REMEMBERED}`);
+    expect(rememberMessage('box', true, false)).toBe(NOT_REMEMBERED);
+  });
+
+  it('says what a click on the box did', () => {
+    expect(rememberMessage('box', true, true)).toBe('Key remembered on this device');
+    expect(rememberMessage('box', false, false)).toBe('Key kept for this tab only');
   });
 });

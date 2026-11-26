@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { keyStore, useGeminiKey } from '../engine';
-import { keyHint, keyProblem } from './rules';
+import { keyHint, keyProblem, NOT_REMEMBERED, rememberMessage } from './rules';
 import './engine-ui.css';
 
 export const KEY_PAGE = 'https://aistudio.google.com/apikey';
@@ -20,6 +20,8 @@ export function KeyPanel({ title, titleAs: Title = 'h2', message, autoFocus = fa
   const [input, setInput] = useState('');
   const [show, setShow] = useState(false);
   const [remember, setRemember] = useState(remembered);
+  // ticked, but the browser would not store the key
+  const [rememberFailed, setRememberFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [said, setSaid] = useState('');
   const field = useRef<HTMLInputElement>(null);
@@ -41,22 +43,32 @@ export function KeyPanel({ title, titleAs: Title = 'h2', message, autoFocus = fa
     setInput('');
     setShow(false);
     setError(null);
-    setSaid(remember ? 'Key set and remembered on this device' : 'Key set for this tab');
+    showRemembered('new-key', remember);
     onKeySet?.();
+  }
+
+  // The box and the message follow what the store did, since storage can refuse the key.
+  function showRemembered(change: 'new-key' | 'box', asked: boolean) {
+    const done = keyStore.isRemembered();
+    setRemember(done);
+    setRememberFailed(asked && !done);
+    setSaid(rememberMessage(change, asked, done));
   }
 
   // With a key already set and nothing typed, the box applies at once.
   function changeRemember(next: boolean) {
     setRemember(next);
+    setRememberFailed(false);
     if (key && !input.trim()) {
       keyStore.set(key, next);
-      setSaid(next ? 'Key remembered on this device' : 'Key kept for this tab only');
+      showRemembered('box', next);
     }
   }
 
   function forget() {
     keyStore.forget();
     setRemember(false);
+    setRememberFailed(false);
     setSaid('Key forgotten');
     field.current?.focus();
   }
@@ -121,6 +133,7 @@ export function KeyPanel({ title, titleAs: Title = 'h2', message, autoFocus = fa
         <p id={`${id}-remember-help`} className="muted">
           Only tick this on your own computer.
         </p>
+        {rememberFailed && <p>{NOT_REMEMBERED}</p>}
       </div>
 
       <div className="key-actions">
