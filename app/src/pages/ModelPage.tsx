@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckList } from '../checks-ui/CheckList';
-import { StatusBox } from '../checks-ui/StatusBox';
-import { overhangMark } from '../checks-ui/wording';
+import { PrintStatus } from '../checks-ui/PrintStatus';
+import { useFix } from '../checks-ui/useFix';
+import { fixedNote, fixLabel, fixRequest, overhangMark } from '../checks-ui/wording';
 import { gemini } from '../engine';
 import { ChangePanel, type Changed } from '../models/ChangePanel';
 import { Changes } from '../models/Changes';
@@ -59,11 +60,13 @@ function ModelScreen({ model }: { model: SavedModel }) {
   const { id } = model;
   const report = shown?.checks ?? null;
   const supports = version.supports === true;
+  const fixer = useFix(id);
 
   // undo, redo and choosing a version all come through here
   const moveTo = useRef((next: SavedModel | undefined, before: number) => {
     if (!next || next.current === before) return;
     setValues({});
+    fixer.clear();
     setSaid(`Showing version ${next.current}: ${currentVersion(next).label}`);
   });
 
@@ -98,10 +101,28 @@ function ModelScreen({ model }: { model: SavedModel }) {
 
   // A typed change starts from the version on screen, with the slider values written in.
   function changed({ code, shown: made, model: by, label }: Changed): number {
+    fixer.clear();
     compiledModels.set(code, made);
     const next = modelStore.addVersion(id, { code, label, model: by });
     setValues({});
     return next?.current ?? version.v;
+  }
+
+  // Our own fix text for every failed check goes to the engine as a change of the code on screen.
+  // The fix is added as a new version, so the one it started from is kept.
+  function fix() {
+    if (!report) return;
+    const from = version.v;
+    fixer.start({
+      instruction: fixRequest(report),
+      code: withValues(version.code, values),
+      keep: ({ code, shown: made, model: by }) => {
+        compiledModels.set(code, made);
+        const next = modelStore.addVersion(id, { code, label: fixLabel(report, made.checks), model: by });
+        setValues({});
+        return fixedNote(next?.current ?? from, from, report, made.checks);
+      },
+    });
   }
 
   const liveLabel = Object.keys(values).length > 0 ? `${version.label}, sizes changed` : version.label;
@@ -139,8 +160,8 @@ function ModelScreen({ model }: { model: SavedModel }) {
         <section className="part-view" aria-label="Your model">
           <Viewer
             stl={shown?.stl ?? null}
-            busy={status !== 'idle' || changing}
-            busyText={changing ? 'Changing' : 'Updating'}
+            busy={status !== 'idle' || changing || fixer.fixing}
+            busyText={fixer.fixing ? 'Fixing' : changing ? 'Changing' : 'Updating'}
             note={viewerNote(live)}
             live={liveLabel}
             mark={supports ? null : overhangMark(report)}
@@ -157,10 +178,11 @@ function ModelScreen({ model }: { model: SavedModel }) {
             )}
           </div>
           {!problem && (
-            <StatusBox
+            <PrintStatus
               report={report}
               busy={status !== 'idle' || changing}
-              canFix={false}
+              fix={fixer}
+              onFix={fix}
               supportsChosen={supports}
               onSupports={() => modelStore.setSupports(id, version.v, !supports)}
             />

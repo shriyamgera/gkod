@@ -2,7 +2,7 @@ import type { CheckResult, Report } from '@gkod/checks';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { StatusBox } from './StatusBox';
-import { announcement, fixRequest, overhangMark, readyLine } from './wording';
+import { announcement, fixedNote, fixLabel, fixRequest, overhangMark, readyLine } from './wording';
 
 const passed: CheckResult[] = [
   { id: 'closed', ok: true, title: 'Solid, no holes', detail: '' },
@@ -143,6 +143,26 @@ describe('wording', () => {
 
   it('asks the engine with the checks’ own instructions, never anything else', () => {
     expect(fixRequest(report(tooBig, sag))).toBe(`${tooBig.fix}\n${sag.fix}`);
+  });
+
+  it('labels the version a fix made by what it fixed', () => {
+    expect(fixLabel(report(sag), report())).toBe('Fixed: steep overhang');
+    expect(fixLabel(report(tooBig, sag), report())).toBe('Fixed: size for the bed and steep overhang');
+    expect(fixLabel(report(sag), report(sag))).toBe('Tried to fix: steep overhang');
+    expect(fixLabel(report(sag), report(tooBig))).toBe('Fixed: steep overhang');
+    expect(fixLabel(report(sag), undefined)).toBe('Tried to fix: steep overhang');
+  });
+
+  it('says plainly whether the fix worked, and that the version it started from is kept', () => {
+    expect(fixedNote(3, 2, report(sag), report())).toBe('Fixed. Version 3 is ready to print.');
+    expect(fixedNote(3, 2, report(sag), report(sag))).toBe(
+      'The fix did not work: version 3 still has a problem. Version 2 is kept under Changes.',
+    );
+    expect(fixedNote(2, 1, report(sag), report(tooBig, sag))).toContain('version 2 still has 2 problems');
+    expect(fixedNote(3, 1, report(sag), report(tooBig))).toBe(
+      'Version 3 fixes that, but has a new problem. Version 1 is kept under Changes.',
+    );
+    expect(fixedNote(2, 1, report(sag), undefined)).toBe('Version 2 is made, but it could not be checked.');
   });
 
   it('marks the overhang with its height above the bed', () => {

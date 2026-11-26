@@ -161,6 +161,49 @@
   cursor: not-allowed;
 }
 
+/* Fix it for me: progress, result, key and problems, under the status box */
+
+.fix-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  font-size: 15px;
+}
+
+.fix-status p {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.45;
+}
+
+.fix-status.has-text {
+  margin: -8px 0 20px;
+}
+
+/* kept in the page while empty, so its first message is read out */
+.fix-status:not(.has-text) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.key-inline.fix-key,
+.make-problem.fix-problem {
+  margin: 0 0 20px;
+}
+
+.key-inline.fix-key {
+  padding: 16px;
+}
+
+.make-problem.fix-problem h2 {
+  font-size: 19px;
+}
+
 /* What we checked */
 
 .checks {

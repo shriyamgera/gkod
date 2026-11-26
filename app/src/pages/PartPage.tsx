@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckList } from '../checks-ui/CheckList';
-import { StatusBox } from '../checks-ui/StatusBox';
-import { overhangMark } from '../checks-ui/wording';
+import { PrintStatus } from '../checks-ui/PrintStatus';
+import { handOverNote, useFix } from '../checks-ui/useFix';
+import { fixedNote, fixLabel, fixRequest, overhangMark } from '../checks-ui/wording';
 import { findExample } from '../examples';
+import { compiledModels } from '../models/compiled';
+import { modelStore } from '../models/store';
 import { Disclosure } from '../part/Disclosure';
 import { downloadFile } from '../part/download';
 import type { Sizes } from '../part/liveCompile';
@@ -31,6 +34,7 @@ function PartScreen({ example }: { example: Example }) {
   const [supports, setSupports] = useState(false);
   const { shown, problem, status } = live;
   const report = shown?.checks ?? null;
+  const fixer = useFix();
   const heading = useRef<HTMLHeadingElement>(null);
   const retrying = useRef(false);
 
@@ -55,6 +59,32 @@ function PartScreen({ example }: { example: Example }) {
   function retry() {
     retrying.current = true;
     live.request(values, true);
+  }
+
+  // An example cannot change, so its fix becomes a new made part: the example as it is on screen, then the fix.
+  function fix() {
+    if (!report) return;
+    const start = withValues(example.source, values);
+    const startShown = shown;
+    fixer.start({
+      instruction: fixRequest(report),
+      code: start,
+      keep: ({ code, shown: made, model }) => {
+        const saved = modelStore.create({
+          title: `${example.name} (fixed)`,
+          request: `${example.name} example`,
+          code: start,
+          label: 'From the example',
+        });
+        if (startShown) compiledModels.set(start, startShown);
+        compiledModels.set(code, made);
+        const next = modelStore.addVersion(saved.id, { code, label: fixLabel(report, made.checks), model });
+        const note = fixedNote(next?.current ?? 2, 1, report, made.checks);
+        handOverNote(saved.id, note);
+        window.location.hash = links.model(saved.id);
+        return note;
+      },
+    });
   }
 
   function download() {
@@ -87,7 +117,8 @@ function PartScreen({ example }: { example: Example }) {
         <section className="part-view" aria-label="Your model">
           <Viewer
             stl={shown?.stl ?? null}
-            busy={status !== 'idle'}
+            busy={status !== 'idle' || fixer.fixing}
+            busyText={fixer.fixing ? 'Fixing' : 'Updating'}
             note={viewerNote(live)}
             mark={supports ? null : overhangMark(report)}
           />
@@ -102,10 +133,11 @@ function PartScreen({ example }: { example: Example }) {
             )}
           </div>
           {!problem && (
-            <StatusBox
+            <PrintStatus
               report={report}
               busy={status !== 'idle'}
-              canFix={false}
+              fix={fixer}
+              onFix={fix}
               supportsChosen={supports}
               onSupports={() => setSupports(!supports)}
             />
