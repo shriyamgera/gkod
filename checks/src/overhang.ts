@@ -154,7 +154,8 @@ function heldUp(mesh: Mesh, steep: Uint8Array, resting: Uint8Array, faces: numbe
   return true;
 }
 
-// Edges of the patch whose neighbour rests on the bed or goes down from the edge. Six numbers per edge.
+// Edges of the patch whose neighbour rests on the bed, goes down from the edge, or is a top face it meets
+// at an inside corner, as where a ball or a rod lying down joins a plate. Six numbers per edge.
 function holdingEdges(mesh: Mesh, steep: Uint8Array, resting: Uint8Array, faces: number[]): number[] {
   const p = mesh.positions;
   const walls: number[] = [];
@@ -165,7 +166,7 @@ function holdingEdges(mesh: Mesh, steep: Uint8Array, resting: Uint8Array, faces:
       if (other === -1 || steep[other]) continue;
       const i = t * 9 + side * 3;
       const j = t * 9 + ((side + 1) % 3) * 3;
-      if (resting[other] || goesDown(p, other, i, j)) {
+      if (resting[other] || goesDown(p, other, i, j) || topInCorner(mesh, t, other, i)) {
         walls.push(p[i]!, p[i + 1]!, p[i + 2]!, p[j]!, p[j + 1]!, p[j + 2]!);
       }
     }
@@ -181,6 +182,18 @@ function goesDown(p: Float32Array, t: number, i: number, j: number): boolean {
     let k = length > 0 ? ((p[c]! - p[i]!) * dx + (p[c + 1]! - p[i + 1]!) * dy + (p[c + 2]! - p[i + 2]!) * dz) / length : 0;
     k = Math.max(0, Math.min(1, k));
     if (p[c + 2]! < p[i + 2]! + k * dz - SUPPORT_DROP_MM) return true;
+  }
+  return false;
+}
+
+// True when triangle t faces up and a corner of it lies in front of face f, so the edge between them is an inside corner.
+function topInCorner(mesh: Mesh, f: number, t: number, i: number): boolean {
+  const n = mesh.normals;
+  if (n[t * 3 + 2]! <= 0) return false;
+  const p = mesh.positions;
+  const nx = n[f * 3]!, ny = n[f * 3 + 1]!, nz = n[f * 3 + 2]!;
+  for (let c = t * 9; c < t * 9 + 9; c += 3) {
+    if (nx * (p[c]! - p[i]!) + ny * (p[c + 1]! - p[i + 1]!) + nz * (p[c + 2]! - p[i + 2]!) > SUPPORT_DROP_MM) return true;
   }
   return false;
 }

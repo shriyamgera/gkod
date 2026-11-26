@@ -92,19 +92,41 @@ export function cells(xs: number[], ys: number[], zs: number[], filled: (i: numb
   return out;
 }
 
-/** A convex outline in the XZ plane (anticlockwise, X right, Z up), pushed along Y from 0 to depth. */
+/** An outline in the XZ plane (anticlockwise, X right, Z up, convex or not), pushed along Y from 0 to depth. */
 export function prism(outline: [number, number][], depth: number): Triangle[] {
   const front = outline.map(([x, z]): Point => [x, 0, z]);
   const back = outline.map(([x, z]): Point => [x, depth, z]);
   const out: Triangle[] = [];
-  for (let i = 1; i < outline.length - 1; i++) {
-    out.push([front[0]!, front[i]!, front[i + 1]!]);
-    out.push([back[0]!, back[i + 1]!, back[i]!]);
+  for (const [a, b, c] of ears(outline)) {
+    out.push([front[a]!, front[b]!, front[c]!]);
+    out.push([back[a]!, back[c]!, back[b]!]);
   }
   for (let i = 0; i < outline.length; i++) {
     const n = (i + 1) % outline.length;
     out.push(...quad(front[i]!, back[i]!, back[n]!, front[n]!));
   }
+  return out;
+}
+
+// Cuts an anticlockwise outline into triangles, one corner at a time. For a convex outline this is a fan from the first corner.
+function ears(outline: [number, number][]): [number, number, number][] {
+  const left = outline.map((_, i) => i);
+  const out: [number, number, number][] = [];
+  const cross = (o: number, a: number, b: number) => {
+    const [ox, oz] = outline[o]!, [ax, az] = outline[a]!, [bx, bz] = outline[b]!;
+    return (ax - ox) * (bz - oz) - (az - oz) * (bx - ox);
+  };
+  while (left.length > 3) {
+    const k = left.findIndex((b, i) => {
+      if (i === 0) return false;
+      const a = left[i - 1]!, c = left[(i + 1) % left.length]!;
+      if (cross(a, b, c) <= 0) return false;
+      return left.every((d) => d === a || d === b || d === c || cross(a, b, d) < 0 || cross(b, c, d) < 0 || cross(c, a, d) < 0);
+    });
+    out.push([left[k - 1]!, left[k]!, left[(k + 1) % left.length]!]);
+    left.splice(k, 1);
+  }
+  out.push([left[0]!, left[1]!, left[2]!]);
   return out;
 }
 

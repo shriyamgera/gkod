@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkMesh } from '#checks/index';
-import { blockWithHole, box, bridge, cells, leaningWall, sphere, toPositions, tShape, type Triangle } from './shapes';
+import { blockWithHole, box, bridge, cells, leaningWall, prism, sphere, toPositions, tShape, type Triangle } from './shapes';
 
 function overhang(triangles: Triangle[], overhangDeg?: number) {
   const report = checkMesh(toPositions(triangles), overhangDeg === undefined ? {} : { overhangDeg });
@@ -81,6 +81,14 @@ describe('overhang', () => {
     const result = overhang([...box([0, 0, 0], [20, 20, 10]), ...box([0, 0, 15], [20, 20, 25])]);
     expect(result.ok).toBe(false);
     expect(result.at![2]).toBeCloseTo(15, 6);
+  });
+
+  it('counts a plate below as holding an overhang that meets it at an inside corner', () => {
+    // a 5 mm plate; above it, a slope leaning 73 degrees rises from the plate's top and reaches `run` mm out over it
+    const plate = (run: number) =>
+      prism([[0, 0], [40, 0], [40, 5], [20, 5], [20 + run, 5 + run * 0.3], [20 + run, 12], [0, 12]], 20);
+    expect(overhang(plate(4)).ok).toBe(true);
+    expect(overhang(plate(10)).ok).toBe(false);
   });
 
   it('ignores a small patch underneath, even one that reaches out', () => {
