@@ -23,7 +23,6 @@ export function StartPage() {
   const [stage, setStage] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [note, setNote] = useState('');
-  const pending = useRef<Pending | null>(null);
   const running = useRef<AbortController | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const makeButton = useRef<HTMLButtonElement>(null);
@@ -43,33 +42,37 @@ export function StartPage() {
     return { request, text, title: titleFromRequest(text, image !== null) };
   }
 
-  function make() {
+  // The request as it is on screen now, or null with a note saying what is missing.
+  function jobOrNote(): Pending | null {
     const job = currentJob();
     if (!job) {
       setNote('Type what you want to print, or add a photo.');
       textarea.current?.focus();
-      return;
     }
-    if (keyStore.get()) void run(job);
-    else askForKey(job);
+    return job;
   }
 
-  function askForKey(job: Pending, message?: string) {
-    pending.current = job;
+  function make() {
+    const job = jobOrNote();
+    if (!job) return;
+    if (keyStore.get()) void run(job);
+    else askForKey();
+  }
+
+  function askForKey(message?: string) {
     setFailure(null);
     setNote('');
     setKeyAsk(message ? { message } : {});
   }
 
+  // The prompt or picture may have changed while the key panel was open, so the request is read again.
   function keySet() {
-    const job = pending.current;
-    pending.current = null;
     setKeyAsk(null);
+    const job = jobOrNote();
     if (job) void run(job);
   }
 
   function cancelKey() {
-    pending.current = null;
     setKeyAsk(null);
     makeButton.current?.focus();
   }
@@ -78,6 +81,7 @@ export function StartPage() {
     running.current?.abort();
     const controller = new AbortController();
     running.current = controller;
+    setKeyAsk(null);
     setFailure(null);
     setNote('');
     setStage('Writing the code');
@@ -115,7 +119,7 @@ export function StartPage() {
     if (result.problem === 'cancelled') {
       setNote('Stopped.');
     } else if (result.problem === 'no-key' || result.problem === 'bad-key') {
-      askForKey(job, result.problem === 'bad-key' ? result.message : undefined);
+      askForKey(result.problem === 'bad-key' ? result.message : undefined);
     } else {
       setFailure({ problem: result.problem, message: result.message, model });
     }
@@ -129,7 +133,7 @@ export function StartPage() {
 
   function tryOther(modelId: string) {
     engineSettings.setModel(modelId);
-    const job = currentJob();
+    const job = jobOrNote();
     if (job) void run(job, modelId);
   }
 

@@ -42,14 +42,20 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
     [],
   );
 
-  function submit() {
+  // The change as it is in the field now, or null with a note saying it is empty.
+  function instructionOrNote(): string | null {
     const instruction = text.trim();
     if (!instruction) {
       setNote('Type a change first, for example “make it 10 mm wider”.');
       field.current?.focus();
-      return;
+      return null;
     }
-    asked.current = instruction;
+    return instruction;
+  }
+
+  function submit() {
+    const instruction = instructionOrNote();
+    if (!instruction) return;
     if (keyStore.get()) void run(instruction);
     else askForKey();
   }
@@ -60,9 +66,11 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
     setKeyAsk(message ? { message } : {});
   }
 
+  // The field may have changed while the key panel was open, so it is read again.
   function keySet() {
     setKeyAsk(null);
-    if (asked.current) void run(asked.current);
+    const instruction = instructionOrNote();
+    if (instruction) void run(instruction);
   }
 
   function cancelKey() {
@@ -74,6 +82,8 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
     running.current?.abort();
     const controller = new AbortController();
     running.current = controller;
+    asked.current = instruction;
+    setKeyAsk(null);
     setFailure(null);
     setNote('');
     setStage('Writing the change');
