@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { findExample } from '../examples';
 import { Disclosure } from '../part/Disclosure';
 import { downloadFile } from '../part/download';
-import type { LiveState, Problem as LiveProblem, Sizes } from '../part/liveCompile';
+import type { Sizes } from '../part/liveCompile';
+import { LiveProblemBox, statusText, viewerNote } from '../part/LiveStatus';
 import { SizesPanel } from '../part/SizesPanel';
 import { stlFileName, withValues } from '../part/sizes';
 import { useLiveCompile } from '../part/useLiveCompile';
@@ -84,7 +85,7 @@ function PartScreen({ example }: { example: Example }) {
         <aside className="part-side" aria-label="Sizes and code">
           <div role="status" className="part-status">
             {problem ? (
-              <Problem problem={problem} hasModel={shown !== null} busy={status !== 'idle'} onRetry={retry} />
+              <LiveProblemBox problem={problem} hasModel={shown !== null} busy={status !== 'idle'} onRetry={retry} />
             ) : (
               <span className="visually-hidden">{statusText(live)}</span>
             )}
@@ -112,63 +113,4 @@ function PartScreen({ example }: { example: Example }) {
       </div>
     </div>
   );
-}
-
-type ProblemProps = { problem: LiveProblem; hasModel: boolean; busy: boolean; onRetry: () => void };
-
-function Problem({ problem, hasModel, busy, onRetry }: ProblemProps) {
-  const { title, text } = describeProblem(problem, hasModel);
-  // the same code with the same sizes fails the same way, so a code error gets no retry
-  const canRetry = problem.kind === 'load' || problem.kind === 'crash' || (problem.kind === 'timeout' && !hasModel);
-  return (
-    <div className="part-problem">
-      <h2>
-        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-          <path d="M10 1.5 19 18H1z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-          <path d="M10 7.5v5M10 14.5v2" stroke="currentColor" strokeWidth="1.8" />
-        </svg>
-        {title}
-      </h2>
-      <p>{text}</p>
-      {hasModel && <p className="muted">The view still shows the last version that worked.</p>}
-      {canRetry && (
-        <button
-          type="button"
-          className="button-quiet part-retry"
-          aria-disabled={busy}
-          onClick={busy ? undefined : onRetry}
-        >
-          {busy ? 'Trying again' : 'Try again'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function describeProblem(problem: LiveProblem, hasModel: boolean): { title: string; text: string } {
-  switch (problem.kind) {
-    case 'load':
-      return { title: 'Could not load the 3D engine', text: 'Check your connection, then try again.' };
-    case 'timeout':
-      return {
-        title: 'This took too long',
-        text: `The compiler was stopped after 10 seconds.${hasModel ? ' Try other sizes.' : ''}`,
-      };
-    default:
-      return { title: 'Could not make the model', text: problem.message };
-  }
-}
-
-function viewerNote({ status, shown, problem }: LiveState): string | undefined {
-  if (shown) return undefined;
-  if (status === 'loading') return 'Getting the 3D engine ready';
-  if (problem) return 'No model to show';
-  return undefined;
-}
-
-// Read out by screen readers; problems have their own visible box.
-function statusText({ status, shown }: LiveState): string {
-  if (status === 'loading') return 'Getting the 3D engine ready';
-  if (!shown) return status === 'working' ? 'Making the model' : '';
-  return 'Model ready';
 }

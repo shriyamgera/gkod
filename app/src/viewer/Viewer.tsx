@@ -23,8 +23,18 @@ const ZOOM_STEP = 0.85;
 
 type Loaded = { mesh: Mesh | null; error: string | null };
 
-// note: shown in place of the model while there is none, e.g. while the compiler loads
-export function Viewer({ stl, busy = false, note }: { stl: ArrayBuffer | null; busy?: boolean; note?: string }) {
+type Props = {
+  stl: ArrayBuffer | null;
+  busy?: boolean;
+  // shown in place of the model while there is none, e.g. while the compiler loads
+  note?: string;
+  // what the model on screen is, shown in a corner as "Live · <live>"
+  live?: string;
+  // shown in the same corner while a new model is being made
+  busyText?: string;
+};
+
+export function Viewer({ stl, busy = false, note, live, busyText = 'Updating' }: Props) {
   const { mesh, error } = useMemo(() => load(stl), [stl]);
   const view = useRef<ViewHandle | null>(null);
   const summaryId = useId();
@@ -71,8 +81,16 @@ export function Viewer({ stl, busy = false, note }: { stl: ArrayBuffer | null; b
         )}
         {mesh && busy && (
           <p className="viewer-busy">
+            <span className="viewer-busy-mark viewer-busy-spin" aria-hidden="true" />
+            {busyText}
+          </p>
+        )}
+        {mesh && !busy && live && (
+          <p className="viewer-busy viewer-live">
             <span className="viewer-busy-mark" aria-hidden="true" />
-            Updating
+            <span>
+              <strong>Live</strong> · {live}
+            </span>
           </p>
         )}
         {mesh && (

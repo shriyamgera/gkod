@@ -64,10 +64,30 @@
 }
 
 .viewer-busy-mark {
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--accent-fill);
+}
+
+.viewer-busy-spin {
+  animation: viewer-pulse 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes viewer-pulse {
+  to {
+    opacity: 0.25;
+  }
+}
+
+.viewer-live {
+  max-width: calc(100% - 24px);
+  line-height: 1.3;
+}
+
+.viewer-live strong {
+  color: var(--ink);
 }
 
 .viewer-hint {

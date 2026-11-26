@@ -3,7 +3,7 @@ import { CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE, type Comp
 import type { CompileResult } from '../scad/types';
 import { createLiveCompile, type LiveState, type Sizes } from './liveCompile';
 
-type Call = { sizes: Sizes; opts: CompileOptions; resolve: (result: CompileResult) => void };
+type Call = { source: string; sizes: Sizes; opts: CompileOptions; resolve: (result: CompileResult) => void };
 
 const good = (width: number): CompileResult => ({
   ok: true,
@@ -17,16 +17,18 @@ const bad = (error: string): CompileResult => ({ ok: false, error, log: [], ms: 
 function setup(ready = false) {
   const calls: Call[] = [];
   const states: LiveState[] = [];
+  const fresh: { source: string; width: number | undefined }[] = [];
   const engine = { ready };
   const live = createLiveCompile({
     source: 'cube(width);',
     // like the real compiler, a cancelled compile resolves at once
-    compile: (_source, sizes, opts) =>
+    compile: (source, sizes, opts) =>
       new Promise((resolve) => {
-        calls.push({ sizes, opts, resolve });
+        calls.push({ source, sizes, opts, resolve });
         opts.signal?.addEventListener('abort', () => resolve(bad(CANCEL_MESSAGE)));
       }),
     onChange: (state) => states.push(state),
+    onFresh: (source, shown) => fresh.push({ source, width: shown.params[0]?.value }),
     engine,
   });
   const last = () => states[states.length - 1]!;
@@ -37,7 +39,7 @@ function setup(ready = false) {
     call.resolve(result);
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { calls, states, engine, live, last, answer };
+  return { calls, states, fresh, engine, live, last, answer };
 }
 
 beforeEach(() => {
@@ -209,5 +211,38 @@ describe('createLiveCompile', () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(states).toHaveLength(seen);
     expect(calls).toHaveLength(1);
+  });
+  it('moves to new code and keeps the old model on screen until the new one is made', async () => {
+    const { calls, live, last, answer, fresh } = setup(true);
+    live.request({}, { now: true });
+    await answer(good(80));
+    live.request({ width: 85 }, { now: true });
+    await answer(good(85));
+    expect(fresh).toEqual([{ source: 'cube(width);', width: 80 }]);
+
+    live.setSource('cube(width + 1);');
+    expect(calls[calls.length - 1]).toMatchObject({ source: 'cube(width + 1);', sizes: {} });
+    expect(last()).toMatchObject({ status: 'working', defaults: null });
+    expect(last().shown?.params[0]?.value).toBe(85);
+    await answer(good(90));
+    expect(last().defaults?.[0]?.value).toBe(90);
+    expect(fresh[1]).toEqual({ source: 'cube(width + 1);', width: 90 });
+  });
+
+  it('shows code that is already compiled at once, and drops the result of the old code', async () => {
+    const { calls, live, last, answer } = setup(true);
+    live.request({}, { now: true });
+    await answer(good(80));
+    live.request({ width: 99 }, { now: true });
+    const ready = { stl: new ArrayBuffer(84), params: [{ name: 'width', value: 70, min: 50, max: 160, step: 1 }], ms: 5 };
+    live.setSource('cube(70);', ready);
+    expect(last()).toMatchObject({ status: 'idle', shown: ready, defaults: ready.params, problem: null });
+    const count = calls.length;
+    await answer(good(99));
+    expect(last().shown).toBe(ready);
+    expect(calls).toHaveLength(count);
+
+    live.request({ width: 75 }, { now: true });
+    expect(calls[calls.length - 1]).toMatchObject({ source: 'cube(70);', sizes: { width: 75 } });
   });
 });

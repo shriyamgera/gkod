@@ -35,6 +35,8 @@ type Options = {
   // because cancelling a running compile restarts the compiler
   cancelAfterMs?: number;
   engine?: { ready: boolean };
+  // told about each model compiled with the sizes written in its code, so it can be shown again without a compile
+  onFresh?: (source: string, shown: Shown) => void;
 };
 
 export const initialState: LiveState = { status: 'idle', shown: null, defaults: null, problem: null };
@@ -50,13 +52,15 @@ export function startState(): LiveState {
 // Recompiles a part as its sizes change. Changes are debounced, only one compile runs at a time,
 // and a result is shown only if no newer change came in while it was being made.
 export function createLiveCompile({
-  source,
+  source: firstSource,
   compile,
   onChange,
   delayMs = 150,
   cancelAfterMs = 300,
   engine = sharedEngine,
+  onFresh,
 }: Options) {
+  let source = firstSource;
   let state = initialState;
   let wanted: Sizes | null = null;
   let latest = 0;
@@ -70,12 +74,14 @@ export function createLiveCompile({
     onChange(state);
   }
 
-  function apply(result: CompileResult, sizes: Sizes) {
+  function apply(result: CompileResult, sizes: Sizes, code: string) {
     if (result.ok) {
       const fresh = Object.keys(sizes).length === 0;
+      const shown = { stl: result.stl, params: result.params, ms: result.ms };
+      if (fresh) onFresh?.(code, shown);
       set({
         status: 'idle',
-        shown: { stl: result.stl, params: result.params, ms: result.ms },
+        shown,
         defaults: state.defaults ?? (fresh ? result.params : null),
         problem: null,
       });
@@ -102,6 +108,7 @@ export function createLiveCompile({
     timer = null;
     if (running || !wanted || stopped) return;
     const sizes = wanted;
+    const code = source;
     const ticket = latest;
     const controller = new AbortController();
     wanted = null;
@@ -112,13 +119,13 @@ export function createLiveCompile({
       engine.ready = true;
       if (!stopped && state.status === 'loading') set({ status: 'working' });
     };
-    void compile(source, sizes, { onStart, signal: controller.signal }).then((result) => {
+    void compile(code, sizes, { onStart, signal: controller.signal }).then((result) => {
       running = null;
       if (cancelTimer) clearTimeout(cancelTimer);
       cancelTimer = null;
       if (stopped) return;
       const cancelled = !result.ok && result.error === CANCEL_MESSAGE;
-      if (ticket === latest && !cancelled) apply(result, sizes);
+      if (ticket === latest && !cancelled) apply(result, sizes, code);
       else if (wanted && !timer) run();
     });
   }
@@ -135,6 +142,24 @@ export function createLiveCompile({
     if (state.status === 'idle') set({ status: engine.ready ? 'working' : 'loading' });
   }
 
+  // Moves to other code, such as another version of a made part. The model on screen stays until the new
+  // one is ready. ready: this code already compiled with its own sizes, so it is shown with no compile.
+  function setSource(next: string, ready?: Shown) {
+    if (stopped) return;
+    source = next;
+    if (!ready) {
+      set({ defaults: null, problem: null });
+      request({}, { now: true });
+      return;
+    }
+    wanted = null;
+    latest += 1;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    cancelIfOutdated();
+    set({ status: 'idle', shown: ready, defaults: ready.params, problem: null });
+  }
+
   function dispose() {
     stopped = true;
     if (timer) clearTimeout(timer);
@@ -142,5 +167,5 @@ export function createLiveCompile({
     cancelIfOutdated();
   }
 
-  return { request, dispose };
+  return { request, setSource, dispose };
 }

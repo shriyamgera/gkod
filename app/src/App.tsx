@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { findExample } from './examples';
+import { modelStore } from './models/store';
+import { ModelPage } from './pages/ModelPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { NoticesPage } from './pages/NoticesPage';
 import { PartPage } from './pages/PartPage';
@@ -15,6 +17,8 @@ function Page({ route }: { route: Route }) {
     case 'part':
       // a new key per part gives each one a fresh compile and a freshly framed view
       return <PartPage key={route.exampleId} exampleId={route.exampleId} />;
+    case 'model':
+      return <ModelPage key={route.modelId} modelId={route.modelId} />;
     case 'notices':
       return <NoticesPage />;
     case 'notFound':
@@ -28,6 +32,8 @@ function pageTitle(route: Route): string {
       return 'GKod';
     case 'part':
       return `${findExample(route.exampleId)?.name ?? 'Page not found'} · GKod`;
+    case 'model':
+      return `${modelStore.get(route.modelId)?.title ?? 'Part not found'} · GKod`;
     case 'notices':
       return 'Notices · GKod';
     case 'notFound':

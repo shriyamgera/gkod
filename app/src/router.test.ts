@@ -13,6 +13,13 @@ describe('parseRoute', () => {
     expect(parseRoute('#/part/phone_stand/')).toEqual({ page: 'part', exampleId: 'phone_stand' });
   });
 
+  it('reads a made part id', () => {
+    expect(parseRoute('#/model/k3x9a1')).toEqual({ page: 'model', modelId: 'k3x9a1' });
+    expect(parseRoute(links.model('a b'))).toEqual({ page: 'model', modelId: 'a b' });
+    expect(parseRoute('#/model')).toEqual({ page: 'notFound' });
+    expect(parseRoute('#/model/%E0%A4%A')).toEqual({ page: 'notFound' });
+  });
+
   it('reads the notices page', () => {
     expect(parseRoute('#/notices')).toEqual({ page: 'notices' });
   });
