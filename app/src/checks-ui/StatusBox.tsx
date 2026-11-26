@@ -1,7 +1,7 @@
 import type { Report } from '@gkod/checks';
 import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
 import { WarningIcon } from '../part/LiveStatus';
-import { CheckIcon } from './icons';
+import { CheckIcon, InfoIcon } from './icons';
 import {
   announcement,
   type BoxKind,
@@ -11,6 +11,7 @@ import {
   problemTitle,
   readyLine,
   SUPPORTS_LINE,
+  SUPPORTS_TITLE,
 } from './wording';
 import './checks-ui.css';
 
@@ -81,15 +82,25 @@ function ReportBox({
 }: BoxProps) {
   const reasonId = useId();
 
-  if (kind !== 'problems') {
-    const withSupports = kind === 'supports';
+  if (kind === 'ready') {
     return (
       <section className="status-box status-ok" aria-label="Print status" aria-busy={busy}>
         <Heading busy={busy} icon={<CheckIcon size={20} />} heading={heading}>
-          {withSupports ? 'Prints with supports' : 'Ready to print'}
+          Ready to print
         </Heading>
-        <p>{withSupports ? SUPPORTS_LINE : readyLine(report)}</p>
-        {withSupports && onSupports && (
+        <p>{readyLine(report)}</p>
+      </section>
+    );
+  }
+
+  if (kind === 'supports') {
+    return (
+      <section className="status-box status-supports" aria-label="Print status" aria-busy={busy}>
+        <Heading busy={busy} icon={<InfoIcon />} heading={heading}>
+          {SUPPORTS_TITLE}
+        </Heading>
+        <p>{SUPPORTS_LINE}</p>
+        {onSupports && (
           <div className="status-actions">
             <button type="button" className="button-link" onClick={onSupports}>
               Print without supports

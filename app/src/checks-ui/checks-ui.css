@@ -21,6 +21,12 @@
   background: var(--warn-bg);
 }
 
+/* the visitor chose supports: a plain note of what to do, not a pass */
+.status-supports {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
 .status-head {
   display: flex;
   align-items: flex-start;

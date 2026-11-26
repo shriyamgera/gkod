@@ -9,7 +9,9 @@ const PASSED: Record<CheckId, string> = {
   overhang: 'needs no supports',
 };
 
-export const SUPPORTS_LINE = 'Supports will hold up the part that would sag. You break them off after printing.';
+// Nothing in the site adds supports yet, so the box says what to turn on in the visitor's own slicer.
+export const SUPPORTS_TITLE = 'Needs supports';
+export const SUPPORTS_LINE = 'Turn on supports in your slicer for the marked part that would sag. You break them off after printing.';
 
 export function problems(report: Report): CheckResult[] {
   return report.results.filter((result) => !result.ok);
@@ -49,7 +51,7 @@ export function announcement(report: Report | null, supportsChosen: boolean): st
     case 'ready':
       return `Ready to print. ${readyLine(report)}`;
     case 'supports':
-      return `Prints with supports. ${SUPPORTS_LINE}`;
+      return `${SUPPORTS_TITLE}. ${SUPPORTS_LINE}`;
     default: {
       const found = problems(report);
       return `${problemTitle(found.length)}. ${found.map((result) => result.detail).join(' ')}`;
@@ -108,13 +110,13 @@ export function fixedNote(v: number, from: number, before: Report, after: Report
   }
 }
 
-/** What the viewer marks: the steep overhang, unless the box says the part prints with supports. */
+/** What the viewer marks: the steep overhang, as where supports go once the visitor chose to print with them. */
 export function viewerMark(report: Report | null | undefined, supportsChosen: boolean): ViewerMark | null {
-  return boxKind(report ?? null, supportsChosen) === 'supports' ? null : overhangMark(report);
+  return overhangMark(report, boxKind(report ?? null, supportsChosen) === 'supports' ? 'Needs supports here' : undefined);
 }
 
 /** The viewer mark for a steep overhang, or null when there is none to show. */
-export function overhangMark(report: Report | null | undefined): ViewerMark | null {
+export function overhangMark(report: Report | null | undefined, label = 'Would sag here'): ViewerMark | null {
   const overhang = report?.results.find((result) => result.id === 'overhang' && !result.ok);
   if (!report || !overhang?.triangles?.length) return null;
   // the height of the point the marker is on, to a tenth of a mm like the heights in the box
@@ -122,7 +124,7 @@ export function overhangMark(report: Report | null | undefined): ViewerMark | nu
   return {
     triangles: overhang.triangles,
     at: overhang.at,
-    label: 'Would sag here',
+    label,
     description: height === null ? 'Steep overhang' : `Steep overhang at ${height} mm height`,
   };
 }

@@ -117,12 +117,15 @@ describe('StatusBox', () => {
     expect(said(html)).toBe(`One thing to fix. ${sag.detail}`);
   });
 
-  it('notes the choice of supports, with a way back', () => {
+  it('says to turn on supports in the slicer once they are chosen, with a way back, and never looks like a pass', () => {
     const html = box({ report: report(sag), supportsChosen: true });
-    expect(visible(html)).toContain('Prints with supports');
+    expect(visible(html)).toContain('Needs supports');
+    expect(visible(html)).toContain('Turn on supports in your slicer for the marked part that would sag.');
+    expect(html).toContain('status-supports');
+    expect(html).not.toContain('status-ok');
     expect(html).not.toContain('Fix it for me');
     expect(button(html, 'Print without supports')).not.toBe('');
-    expect(said(html)).toMatch(/^Prints with supports\./);
+    expect(said(html)).toMatch(/^Needs supports\. Turn on supports in your slicer/);
   });
 
   it('ignores the supports choice once a problem supports cannot carry turns up, or once nothing sags', () => {
@@ -179,10 +182,10 @@ describe('wording', () => {
     expect(overhangMark(null)).toBeNull();
   });
 
-  it('drops the mark only while the box says the part prints with supports', () => {
+  it('keeps marking the overhang once supports are chosen, as where they go', () => {
     expect(viewerMark(report(sag), false)).toEqual(overhangMark(report(sag)));
-    expect(viewerMark(report(sag), true)).toBeNull();
-    // supports cannot fix the size, so the box lists the overhang again and the viewer marks it
+    expect(viewerMark(report(sag), true)).toEqual({ ...overhangMark(report(sag)), label: 'Needs supports here' });
+    // supports cannot fix the size, so the box lists the overhang again and the viewer says it would sag
     expect(viewerMark(report(tooBig, sag), true)).toEqual(overhangMark(report(tooBig, sag)));
   });
 });
