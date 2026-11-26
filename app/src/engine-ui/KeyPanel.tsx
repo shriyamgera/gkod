@@ -68,12 +68,17 @@ export function KeyPanel({ title, titleAs: Title = 'h2', message, autoFocus = fa
     }
   }
 
-  const describedBy = [error ? `${id}-error` : null, `${id}-privacy`].filter(Boolean).join(' ');
+  // the reason the panel opened is read out first when the field gets focus
+  const describedBy = [message ? `${id}-message` : null, error ? `${id}-error` : null, `${id}-privacy`].filter(Boolean).join(' ');
 
   return (
     <form className="key-panel" onSubmit={submit} onKeyDown={onKeyDown} noValidate>
       <Title className="key-title">{title}</Title>
-      {message && <p className="key-message">{message}</p>}
+      {message && (
+        <p id={`${id}-message`} className="key-message">
+          {message}
+        </p>
+      )}
       {key && <p className="key-hint mono">{keyHint(key)}</p>}
 
       <div className="key-field">
