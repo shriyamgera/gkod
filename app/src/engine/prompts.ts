@@ -10,7 +10,8 @@ Rules for the code:
   // Stand width (mm)
   width = 80; // [40:1:160]
 - Pick each range so the part stays printable, with the value inside the range.
-- Values that should not be changed go after the sizes, under a line /* [Hidden] */.
+- Give each size someone may want to change its own slider: outer sizes, wall thickness, hole and slot sizes, angles.
+- Fixed values and values worked out from the sizes go after the sizes, under a line /* [Hidden] */.
 - The part sits flat on the print bed: its base is flat on z = 0 and nothing goes below z = 0.
 - Make it printable without supports where possible: no overhangs steeper than 45 degrees and no floating pieces.
 - Walls and other thin features are at least 1.2 mm thick.
