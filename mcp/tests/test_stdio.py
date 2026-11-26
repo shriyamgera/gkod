@@ -59,3 +59,15 @@ async def test_the_server_reads_only_stl_files_in_the_repo_or_its_output_folder(
             assert "triangles" not in text and "bytes" not in text
         inside = await client.call_tool("check_part", {"stl_path": str(FIXTURE)})
     assert not inside.is_error
+
+
+@pytest.mark.anyio
+async def test_relative_stl_paths_start_at_the_repo_when_the_server_runs_elsewhere(out_folder, tmp_path):
+    shutil.copy(FIXTURE, tmp_path / "here.stl")
+    async with start(out_folder, cwd=tmp_path) as client:
+        checked = await client.call_tool("check_part", {"stl_path": "checks/test/fixtures/cable_clip.stl"})
+        drawn = await client.call_tool("render_part", {"stl_path": "checks/test/fixtures/cable_clip.stl"})
+        here = await client.call_tool("check_part", {"stl_path": "here.stl"})
+    assert not checked.is_error and checked.structured_content["stl_path"] == str(FIXTURE)
+    assert not drawn.is_error and [block.type for block in drawn.content] == ["image", "text"]
+    assert here.is_error and "There is no STL file at here.stl" in here.content[0].text

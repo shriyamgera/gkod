@@ -59,7 +59,7 @@ For a client that reads the common `mcpServers` JSON:
 }
 ```
 
-The package is installed into the virtualenv, so the server also starts from any other working directory; its files still go to `<repo>/.gkod-out` unless `GKOD_OUT` is set.
+The package is installed into the virtualenv, so the server also starts from any other working directory; its files still go to `<repo>/.gkod-out` unless `GKOD_OUT` is set, and relative STL paths still start at the repository root.
 
 ## Tests
 
