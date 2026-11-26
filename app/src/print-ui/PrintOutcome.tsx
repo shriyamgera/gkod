@@ -6,6 +6,7 @@ import { formatDuration, formatFilament, formatTemps } from './format';
 import { type Finished, type Phase, problemLine } from './run';
 
 export const UNSAFE = 'This file failed our safety check and was not offered for download.';
+const ESTIMATE = '(estimate, not exact)';
 const MAX_SHOWN = 50;
 
 type Props = {
@@ -75,7 +76,7 @@ function Result({ result, stale, fileName, onDownload }: ResultProps) {
         </p>
       )}
       <p className="print-time">
-        <strong>{formatDuration(result.seconds)}</strong> <span className="muted">(estimate, not exact)</span>
+        <strong>{formatDuration(result.seconds)}</strong> <span className="muted">{ESTIMATE}</span>
       </p>
       <ul className="print-facts">
         <li>{formatFilament(result.filamentMm)} of filament</li>
@@ -160,7 +161,7 @@ export function phaseAnnouncement(phase: Phase, stale: string | null): string {
       return `Slicing for ${phase.sliced.printer.name}.`;
     case 'done': {
       const { seconds, filamentMm } = phase.result;
-      return stale ?? `Sliced. ${formatDuration(seconds)}, ${formatFilament(filamentMm)} of filament. Ready to download.`;
+      return stale ?? `Sliced. ${formatDuration(seconds)} ${ESTIMATE}, ${formatFilament(filamentMm)} of filament. Ready to download.`;
     }
     case 'unsafe': {
       const first = phase.report.problems[0];

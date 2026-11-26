@@ -122,7 +122,7 @@ describe('PrintOutcome', () => {
   it('reads out each settled state once, in short sentences', () => {
     expect(phaseAnnouncement({ kind: 'slicing', percent: 10, sliced: job }, null)).toBe('Slicing for Anycubic Kobra 2 Neo.');
     expect(phaseAnnouncement({ kind: 'done', sliced: job, result: finished }, null)).toBe(
-      'Sliced. About 1 h 40 min, 12.4 m of filament. Ready to download.',
+      'Sliced. About 1 h 40 min (estimate, not exact), 12.4 m of filament. Ready to download.',
     );
     expect(phaseAnnouncement({ kind: 'done', sliced: job, result: finished }, SETTINGS_CHANGED)).toBe(SETTINGS_CHANGED);
     expect(phaseAnnouncement({ kind: 'unsafe', sliced: job, report: unsafe }, null)).toBe(
