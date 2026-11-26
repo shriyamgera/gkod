@@ -12,6 +12,13 @@
   min-height: 280px;
 }
 
+/* on a phone, leave room for the first sizes below the view */
+@media (max-width: 600px) {
+  .viewer-stage {
+    height: 340px;
+  }
+}
+
 .viewer-canvas {
   position: absolute;
   inset: 0;

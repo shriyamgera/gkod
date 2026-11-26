@@ -155,6 +155,14 @@
   border: var(--rule-soft);
 }
 
+/* when the two columns sit side by side, the view stays on screen while the sizes scroll */
+@media (min-width: 1040px) {
+  .part-view {
+    position: sticky;
+    top: 16px;
+  }
+}
+
 .part-side {
   flex: 1 1 320px;
   min-width: 0;

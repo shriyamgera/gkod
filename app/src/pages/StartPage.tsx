@@ -6,7 +6,7 @@ export function StartPage() {
     <div className="start">
       <h1 className="display">What do you want to print?</h1>
       <p className="start-note">
-        Making a part from a description is not built yet. For now, open one of the example parts.
+        Typing a request to make a new part comes next. For now, open an example part and change its sizes.
       </p>
 
       <ul className="example-list" aria-label="Example parts">
