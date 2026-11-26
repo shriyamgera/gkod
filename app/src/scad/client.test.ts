@@ -92,6 +92,18 @@ describe('compile', () => {
     expect(await without).not.toHaveProperty('checks');
   });
 
+  it("sends the chosen printer's bed for the print checks, and none when not given", async () => {
+    const { workers, compile } = setup();
+    void compile('cube(1);', {}, { bed: { x: 220, y: 220, z: 250 } });
+    await flush();
+    expect(workers[0]!.last().bed).toEqual({ x: 220, y: 220, z: 250 });
+    workers[0]!.start();
+    workers[0]!.succeed();
+    void compile('cube(2);');
+    await flush();
+    expect(workers[0]!.last()).not.toHaveProperty('bed');
+  });
+
   it('rejects banned calls without starting a worker', async () => {
     const { workers, compile } = setup();
     const result = await compile('minkowski() { cube(1); sphere(1); }');

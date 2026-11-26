@@ -1,3 +1,4 @@
+import type { Bed } from '@gkod/checks';
 import { findBannedCall } from './guard';
 import {
   CANCEL_MESSAGE,
@@ -18,8 +19,8 @@ export type WorkerLike = {
 };
 
 // onStart runs once the compiler is loaded and this compile begins, so a page can tell loading apart from compiling.
-// Aborting signal cancels the compile: it resolves with CANCEL_MESSAGE.
-export type CompileOptions = { timeoutMs?: number; onStart?: () => void; signal?: AbortSignal };
+// Aborting signal cancels the compile: it resolves with CANCEL_MESSAGE. bed: the printer the print checks measure against.
+export type CompileOptions = { timeoutMs?: number; onStart?: () => void; signal?: AbortSignal; bed?: Bed };
 
 export { CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE };
 
@@ -93,7 +94,7 @@ export function createCompiler(makeWorker: () => WorkerLike) {
         event.preventDefault?.();
         stop(CRASH_MESSAGE);
       };
-      current.postMessage({ type: 'compile', id, source, overrides });
+      current.postMessage({ type: 'compile', id, source, overrides, ...(opts.bed ? { bed: opts.bed } : {}) });
     });
   }
 
