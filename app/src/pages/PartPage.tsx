@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { CheckList } from '../checks-ui/CheckList';
+import { StatusBox } from '../checks-ui/StatusBox';
+import { overhangMark } from '../checks-ui/wording';
 import { findExample } from '../examples';
 import { Disclosure } from '../part/Disclosure';
 import { downloadFile } from '../part/download';
@@ -24,7 +27,10 @@ function PartScreen({ example }: { example: Example }) {
   const live = useLiveCompile(example.source);
   // only the sizes the visitor has changed; the rest keep the values written in the code
   const [values, setValues] = useState<Sizes>({});
+  // print with supports instead of fixing the overhang; an example has no versions, so it lives here
+  const [supports, setSupports] = useState(false);
   const { shown, problem, status } = live;
+  const report = shown?.checks ?? null;
   const heading = useRef<HTMLHeadingElement>(null);
   const retrying = useRef(false);
 
@@ -79,10 +85,15 @@ function PartScreen({ example }: { example: Example }) {
 
       <div className="part-columns">
         <section className="part-view" aria-label="Your model">
-          <Viewer stl={shown?.stl ?? null} busy={status !== 'idle'} note={viewerNote(live)} />
+          <Viewer
+            stl={shown?.stl ?? null}
+            busy={status !== 'idle'}
+            note={viewerNote(live)}
+            mark={supports ? null : overhangMark(report)}
+          />
         </section>
 
-        <aside className="part-side" aria-label="Sizes and code">
+        <aside className="part-side" aria-label="Print status, sizes and code">
           <div role="status" className="part-status">
             {problem ? (
               <LiveProblemBox problem={problem} hasModel={shown !== null} busy={status !== 'idle'} onRetry={retry} />
@@ -90,6 +101,15 @@ function PartScreen({ example }: { example: Example }) {
               <span className="visually-hidden">{statusText(live)}</span>
             )}
           </div>
+          {!problem && (
+            <StatusBox
+              report={report}
+              busy={status !== 'idle'}
+              canFix={false}
+              supportsChosen={supports}
+              onSupports={() => setSupports(!supports)}
+            />
+          )}
 
           <div className="part-details">
             <Disclosure title="Sizes" defaultOpen>
@@ -101,6 +121,7 @@ function PartScreen({ example }: { example: Example }) {
                 onReset={reset}
               />
             </Disclosure>
+            <CheckList report={report} />
             <Disclosure title="Code">
               <pre className="code" tabIndex={0} aria-label={`OpenSCAD code for ${example.name}`}>
                 {withValues(example.source, values)}

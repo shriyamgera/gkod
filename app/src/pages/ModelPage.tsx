@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { CheckList } from '../checks-ui/CheckList';
+import { StatusBox } from '../checks-ui/StatusBox';
+import { overhangMark } from '../checks-ui/wording';
 import { gemini } from '../engine';
 import { ChangePanel, type Changed } from '../models/ChangePanel';
 import { Changes } from '../models/Changes';
@@ -54,6 +57,8 @@ function ModelScreen({ model }: { model: SavedModel }) {
   const [changing, setChanging] = useState(false);
   const { shown, problem, status } = live;
   const { id } = model;
+  const report = shown?.checks ?? null;
+  const supports = version.supports === true;
 
   // undo, redo and choosing a version all come through here
   const moveTo = useRef((next: SavedModel | undefined, before: number) => {
@@ -138,11 +143,12 @@ function ModelScreen({ model }: { model: SavedModel }) {
             busyText={changing ? 'Changing' : 'Updating'}
             note={viewerNote(live)}
             live={liveLabel}
+            mark={supports ? null : overhangMark(report)}
           />
           <ChangePanel currentCode={() => withValues(version.code, values)} onChanged={changed} onBusy={setChanging} />
         </section>
 
-        <aside className="part-side" aria-label="Changes, sizes and code">
+        <aside className="part-side" aria-label="Print status, changes, sizes and code">
           <div role="status" className="part-status">
             {problem ? (
               <LiveProblemBox problem={problem} hasModel={shown !== null} busy={status !== 'idle'} onRetry={retry} />
@@ -150,6 +156,15 @@ function ModelScreen({ model }: { model: SavedModel }) {
               <span className="visually-hidden">{statusText(live)}</span>
             )}
           </div>
+          {!problem && (
+            <StatusBox
+              report={report}
+              busy={status !== 'idle' || changing}
+              canFix={false}
+              supportsChosen={supports}
+              onSupports={() => modelStore.setSupports(id, version.v, !supports)}
+            />
+          )}
 
           <p role="status" className="visually-hidden">
             {said}
@@ -172,6 +187,7 @@ function ModelScreen({ model }: { model: SavedModel }) {
                 onReset={reset}
               />
             </Disclosure>
+            <CheckList report={report} />
             <Disclosure title="Code">
               <pre className="code" tabIndex={0} aria-label={`OpenSCAD code for ${model.title}, version ${version.v}`}>
                 {withValues(version.code, values)}
