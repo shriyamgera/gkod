@@ -362,3 +362,8 @@
     padding: 16px 16px 20px;
   }
 }
+
+.model-fallback {
+  margin-top: 6px;
+  font-size: 14px;
+}

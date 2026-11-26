@@ -113,6 +113,7 @@ function ModelMenu() {
           )}
         </div>
       ))}
+      <p className="muted model-fallback">If the chosen model is busy, the next one on the list is tried.</p>
     </fieldset>
   );
 }
