@@ -52,15 +52,25 @@ type Run = { exitCode: number; log: string[]; output: Uint8Array | null };
 // One OpenSCAD instance can run main only once, so each run gets a new one.
 async function run(compiler: Compiler, source: string, outPath: string, args: string[]): Promise<Run> {
   const log: string[] = [];
-  const instance = await compiler.factory({
-    noInitialRun: true,
-    print: (line) => log.push(line),
-    printErr: (line) => log.push(line),
-    instantiateWasm: (imports, done) => {
-      void WebAssembly.instantiate(compiler.wasm, imports).then((made) => done(made, compiler.wasm));
-      return {};
-    },
+  // If making the instance fails (e.g. no memory left), the factory's promise never settles, so race it.
+  let failed: (reason: unknown) => void = () => {};
+  const instantiateFailed = new Promise<never>((_, reject) => {
+    failed = reject;
   });
+  const instance = await Promise.race([
+    compiler.factory({
+      noInitialRun: true,
+      print: (line) => log.push(line),
+      printErr: (line) => log.push(line),
+      instantiateWasm: (imports, done) => {
+        WebAssembly.instantiate(compiler.wasm, imports)
+          .then((made) => done(made, compiler.wasm))
+          .catch(failed);
+        return {};
+      },
+    }),
+    instantiateFailed,
+  ]);
   instance.FS.writeFile('/in.scad', source);
   let exitCode: number;
   try {
