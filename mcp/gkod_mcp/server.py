@@ -5,17 +5,25 @@ import json
 import math
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import Image, MCPServer
+from pydantic import Field, WithJsonSchema
 
 from gkod_mcp.examples import example_source, examples
 from gkod_mcp.node import GkodError, run_gkod
 from gkod_mcp.paths import REPO, out_dir
 
-View = Literal["iso", "front", "side", "top"]
+VIEWS = ("iso", "front", "side", "top")
 # the printers gkod check knows (tools/src/printers.ts); the Kobra 2 Neo is the owner's
-Printer = Literal["kobra2neo", "p1s", "a1", "ender3v2", "mk4"]
+PRINTERS = ("kobra2neo", "p1s", "a1", "ender3v2", "mk4")
+# The schema lists the choices, but the tools check the values themselves, so a wrong one gets a plain message.
+View = Annotated[str, Field(json_schema_extra={"enum": list(VIEWS)})]
+Printer = Annotated[str, Field(json_schema_extra={"enum": list(PRINTERS)})]
+Sizes = Annotated[
+    dict[str, Any] | None,
+    WithJsonSchema({"anyOf": [{"type": "object", "additionalProperties": {"type": "number"}}, {"type": "null"}]}),
+]
 
 # A compile stops itself after 10 s; these limits also cover starting Node and loading the compiler.
 COMPILE_SECONDS = 40
@@ -37,17 +45,32 @@ server = MCPServer(
 )
 
 
-def _defines(sizes: dict[str, float] | None) -> list[str]:
+def _pick(value: str, allowed: tuple[str, ...], what: str) -> str:
+    if value not in allowed:
+        raise GkodError(f"There is no {what} called {value!r}. {what.capitalize()}s: {', '.join(allowed)}.")
+    return value
+
+
+def _finite(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def _defines(sizes: dict[str, Any] | None) -> list[str]:
     args = []
     for name, value in (sizes or {}).items():
-        number = isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
-        if not NAME.match(name) or not number:
-            raise GkodError(f'Sizes take a name and a number, like {{"width": 80}}; "{name}": {value!r} is not one.')
+        if not NAME.match(name) or not _finite(value):
+            shown = repr(value) if len(repr(value)) <= 40 else repr(value)[:37] + "..."
+            raise GkodError(f'Sizes take a name and a number, like {{"width": 80}}; "{name}": {shown} is not one.')
         args += ["-D", f"{name}={value!r}"]
     return args
 
 
-def _compile(code: str, sizes: dict[str, float] | None, stem: str = "part") -> dict[str, Any]:
+def _compile(code: str, sizes: dict[str, Any] | None, stem: str = "part") -> dict[str, Any]:
     defines = _defines(sizes)
     key = hashlib.sha256(json.dumps([code, sizes or {}], sort_keys=True).encode()).hexdigest()[:12]
     folder = out_dir()
@@ -144,7 +167,7 @@ def list_examples() -> list[dict[str, Any]]:
 
 
 @server.tool()
-def compile_part(code: str, sizes: dict[str, float] | None = None) -> dict[str, Any]:
+def compile_part(code: str, sizes: Sizes = None) -> dict[str, Any]:
     """Compiles OpenSCAD code to an STL file with the same compiler, flags and 10 second limit as the GKod site.
 
     sizes overrides named sizes without editing the code, e.g. {"width": 100}. Returns ok, stl_path, the part's
@@ -160,7 +183,7 @@ def check_part(stl_path: str, printer: Printer = "kobra2neo") -> dict[str, Any]:
     stl_path is an STL file inside the GKod repo (relative paths start there) or its output folder, such as one
     from compile_part. Returns the report in plain words (summary) and as JSON (checks), with a fix for each failed check.
     """
-    return _check(stl_path, printer)
+    return _check(stl_path, _pick(printer, PRINTERS, "printer"))
 
 
 @server.tool(structured_output=False)
@@ -169,7 +192,7 @@ def render_part(
     stl_path: str | None = None,
     view: View = "iso",
     mark_overhangs: bool = True,
-    sizes: dict[str, float] | None = None,
+    sizes: Sizes = None,
     printer: Printer = "kobra2neo",
 ) -> list[Image | str]:
     """Draws a part as a PNG picture to look at, from OpenSCAD code (compiled first, with optional sizes) or an STL file.
@@ -180,6 +203,8 @@ def render_part(
     are orange (seen through the part when they are underneath). Also returns a one-line summary: size, triangles,
     and ready to print or what to fix.
     """
+    _pick(view, VIEWS, "view")
+    _pick(printer, PRINTERS, "printer")
     if (code is None) == (stl_path is None):
         raise GkodError("Give either code or stl_path, not both or neither.")
     if code is not None:
@@ -201,6 +226,8 @@ def preview_example(name: str, view: View = "iso", printer: Printer = "kobra2neo
 
     Returns the picture, the named sizes, the check report in plain words, the file paths and the code.
     """
+    _pick(view, VIEWS, "view")
+    _pick(printer, PRINTERS, "printer")
     try:
         source = example_source(name)
     except KeyError:

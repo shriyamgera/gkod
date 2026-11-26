@@ -1,4 +1,3 @@
-import typing
 from pathlib import Path
 
 import pytest
@@ -79,7 +78,7 @@ def test_compile_part_reports_errors_in_plain_words():
 
 
 def test_compile_part_refuses_sizes_that_are_not_numbers():
-    for sizes in [{"width": "wide"}, {"2w": 3}, {"w": True}, {"w": float("nan")}]:
+    for sizes in [{"width": "wide"}, {"2w": 3}, {"w": True}, {"w": float("nan")}, {"w": 10**400}]:
         with pytest.raises(GkodError, match="Sizes take a name and a number"):
             server.compile_part("cube(1);", sizes)
 
@@ -119,7 +118,7 @@ def test_check_part_reads_only_stl_files_in_the_repo_or_the_output_folder(tmp_pa
 
 
 def test_the_printers_offered_are_the_ones_gkod_knows():
-    offered = list(typing.get_args(server.Printer))
+    offered = list(server.PRINTERS)
     stl = REPO / "checks" / "test" / "fixtures" / "cable_clip.stl"
     with pytest.raises(GkodError) as raised:
         run_gkod(["check", str(stl), "--printer", "nope"], 30)
@@ -182,6 +181,15 @@ def test_preview_example_does_everything_in_one_call():
 def test_preview_example_lists_the_examples_for_an_unknown_name():
     with pytest.raises(GkodError, match="Examples: cable_clip, phone_stand, wall_hook"):
         server.preview_example("bracket")
+
+
+@pytest.mark.anyio
+async def test_the_schema_offers_the_printers_views_and_number_sizes():
+    tools = {tool.name: tool.input_schema["properties"] for tool in await server.server.list_tools()}
+    assert tools["check_part"]["printer"]["enum"] == list(server.PRINTERS)
+    assert tools["render_part"]["view"]["enum"] == list(server.VIEWS)
+    assert tools["render_part"]["view"]["default"] == "iso"
+    assert tools["compile_part"]["sizes"]["anyOf"][0]["additionalProperties"] == {"type": "number"}
 
 
 @pytest.mark.anyio

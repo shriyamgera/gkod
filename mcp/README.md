@@ -68,4 +68,4 @@ mcp/.venv/bin/python -m pip install -r mcp/requirements-dev.txt
 mcp/.venv/bin/python -m pytest mcp
 ```
 
-The tests call every tool in-process, and one starts the server over stdio with the SDK's client, lists the tools and calls `preview_example("phone_stand")`.
+The tests call every tool in-process. Others start the server over stdio with the SDK's client, as a real client would: they list the tools, call `preview_example("phone_stand")`, try paths outside the repository and wrong printers, views and sizes, and start the server from another folder.

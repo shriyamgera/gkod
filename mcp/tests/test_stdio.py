@@ -71,3 +71,22 @@ async def test_relative_stl_paths_start_at_the_repo_when_the_server_runs_elsewhe
     assert not checked.is_error and checked.structured_content["stl_path"] == str(FIXTURE)
     assert not drawn.is_error and [block.type for block in drawn.content] == ["image", "text"]
     assert here.is_error and "There is no STL file at here.stl" in here.content[0].text
+
+
+@pytest.mark.anyio
+async def test_wrong_printers_views_and_sizes_get_plain_messages(out_folder):
+    printers = "There is no printer called 'nope'. Printers: kobra2neo, p1s, a1, ender3v2, mk4."
+    calls = [
+        ("check_part", {"stl_path": str(FIXTURE), "printer": "nope"}, printers),
+        ("render_part", {"code": "cube(10);", "printer": "nope"}, printers),
+        ("render_part", {"code": "cube(10);", "view": "bottom"}, "There is no view called 'bottom'. Views: iso, front, side, top."),
+        ("preview_example", {"name": "phone_stand", "printer": "nope"}, printers),
+        ("compile_part", {"code": "cube(1);", "sizes": {"w": "wide"}}, """Sizes take a name and a number, like {"width": 80}; "w": 'wide' is not one."""),
+        ("render_part", {"code": "cube(1);", "sizes": {"w": 10**400}}, "Sizes take a name and a number"),
+    ]
+    async with start(out_folder) as client:
+        for name, args, message in calls:
+            result = await client.call_tool(name, args)
+            text = result.content[0].text
+            assert result.is_error and message in text, (args, text)
+            assert "pydantic" not in text
