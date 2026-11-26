@@ -2,9 +2,14 @@ import { type ChangeEvent, useEffect, useId, useRef, useState } from 'react';
 import { type ImageInput, prepareImage } from '../engine';
 import './engine-ui.css';
 
-type Props = { image: ImageInput | null; onChange: (image: ImageInput | null) => void };
+type Props = {
+  image: ImageInput | null;
+  onChange: (image: ImageInput | null) => void;
+  // told when a picture starts and stops being read, so a request is not sent without it
+  onReading?: (reading: boolean) => void;
+};
 
-export function PhotoButton({ image, onChange }: Props) {
+export function PhotoButton({ image, onChange, onReading }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const removeButton = useRef<HTMLButtonElement>(null);
@@ -27,6 +32,7 @@ export function PhotoButton({ image, onChange }: Props) {
     event.target.value = '';
     if (!file) return;
     setReading(true);
+    onReading?.(true);
     setError(null);
     setSaid('Reading the picture');
     try {
@@ -40,6 +46,7 @@ export function PhotoButton({ image, onChange }: Props) {
       setSaid(message);
     } finally {
       setReading(false);
+      onReading?.(false);
     }
   }
 

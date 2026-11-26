@@ -9,6 +9,7 @@ type Props = {
   onChange: (value: string) => void;
   image: ImageInput | null;
   onImage: (image: ImageInput | null) => void;
+  onReading?: (reading: boolean) => void;
   busy: boolean;
   onSubmit: () => void;
   textareaRef?: Ref<HTMLTextAreaElement>;
@@ -18,7 +19,18 @@ type Props = {
 
 export const PROMPT_ID = 'prompt';
 
-export function PromptBox({ value, onChange, image, onImage, busy, onSubmit, textareaRef, buttonRef, describedBy }: Props) {
+export function PromptBox({
+  value,
+  onChange,
+  image,
+  onImage,
+  onReading,
+  busy,
+  onSubmit,
+  textareaRef,
+  buttonRef,
+  describedBy,
+}: Props) {
   const id = useId();
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -46,7 +58,7 @@ export function PromptBox({ value, onChange, image, onImage, busy, onSubmit, tex
         Enter makes the part. Shift and Enter adds a new line.
       </p>
       <div className="prompt-bar">
-        <PhotoButton image={image} onChange={onImage} />
+        <PhotoButton image={image} onChange={onImage} onReading={onReading} />
         <button
           ref={buttonRef}
           type="button"

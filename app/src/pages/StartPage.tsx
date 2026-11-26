@@ -19,6 +19,7 @@ type Failure = { problem: EngineProblem | 'compile'; message: string; model: str
 export function StartPage() {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState<ImageInput | null>(null);
+  const [readingPhoto, setReadingPhoto] = useState(false);
   const [keyAsk, setKeyAsk] = useState<{ message?: string } | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
@@ -44,6 +45,11 @@ export function StartPage() {
 
   // The request as it is on screen now, or null with a note saying what is missing.
   function jobOrNote(): Pending | null {
+    if (readingPhoto) {
+      setNote('Wait until the picture is read, then try again.');
+      makeButton.current?.focus();
+      return null;
+    }
     const job = currentJob();
     if (!job) {
       setNote('Type what you want to print, or add a photo.');
@@ -163,6 +169,7 @@ export function StartPage() {
           onChange={setPrompt}
           image={image}
           onImage={setImage}
+          onReading={setReadingPhoto}
           busy={busy}
           onSubmit={make}
           textareaRef={textarea}
