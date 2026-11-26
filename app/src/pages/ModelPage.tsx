@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { gemini } from '../engine';
+import { ChangePanel, type Changed } from '../models/ChangePanel';
 import { Changes } from '../models/Changes';
+import { compiledModels } from '../models/compiled';
 import { downloadName } from '../models/names';
 import { currentVersion, modelStore, type SavedModel, useSavedModel } from '../models/store';
 import '../models/models.css';
@@ -49,6 +51,7 @@ function ModelScreen({ model }: { model: SavedModel }) {
   // the next typed change writes them into the code it sends. Moving to another version clears them.
   const [values, setValues] = useState<Sizes>({});
   const [said, setSaid] = useState('');
+  const [changing, setChanging] = useState(false);
   const { shown, problem, status } = live;
   const { id } = model;
 
@@ -88,6 +91,14 @@ function ModelScreen({ model }: { model: SavedModel }) {
     live.request(values, true);
   }
 
+  // A typed change starts from the version on screen, with the slider values written in.
+  function changed({ code, shown: made, model: by, label }: Changed): number {
+    compiledModels.set(code, made);
+    const next = modelStore.addVersion(id, { code, label, model: by });
+    setValues({});
+    return next?.current ?? version.v;
+  }
+
   const liveLabel = Object.keys(values).length > 0 ? `${version.label}, sizes changed` : version.label;
 
   function download() {
@@ -118,7 +129,14 @@ function ModelScreen({ model }: { model: SavedModel }) {
 
       <div className="part-columns">
         <section className="part-view" aria-label="Your model">
-          <Viewer stl={shown?.stl ?? null} busy={status !== 'idle'} note={viewerNote(live)} live={liveLabel} />
+          <Viewer
+            stl={shown?.stl ?? null}
+            busy={status !== 'idle' || changing}
+            busyText={changing ? 'Changing' : 'Updating'}
+            note={viewerNote(live)}
+            live={liveLabel}
+          />
+          <ChangePanel currentCode={() => withValues(version.code, values)} onChanged={changed} onBusy={setChanging} />
         </section>
 
         <aside className="part-side" aria-label="Changes, sizes and code">
