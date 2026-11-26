@@ -1,3 +1,9 @@
+// Failures the page tells apart by their message; the worker and the client both use them.
+export const TIMEOUT_MESSAGE = 'This took too long and was stopped.';
+export const CRASH_MESSAGE = 'The compiler stopped unexpectedly. Try again.';
+export const LOAD_MESSAGE = 'The compiler could not be loaded. Check your connection and try again.';
+export const CANCEL_MESSAGE = 'The compile was cancelled.';
+
 export type CompileRequest = { type: 'compile'; id: number; source: string; overrides: Record<string, number> };
 
 export type WorkerRequest =

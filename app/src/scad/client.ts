@@ -1,5 +1,12 @@
 import { findBannedCall } from './guard';
-import type { WorkerReply, WorkerRequest } from './messages';
+import {
+  CANCEL_MESSAGE,
+  CRASH_MESSAGE,
+  LOAD_MESSAGE,
+  TIMEOUT_MESSAGE,
+  type WorkerReply,
+  type WorkerRequest,
+} from './messages';
 import { applyOverrides, parseParams } from './params';
 import type { CompileResult } from './types';
 
@@ -14,10 +21,7 @@ export type WorkerLike = {
 // Aborting signal cancels the compile: it resolves with CANCEL_MESSAGE.
 export type CompileOptions = { timeoutMs?: number; onStart?: () => void; signal?: AbortSignal };
 
-export const TIMEOUT_MESSAGE = 'This took too long and was stopped.';
-export const CRASH_MESSAGE = 'The compiler stopped unexpectedly. Try again.';
-export const LOAD_MESSAGE = 'The compiler could not be loaded. Check your connection and try again.';
-export const CANCEL_MESSAGE = 'The compile was cancelled.';
+export { CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE };
 
 // Fetching the compiler has its own, longer limit so a slow first download is not reported as a slow part.
 const LOAD_TIMEOUT_MS = 60000;

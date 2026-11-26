@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CANCEL_MESSAGE, TIMEOUT_MESSAGE, type CompileOptions } from '../scad/client';
+import { CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE, type CompileOptions } from '../scad/client';
 import type { CompileResult } from '../scad/types';
 import { createLiveCompile, type LiveState, type Sizes } from './liveCompile';
 
@@ -130,6 +130,19 @@ describe('createLiveCompile', () => {
     await answer(bad(TIMEOUT_MESSAGE));
     expect(last().problem?.kind).toBe('timeout');
     expect(last().shown).toBeNull();
+  });
+
+  it('tells a compiler that did not load or stopped apart from a code error', async () => {
+    const { live, last, answer } = setup();
+    live.request({}, { now: true });
+    await answer(bad(LOAD_MESSAGE));
+    expect(last().problem?.kind).toBe('load');
+    live.request({}, { now: true });
+    await answer(bad(CRASH_MESSAGE));
+    expect(last().problem?.kind).toBe('crash');
+    live.request({}, { now: true });
+    await answer(good(80));
+    expect(last()).toMatchObject({ status: 'idle', problem: null });
   });
 
   it('takes the starting sizes only from a compile with no changes', async () => {

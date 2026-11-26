@@ -5,16 +5,19 @@ import { SizeControl } from './SizeControl';
 type Props = {
   params: Param[] | null;
   values: Sizes;
-  waiting: boolean;
+  // the part's own code failed, rather than the compiler failing to load or run
+  codeFailed: boolean;
   onChange: (name: string, value: number) => void;
   onReset: () => void;
 };
 
-export function SizesPanel({ params, values, waiting, onChange, onReset }: Props) {
+export function SizesPanel({ params, values, codeFailed, onChange, onReset }: Props) {
   if (!params) {
     return (
       <p className="muted sizes-note">
-        {waiting ? 'The sizes appear once the model is made.' : 'There are no sizes to change, because the code did not compile.'}
+        {codeFailed
+          ? 'There are no sizes to change, because the code did not compile.'
+          : 'The sizes appear once the model is made.'}
       </p>
     );
   }

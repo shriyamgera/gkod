@@ -47,6 +47,11 @@ textarea {
   outline-offset: 2px;
 }
 
+/* headings take focus only so screen readers announce a new screen; they are not controls */
+h1[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
 .display {
   font-stretch: var(--condensed);
   font-weight: 800;

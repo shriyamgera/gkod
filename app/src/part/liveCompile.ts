@@ -1,4 +1,4 @@
-import { CANCEL_MESSAGE, type CompileOptions, TIMEOUT_MESSAGE } from '../scad/client';
+import { CANCEL_MESSAGE, type CompileOptions, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE } from '../scad/client';
 import type { CompileResult, Param } from '../scad/types';
 
 export type Sizes = Record<string, number>;
@@ -12,7 +12,16 @@ export type LiveState = {
   shown: Shown | null;
   // the sizes and their starting values, from the first model that compiled
   defaults: Param[] | null;
-  problem: { kind: 'error' | 'timeout'; message: string } | null;
+  problem: Problem | null;
+};
+
+// error: the code itself failed; load: the compiler files did not arrive; crash: the compiler stopped
+export type Problem = { kind: 'error' | 'timeout' | 'load' | 'crash'; message: string };
+
+const kinds: Record<string, Problem['kind']> = {
+  [TIMEOUT_MESSAGE]: 'timeout',
+  [LOAD_MESSAGE]: 'load',
+  [CRASH_MESSAGE]: 'crash',
 };
 
 type CompileFn = (source: string, overrides: Sizes, opts: CompileOptions) => Promise<CompileResult>;
@@ -71,8 +80,7 @@ export function createLiveCompile({
         problem: null,
       });
     } else {
-      const kind = result.error === TIMEOUT_MESSAGE ? 'timeout' : 'error';
-      set({ status: 'idle', problem: { kind, message: result.error } });
+      set({ status: 'idle', problem: { kind: kinds[result.error] ?? 'error', message: result.error } });
     }
   }
 

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { findExample } from '../examples';
 import { Disclosure } from '../part/Disclosure';
 import { downloadFile } from '../part/download';
-import type { LiveState, Sizes } from '../part/liveCompile';
+import type { LiveState, Problem as LiveProblem, Sizes } from '../part/liveCompile';
 import { SizesPanel } from '../part/SizesPanel';
 import { stlFileName, withValues } from '../part/sizes';
 import { useLiveCompile } from '../part/useLiveCompile';
@@ -24,6 +24,15 @@ function PartScreen({ example }: { example: Example }) {
   // only the sizes the visitor has changed; the rest keep the values written in the code
   const [values, setValues] = useState<Sizes>({});
   const { shown, problem, status } = live;
+  const heading = useRef<HTMLHeadingElement>(null);
+  const retrying = useRef(false);
+
+  // The Try again button goes away once it works, so focus moves to the heading instead of being lost.
+  useEffect(() => {
+    if (status !== 'idle' || !retrying.current) return;
+    retrying.current = false;
+    if (!problem) heading.current?.focus();
+  }, [status, problem]);
 
   function change(name: string, value: number) {
     const next = { ...values, [name]: value };
@@ -34,6 +43,11 @@ function PartScreen({ example }: { example: Example }) {
   function reset() {
     setValues({});
     live.request({}, true);
+  }
+
+  function retry() {
+    retrying.current = true;
+    live.request(values, true);
   }
 
   function download() {
@@ -48,7 +62,9 @@ function PartScreen({ example }: { example: Example }) {
             ← All examples
           </a>
           <div className="part-title">
-            <h1 className="display">{example.name}</h1>
+            <h1 className="display" tabIndex={-1} ref={heading}>
+              {example.name}
+            </h1>
             <span className="mono muted">Example part</span>
           </div>
         </div>
@@ -67,7 +83,11 @@ function PartScreen({ example }: { example: Example }) {
 
         <aside className="part-side" aria-label="Sizes and code">
           <div role="status" className="part-status">
-            {problem ? <Problem problem={problem} hasModel={shown !== null} /> : <span className="visually-hidden">{statusText(live)}</span>}
+            {problem ? (
+              <Problem problem={problem} hasModel={shown !== null} busy={status !== 'idle'} onRetry={retry} />
+            ) : (
+              <span className="visually-hidden">{statusText(live)}</span>
+            )}
           </div>
 
           <div className="part-details">
@@ -75,7 +95,7 @@ function PartScreen({ example }: { example: Example }) {
               <SizesPanel
                 params={live.defaults}
                 values={values}
-                waiting={!problem}
+                codeFailed={problem?.kind === 'error'}
                 onChange={change}
                 onReset={reset}
               />
@@ -94,8 +114,12 @@ function PartScreen({ example }: { example: Example }) {
   );
 }
 
-function Problem({ problem, hasModel }: { problem: NonNullable<LiveState['problem']>; hasModel: boolean }) {
-  const timedOut = problem.kind === 'timeout';
+type ProblemProps = { problem: LiveProblem; hasModel: boolean; busy: boolean; onRetry: () => void };
+
+function Problem({ problem, hasModel, busy, onRetry }: ProblemProps) {
+  const { title, text } = describeProblem(problem, hasModel);
+  // the same code with the same sizes fails the same way, so a code error gets no retry
+  const canRetry = problem.kind === 'load' || problem.kind === 'crash' || (problem.kind === 'timeout' && !hasModel);
   return (
     <div className="part-problem">
       <h2>
@@ -103,12 +127,36 @@ function Problem({ problem, hasModel }: { problem: NonNullable<LiveState['proble
           <path d="M10 1.5 19 18H1z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
           <path d="M10 7.5v5M10 14.5v2" stroke="currentColor" strokeWidth="1.8" />
         </svg>
-        {timedOut ? 'This took too long' : 'Could not make the model'}
+        {title}
       </h2>
-      <p>{timedOut ? 'The compiler was stopped after 10 seconds. Try other sizes.' : problem.message}</p>
+      <p>{text}</p>
       {hasModel && <p className="muted">The view still shows the last version that worked.</p>}
+      {canRetry && (
+        <button
+          type="button"
+          className="button-quiet part-retry"
+          aria-disabled={busy}
+          onClick={busy ? undefined : onRetry}
+        >
+          {busy ? 'Trying again' : 'Try again'}
+        </button>
+      )}
     </div>
   );
+}
+
+function describeProblem(problem: LiveProblem, hasModel: boolean): { title: string; text: string } {
+  switch (problem.kind) {
+    case 'load':
+      return { title: 'Could not load the 3D engine', text: 'Check your connection, then try again.' };
+    case 'timeout':
+      return {
+        title: 'This took too long',
+        text: `The compiler was stopped after 10 seconds.${hasModel ? ' Try other sizes.' : ''}`,
+      };
+    default:
+      return { title: 'Could not make the model', text: problem.message };
+  }
 }
 
 function viewerNote({ status, shown, problem }: LiveState): string | undefined {

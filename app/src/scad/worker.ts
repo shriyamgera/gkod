@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { cleanLog, findFailure, stlTriangles } from './errors';
-import type { CompileRequest, WorkerReply, WorkerRequest } from './messages';
+import { type CompileRequest, CRASH_MESSAGE, LOAD_MESSAGE, type WorkerReply, type WorkerRequest } from './messages';
 
 type OpenScadInstance = {
   FS: { writeFile(path: string, data: string): void; readFile(path: string): Uint8Array };
@@ -120,7 +120,7 @@ async function handle({ id, source, overrides }: CompileRequest): Promise<void> 
   } catch (thrown) {
     if (!waiting.delete(id)) return;
     const detail = thrown instanceof Error ? thrown.message : String(thrown);
-    reply({ type: 'done', id, ok: false, error: 'The compiler could not be loaded.', log: [detail], ms: 0 });
+    reply({ type: 'done', id, ok: false, error: LOAD_MESSAGE, log: [detail], ms: 0 });
     return;
   }
   if (!waiting.delete(id)) return;
@@ -143,7 +143,7 @@ async function handle({ id, source, overrides }: CompileRequest): Promise<void> 
   } catch (thrown) {
     const detail = thrown instanceof Error ? thrown.message : String(thrown);
     const ms = performance.now() - started;
-    reply({ type: 'done', id, ok: false, error: 'The compiler stopped unexpectedly.', log: [detail], ms });
+    reply({ type: 'done', id, ok: false, error: CRASH_MESSAGE, log: [detail], ms });
   }
 }
 
