@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { Printer } from '../slicer/printers';
 import type { SliceResult, SliceSettings } from '../slicer/types';
 import { PrintOutcome, phaseAnnouncement, UNSAFE } from './PrintOutcome';
-import { type Phase, phaseFrom, problemLine, SETTINGS_CHANGED, SHAPE_CHANGED, type Sliced, staleNote } from './run';
+import { PART_UPDATING, type Phase, phaseFrom, problemLine, SETTINGS_CHANGED, SHAPE_CHANGED, type Sliced, staleNote } from './run';
 
 const kobra: Printer = {
   id: 'anycubic-kobra-2-neo',
@@ -91,6 +91,15 @@ describe('PrintOutcome', () => {
     expect(html).not.toContain('Download G-code');
   });
 
+  it('takes the download away while the part is updating, before the new shape is ready', () => {
+    const note = staleNote(job, stl, settings, { updating: true });
+    expect(note).toBe('The part is updating.');
+    const html = outcome({ kind: 'done', sliced: job, result: finished }, note);
+    expect(visible(html)).toContain('The part is updating.');
+    expect(html).not.toContain('Download G-code');
+    expect(phaseAnnouncement({ kind: 'done', sliced: job, result: finished }, note)).toBe('The part is updating.');
+  });
+
   it('never offers a file that failed the safety check, and names the first problem in words', () => {
     const html = outcome({ kind: 'unsafe', sliced: job, report: unsafe });
     const text = visible(html);
@@ -174,6 +183,11 @@ describe('staleNote', () => {
       { supports: true },
     ];
     for (const change of changes) expect(staleNote(job, stl, { ...settings, ...change })).toBe(SETTINGS_CHANGED);
+  });
+
+  it('says the part is updating while it builds, even before anything differs', () => {
+    expect(staleNote(job, stl, settings, { updating: true })).toBe(PART_UPDATING);
+    expect(staleNote(job, stl, settings, { updating: false })).toBeNull();
   });
 });
 

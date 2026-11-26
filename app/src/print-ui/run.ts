@@ -22,11 +22,21 @@ export function phaseFrom(result: SliceResult, sliced: Sliced): Phase {
   return { kind: 'failed', sliced, error: result.error || 'The slicer stopped without a reason.' };
 }
 
+export const PART_UPDATING = 'The part is updating.';
 export const SHAPE_CHANGED = 'The part changed. Slice again.';
 export const SETTINGS_CHANGED = 'Settings changed. Slice again.';
 
-/** Why a finished slice no longer matches what is on screen, or null when it still does. */
-export function staleNote(sliced: Sliced, stl: ArrayBuffer | null, settings: SliceSettings): string | null {
+type Now = {
+  // the part is being built again, so the shape on screen is not settled yet
+  updating?: boolean;
+};
+
+/**
+ * Why a finished slice no longer matches what is on screen, or null when it still does. The file is not offered
+ * while this is set, so it is set while the part is updating too.
+ */
+export function staleNote(sliced: Sliced, stl: ArrayBuffer | null, settings: SliceSettings, now: Now = {}): string | null {
+  if (now.updating) return PART_UPDATING;
   if (!stl || !sameBytes(sliced.stl, stl)) return SHAPE_CHANGED;
   const a = sliced.settings;
   const same =
