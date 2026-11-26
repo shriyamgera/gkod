@@ -381,6 +381,13 @@ describe('checkGcode', () => {
     ]);
   });
 
+  it('fails numbers the printer reads differently, and a letter given twice', () => {
+    for (const extra of ['G1 X300E-1', 'G1 X300E-1 Y50', 'G1 Z-0.5E-7', 'G1 X0x20', 'G1 X1e2', 'G1 X50 X300', 'G1 X50 x60', 'G1 X--5', 'G1 X.']) {
+      expect(reasons(check(file(6, (l) => replace(l, 'M107', [extra, 'M107']))))).toEqual(['This line could not be read.']);
+    }
+    expect(check(file(6, (l) => replace(l, 'G1 X100 Y100', ['G1 X+100. Y.5', 'G1 X100 Y100']))).ok).toBe(true);
+  });
+
   it('fails a file with no moves', () => {
     expect(reasons(check('M104 S0\n'))).toEqual(['The file has no moves.']);
   });

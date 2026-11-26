@@ -478,19 +478,19 @@ function normalize(command: string): string {
   return match ? `${match[1]!.toUpperCase()}${match[2]}` : command.toUpperCase();
 }
 
+// Plain decimals only. Marlin stops a number at "E" or "X", so "X300E-1" is X 300 and E -1 to the printer,
+// not X 30 as Number() reads it; hex and exponents are refused.
+const NUMBER = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
+
 function parseWords(tokens: string[]): Words | null {
   const words: Words = new Map();
   for (const token of tokens) {
     const letter = token[0]!.toUpperCase();
     const rest = token.slice(1);
-    if (!/^[A-Z]$/.test(letter)) return null;
-    if (rest === '') {
-      words.set(letter, 0);
-      continue;
-    }
-    const value = Number(rest);
-    if (!Number.isFinite(value)) return null;
-    words.set(letter, value);
+    // a letter given twice may be read either way
+    if (!/^[A-Z]$/.test(letter) || words.has(letter)) return null;
+    if (rest !== '' && !NUMBER.test(rest)) return null;
+    words.set(letter, rest === '' ? 0 : Number(rest));
   }
   return words;
 }
