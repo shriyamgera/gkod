@@ -17,6 +17,8 @@
     "test": "npm run test --workspaces --if-present",
     "fetch:openscad": "sh scripts/fetch-openscad.sh",
     "fetch:kiri": "sh scripts/fetch-kiri.sh",
-    "licenses": "node scripts/third-party-licenses.mjs"
+    "licenses": "node scripts/third-party-licenses.mjs",
+    "check:gcode": "node scripts/check-gcode.mjs",
+    "slice:printers": "node scripts/slice-printers.mjs"
   }
 }

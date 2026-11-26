@@ -67,3 +67,8 @@ jobs:
           for f in openscad/openscad.js openscad/openscad.wasm kiri/kiri-eng.js kiri/kiri-work.js kiri/kiri-pool.js kiri/wasm/manifold.wasm kiri/wasm/kiri-geo.wasm kiri/LICENSE-kiri-moto.md; do
             test -s "app/dist/$f" || { echo "missing app/dist/$f"; exit 1; }
           done
+
+      # Slices the example parts and a 20 mm cube for every printer in the picker, in headless Chrome against a
+      # production build, then checks every G-code file again in Node. Any failed check fails the run.
+      - name: Slice for every printer and check the G-code
+        run: npm run slice:printers
