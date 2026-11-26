@@ -224,9 +224,21 @@ describe('createLiveCompile', () => {
     expect(calls[calls.length - 1]).toMatchObject({ source: 'cube(width + 1);', sizes: {} });
     expect(last()).toMatchObject({ status: 'working', defaults: null });
     expect(last().shown?.params[0]?.value).toBe(85);
+    expect(last().shownSource).toBe('cube(width);');
     await answer(good(90));
     expect(last().defaults?.[0]?.value).toBe(90);
+    expect(last().shownSource).toBe('cube(width + 1);');
     expect(fresh[1]).toEqual({ source: 'cube(width + 1);', width: 90 });
+  });
+
+  it('keeps naming the old code as the source of the model on screen when new code fails', async () => {
+    const { live, last, answer } = setup(true);
+    live.request({}, { now: true });
+    await answer(good(80));
+    live.setSource('cube(width + 1);');
+    await answer(bad('Line 1: Parser error: syntax error'));
+    expect(last().shown?.params[0]?.value).toBe(80);
+    expect(last().shownSource).toBe('cube(width);');
   });
 
   it('shows code that is already compiled at once, and drops the result of the old code', async () => {
@@ -236,7 +248,7 @@ describe('createLiveCompile', () => {
     live.request({ width: 99 }, { now: true });
     const ready = { stl: new ArrayBuffer(84), params: [{ name: 'width', value: 70, min: 50, max: 160, step: 1 }], ms: 5 };
     live.setSource('cube(70);', ready);
-    expect(last()).toMatchObject({ status: 'idle', shown: ready, defaults: ready.params, problem: null });
+    expect(last()).toMatchObject({ status: 'idle', shown: ready, shownSource: 'cube(70);', defaults: ready.params, problem: null });
     const count = calls.length;
     await answer(good(99));
     expect(last().shown).toBe(ready);

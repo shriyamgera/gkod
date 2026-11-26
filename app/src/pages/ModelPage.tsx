@@ -101,8 +101,11 @@ function ModelScreen({ model }: { model: SavedModel }) {
 
   const liveLabel = Object.keys(values).length > 0 ? `${version.label}, sizes changed` : version.label;
 
-  function download() {
-    if (shown) downloadFile(shown.stl, downloadName(model.title, version.v));
+  // After undo or redo the older model stays on screen until this version is built, so it is not offered as this one.
+  const thisVersion = shown && live.shownSource === version.code ? shown : null;
+
+  function save() {
+    if (thisVersion) downloadFile(thisVersion.stl, downloadName(model.title, version.v));
   }
 
   return (
@@ -119,7 +122,7 @@ function ModelScreen({ model }: { model: SavedModel }) {
             <span className="mono muted">Version {version.v}</span>
           </div>
         </div>
-        <button type="button" className="button-main" onClick={download} disabled={!shown}>
+        <button type="button" className="button-main" onClick={save} disabled={!thisVersion}>
           Download STL
           <svg width="16" height="18" viewBox="0 0 16 18" aria-hidden="true">
             <path d="M8 0v13M2 7l6 6 6-6M0 17h16" fill="none" stroke="currentColor" strokeWidth="2.2" />

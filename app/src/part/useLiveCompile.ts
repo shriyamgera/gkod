@@ -18,14 +18,20 @@ export function useLiveCompile(source: string) {
   return { ...state, request };
 }
 
-const readyState = (shown: Shown): LiveState => ({ status: 'idle', shown, defaults: shown.params, problem: null });
+const readyState = (shown: Shown, source: string): LiveState => ({
+  status: 'idle',
+  shown,
+  shownSource: source,
+  defaults: shown.params,
+  problem: null,
+});
 
 // For a made part, whose code changes from version to version. One live compile follows the code, and the
 // model on screen stays until the next one is ready. Code compiled before in this tab is shown at once.
 export function useVersionCompile(source: string) {
   const [state, setState] = useState<LiveState>(() => {
     const ready = compiledModels.get(source);
-    return ready ? readyState(ready) : startState();
+    return ready ? readyState(ready, source) : startState();
   });
   const live = useRef<ReturnType<typeof createLiveCompile> | null>(null);
 

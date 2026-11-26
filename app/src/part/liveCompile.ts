@@ -10,6 +10,8 @@ export type LiveState = {
   status: 'loading' | 'working' | 'idle';
   // the last model that compiled; it stays on screen while a newer one is made, or when one fails
   shown: Shown | null;
+  // the code the shown model was made from, which can be older code while new code is compiled
+  shownSource: string | null;
   // the sizes and their starting values, from the first model that compiled
   defaults: Param[] | null;
   problem: Problem | null;
@@ -39,7 +41,7 @@ type Options = {
   onFresh?: (source: string, shown: Shown) => void;
 };
 
-export const initialState: LiveState = { status: 'idle', shown: null, defaults: null, problem: null };
+export const initialState: LiveState = { status: 'idle', shown: null, shownSource: null, defaults: null, problem: null };
 
 // The compiler is shared by every part screen, so once it has loaded it stays loaded.
 const sharedEngine = { ready: false };
@@ -82,6 +84,7 @@ export function createLiveCompile({
       set({
         status: 'idle',
         shown,
+        shownSource: code,
         defaults: state.defaults ?? (fresh ? result.params : null),
         problem: null,
       });
@@ -157,7 +160,7 @@ export function createLiveCompile({
     if (timer) clearTimeout(timer);
     timer = null;
     cancelIfOutdated();
-    set({ status: 'idle', shown: ready, defaults: ready.params, problem: null });
+    set({ status: 'idle', shown: ready, shownSource: next, defaults: ready.params, problem: null });
   }
 
   function dispose() {
