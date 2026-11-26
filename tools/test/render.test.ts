@@ -18,6 +18,22 @@ function cube(edge = 10): Float32Array {
   return new Float32Array(faces.flatMap(([a, b, d, e]) => [...c(a!), ...c(b!), ...c(d!), ...c(a!), ...c(d!), ...c(e!)]));
 }
 
+// a sphere of radius 20 standing on the bed, in 48 x 48 pieces
+function sphere(segments = 48): Float32Array {
+  const point = (i: number, j: number) => {
+    const across = (Math.PI * i) / segments, around = (2 * Math.PI * j) / segments;
+    return [20 * Math.sin(across) * Math.cos(around), 20 * Math.sin(across) * Math.sin(around), 20 + 20 * Math.cos(across)];
+  };
+  const out: number[] = [];
+  for (let i = 0; i < segments; i++) {
+    for (let j = 0; j < segments; j++) {
+      const a = point(i, j), b = point(i + 1, j), c = point(i + 1, j + 1), d = point(i, j + 1);
+      out.push(...a, ...b, ...c, ...a, ...c, ...d);
+    }
+  }
+  return new Float32Array(out);
+}
+
 // the box around the dark ink pixels above the size label
 function inkBox(rgb: Uint8Array, width: number, height: number) {
   let [left, right, top, low] = [width, -1, height, -1];
@@ -86,6 +102,24 @@ describe('renderMesh', () => {
       expect(Math.log10(picture.grid) % 1).toBe(0);
       expect(edge / picture.grid).toBeLessThan(200);
     }
+  });
+
+  it('keeps the shading on a curved part rather than washing it out to white', () => {
+    const { width, height, rgb } = decodePng(renderMesh(sphere(), { size: 300, view: 'front' }).png);
+    const box = inkBox(rgb, width, height);
+    const r = (box.right - box.left) / 2;
+    const [cx, cy] = [box.left + r, box.top + r];
+    let inside = 0, white = 0;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if ((x - cx) ** 2 + (y - cy) ** 2 > (r - 3) ** 2) continue;
+        const i = (y * width + x) * 3;
+        inside++;
+        if (Math.min(rgb[i]!, rgb[i + 1]!, rgb[i + 2]!) >= 250) white++;
+      }
+    }
+    expect(inside).toBeGreaterThan(10000);
+    expect(white / inside).toBeLessThan(0.05);
   });
 
   it('refuses a part with no triangles', () => {

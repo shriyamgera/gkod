@@ -50,14 +50,15 @@ function tone(t: number): Rgb {
 }
 
 // Two lights fixed to the camera, so every view reads the same way: a main one from the upper left and a weak
-// one from the right. A vector's length is its light's strength. In the iso view a box's top comes out near white,
-// its front a light grey and its right side darker; a face turned straight at the camera gets a middle grey, so a
-// part seen from the top still stands out from the bed.
+// one from the right. A vector's length is its light's strength. The main light's 0.8 plus the 0.15 ambient only
+// reaches white on a face pointing straight at it, so curved parts keep their shading. In the iso view a box's top
+// comes out a pale grey, darker than the bed so it stands apart from it, its front a light grey and its right side
+// darker; a face turned straight at the camera gets a middle grey, so a part seen from the top still stands out.
 function lighting(basis: Basis): (normal: Vec3) => number {
   const at = (r: number, u: number, b: number): Vec3 =>
     [0, 1, 2].map((k) => r * basis.right[k]! + u * basis.up[k]! + b * basis.back[k]!) as Vec3;
-  const key = at(-0.87, 0.62, 0.28);
-  const fill = at(0.2, 0.02, 0.07);
+  const key = at(-0.63, 0.45, 0.2);
+  const fill = at(0.145, 0.015, 0.05);
   return (n) => Math.min(1, 0.15 + Math.max(0, dot(n, key)) + Math.max(0, dot(n, fill)));
 }
 
