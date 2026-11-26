@@ -55,7 +55,7 @@ export function bodyPiece(body: Body): BodyPiece {
         faces: {
           top: {
             u0: 0, u1: w, v0: 0, v1: d, uMid: half(w), vMid: half(d), uLen: w, thick: t,
-            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', flat: true,
+            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', vAxis: 'y', flat: true,
             corner: body.corner === 'sharp' ? undefined : { kind: body.corner, size: c },
           },
         },
@@ -89,7 +89,7 @@ export function bodyPiece(body: Body): BodyPiece {
         faces: {
           floor: {
             u0: wall, u1: sub(w, wall), v0: wall, v1: sub(d, wall), uMid: half(w), vMid: half(d), uLen: sub(w, mul(2, wall)), thick: f,
-            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', flat: true,
+            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', vAxis: 'y', flat: true,
             corner: body.corner === 'sharp' ? undefined : { kind: body.corner, size: inner },
           },
         },
@@ -116,11 +116,11 @@ export function bodyPiece(body: Body): BodyPiece {
         faces: {
           base: {
             u0: 0, u1: w, v0: t, v1: b, uMid: half(w), vMid: half(add(b, t)), uLen: w, thick: t,
-            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', flat: true,
+            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', vAxis: 'y', flat: true,
           },
           upright: {
             u0: 0, u1: w, v0: t, v1: h, uMid: half(w), vMid: half(add(h, t)), uLen: w, thick: t,
-            at: (u, v) => [u, 0, v], normal: 'y', uAxis: 'x', flat: false,
+            at: (u, v) => [u, 0, v], normal: 'y', uAxis: 'x', vAxis: 'z', flat: false,
           },
         },
       };
@@ -148,7 +148,7 @@ export function bodyPiece(body: Body): BodyPiece {
         faces: {
           floor: {
             u0: 0, u1: len, v0: wall, v1: sub(w, wall), uMid: half(len), vMid: half(w), uLen: len, thick: f,
-            at: (u, v) => [v, u, 0], normal: 'z', uAxis: 'y', flat: true,
+            at: (u, v) => [v, u, 0], normal: 'z', uAxis: 'y', vAxis: 'x', flat: true,
           },
         },
       };
@@ -202,7 +202,7 @@ export function bodyPiece(body: Body): BodyPiece {
         faces: {
           plate: {
             u0: start, u1: plate, v0: 0, v1: w, uMid: half(add(start, plate)), vMid: half(w), uLen: sub(plate, start), thick: t,
-            at: (u, v) => [0, u, v], normal: 'x', uAxis: 'y', flat: false,
+            at: (u, v) => [0, u, v], normal: 'x', uAxis: 'y', vAxis: 'z', flat: false,
           },
         },
       };
@@ -261,10 +261,11 @@ export function bodyPiece(body: Body): BodyPiece {
           { face: 'pad', cut: false, edge: true, what: 'ring', u0: -env.outer_r!, v0: 0, u1: env.outer_r!, v1: env.length! },
         ],
         extent: { x: pad, y: add(ref('ring_y'), outer), z: len },
+        trims: ['y'],
         faces: {
           pad: {
             u0: half(mul(-1, pad)), u1: half(pad), v0: 0, v1: len, uMid: 0, vMid: half(len), uLen: pad, thick: ref('pad_thickness'),
-            at: (u, v) => [u, 0, v], normal: 'y', uAxis: 'x', flat: false,
+            at: (u, v) => [u, 0, v], normal: 'y', uAxis: 'x', vAxis: 'z', flat: false,
           },
         },
       };

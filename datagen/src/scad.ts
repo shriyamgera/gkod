@@ -25,6 +25,7 @@ export function add(a: Expr, b: Expr): Expr {
 export function sub(a: Expr, b: Expr): Expr {
   if (typeof a === 'number' && typeof b === 'number') return tidy(a - b);
   if (b === 0) return a;
+  if (a === 0) return neg(b);
   if (typeof b === 'number' && b < 0) return add(a, -b);
   return { op: '-', a, b };
 }
@@ -45,6 +46,11 @@ export function div(a: Expr, b: Expr): Expr {
 
 export const half = (a: Expr) => div(a, 2);
 
+/** Minus a: written as -a. */
+export function neg(a: Expr): Expr {
+  return typeof a === 'number' ? tidy(-a) : { op: '-', a: 0, b: a };
+}
+
 export function max(...args: Expr[]): Expr {
   return args.every((arg) => typeof arg === 'number') ? Math.max(...(args as number[])) : { fn: 'max', args };
 }
@@ -56,13 +62,9 @@ export function min(...args: Expr[]): Expr {
 // OpenSCAD's sin and cos take degrees.
 const radians = (deg: number) => (deg * Math.PI) / 180;
 
-export function sin(a: Expr): Expr {
-  return typeof a === 'number' ? tidy(Math.sin(radians(a))) : { fn: 'sin', args: [a] };
-}
-
-export function cos(a: Expr): Expr {
-  return typeof a === 'number' ? tidy(Math.cos(radians(a))) : { fn: 'cos', args: [a] };
-}
+// Kept as calls even for a plain number, so the code says cos(30) rather than a rounded 0.866.
+export const sin = (a: Expr): Expr => ({ fn: 'sin', args: [a] });
+export const cos = (a: Expr): Expr => ({ fn: 'cos', args: [a] });
 
 export type Env = Record<string, number>;
 
@@ -105,6 +107,10 @@ export function expr(e: Expr, parent?: string, right = false): string {
   if (typeof e === 'number') return e < 0 && parent ? `(${num(e)})` : num(e);
   if ('ref' in e) return e.ref;
   if ('fn' in e) return `${e.fn}(${e.args.map((arg) => expr(arg)).join(', ')})`;
+  if (e.op === '-' && e.a === 0) {
+    const minus = `-${expr(e.b, '*')}`;
+    return parent ? `(${minus})` : minus;
+  }
   const text = `${expr(e.a, e.op)} ${e.op} ${expr(e.b, e.op, true)}`;
   if (!parent) return text;
   const wrap = rank(e.op) < rank(parent) || (right && rank(e.op) === rank(parent) && (parent === '-' || parent === '/'));

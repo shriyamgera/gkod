@@ -39,7 +39,9 @@ export type Face = {
   thick: Expr;
   at: (u: Expr, v: Expr) => Expr[];
   normal: 'x' | 'y' | 'z';
+  /** the world axes that u and v run along */
   uAxis: 'x' | 'y';
+  vAxis: 'x' | 'y' | 'z';
   /** true when the face lies flat while printing, so holes through it are upright */
   flat: boolean;
   corner?: { kind: 'round' | 'chamfer'; size: Expr };
@@ -59,7 +61,11 @@ export type Piece = {
   rules: Rule[];
   shapes: (env: Env) => Shape[];
   extent: Partial<Extent>;
+  /** axes where the piece cuts into the outer edge, so the extent is only an upper bound */
+  trims?: Axis[];
 };
+
+export type Axis = 'x' | 'y' | 'z';
 
 export type Model = {
   sizes: Size[];
@@ -68,13 +74,14 @@ export type Model = {
   rules: Rule[];
   shapes: (env: Env) => Shape[];
   extent: Extent;
+  /** true on an axis where the extent is the part's real overall size */
+  exact: Record<Axis, boolean>;
 };
 
 export function size(path: Path, value: number, name: string, caption: string, step: number, lo: number, hi: number): Size {
   return { name, caption, value, step, lo, hi, path };
 }
 
-export const empty = (): Piece => ({ sizes: [], derived: [], rules: [], shapes: () => [], extent: {} });
 
 /** The values of every size and worked-out value, with some sizes changed. */
 export function envOf(model: Model, changes: Env = {}): Env {

@@ -26,5 +26,10 @@ export function modelOf(tree: Tree): Model {
     rules: pieces.flatMap((piece) => piece.rules),
     shapes: (env) => pieces.flatMap((piece): Shape[] => piece.shapes(env)),
     extent,
+    exact: {
+      x: !pieces.some((piece) => piece.trims?.includes('x')),
+      y: !pieces.some((piece) => piece.trims?.includes('y')),
+      z: !pieces.some((piece) => piece.trims?.includes('z')),
+    },
   };
 }

@@ -363,6 +363,7 @@ export function featurePiece(f: Feature, ctx: Ctx): Piece {
         ],
         shapes: () => [],
         extent: {},
+        trims: ['x', 'y'],
       };
     }
     case 'flat': {
