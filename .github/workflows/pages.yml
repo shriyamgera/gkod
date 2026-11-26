@@ -17,6 +17,8 @@ concurrency:
 
 jobs:
   build:
+    # The private working copy of this repo has no Pages site; only the public repo deploys.
+    if: github.repository == 'shriyamgera/gkod'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
