@@ -127,7 +127,7 @@ async function handle({ id, source, overrides }: CompileRequest): Promise<void> 
   reply({ type: 'start', id });
   const started = performance.now();
   try {
-    const args = ['--export-format=binstl', '--backend=manifold', ...defineArgs(overrides)];
+    const args = ['--export-format=binstl', '--backend=manifold', '--hardwarnings', ...defineArgs(overrides)];
     const result = await run(compiler, source, '/out.stl', args);
     const error = findFailure(result.exitCode, result.log, stlTriangles(result.output));
     if (error || !result.output) {

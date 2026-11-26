@@ -13,15 +13,18 @@ export function stlTriangles(stl: Uint8Array | null): number {
 function readable(line: string): string {
   const where = /,? in file \S+, line (\d+)\s*$/.exec(line);
   const text = line
-    .replace(/^(ERROR|EXCEPTION):\s*/, '')
+    .replace(/^(ERROR|EXCEPTION|WARNING):\s*/, '')
     .replace(/,? in file \S+, line \d+\s*$/, '')
+    // compiles stop on the first warning, so nothing was ignored
+    .replace(/^Ignoring unknown/, 'Unknown')
     .trim();
   return where ? `Line ${where[1]}: ${text}` : text;
 }
 
 // Picks one short message for a failed compile, or returns null when the compile is fine.
+// Compiles run with --hardwarnings, so a warning stops the compile and is the cause to report.
 export function findFailure(exitCode: number, log: string[], triangles: number): string | null {
-  const error = log.find((line) => line.startsWith('ERROR:'));
+  const error = log.find((line) => line.startsWith('ERROR:') && !/stop on first warning/.test(line));
   if (error) return readable(error);
   const thrown = log.find((line) => line.startsWith('EXCEPTION:'));
   if (thrown) {
@@ -29,6 +32,8 @@ export function findFailure(exitCode: number, log: string[], triangles: number):
       ? 'The code ran out of room, most likely from endless recursion.'
       : `The compiler stopped: ${readable(thrown)}`;
   }
+  const warning = exitCode !== 0 ? log.find((line) => line.startsWith('WARNING:')) : undefined;
+  if (warning) return readable(warning);
   if (log.some((line) => /top level object is empty/i.test(line))) return 'The code does not make any solid shape.';
   if (log.some((line) => /not a 3D object/i.test(line))) return 'The code makes a flat 2D shape, not a 3D part.';
   if (exitCode !== 0) {

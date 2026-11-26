@@ -26,8 +26,25 @@ describe('findFailure', () => {
     expect(findFailure(-1, ['EXCEPTION: Maximum call stack size exceeded'], 0)).toMatch(/recursion/);
   });
 
-  it('passes a clean compile, warnings included', () => {
-    expect(findFailure(0, ['WARNING: Ignoring unknown variable "x" in file /in.scad, line 2'], 80)).toBeNull();
+  it('reports the warning that stopped the compile', () => {
+    const log = ['WARNING: Ignoring unknown variable "undefined_width" in file /in.scad, line 1', "TRACE: called by 'cube'"];
+    expect(findFailure(1, log, 0)).toBe('Line 1: Unknown variable "undefined_width"');
+    expect(findFailure(1, ["WARNING: Ignoring unknown module 'no_such_module' in file /in.scad, line 3"], 0)).toBe(
+      "Line 3: Unknown module 'no_such_module'",
+    );
+  });
+
+  it('names the missing include rather than the stop it caused', () => {
+    const log = [
+      "WARNING: Can't find include file 'nothere.scad'. in file /in.scad, line 1",
+      'ERROR: Parser error: stop on first warning in file /in.scad, line 1',
+      "Can't parse file '/in.scad'!",
+    ];
+    expect(findFailure(1, log, 0)).toBe("Line 1: Can't find include file 'nothere.scad'.");
+  });
+
+  it('passes a clean compile, including warnings that did not stop it', () => {
+    expect(findFailure(0, ['WARNING: [manifold] Minkowski failed with error, falling back to Nef operation'], 80)).toBeNull();
   });
 });
 
