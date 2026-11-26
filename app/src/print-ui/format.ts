@@ -19,19 +19,19 @@ export function formatFilament(mm: number): string {
   return metres < 0.05 ? 'Under 0.1 m' : `${metres.toFixed(1)} m`;
 }
 
-/** "205 °C", or "200 to 210 °C" when the file sets more than one. Zero only turns a heater off. */
+/** "205 °C", or "200 to 210 °C" when the file sets more than one, with a space that does not break. Zero only turns a heater off. */
 export function formatTemps(values: number[]): string {
   const set = [...new Set(values.filter((value) => value > 0))].sort((a, b) => a - b);
   if (set.length === 0) return '';
   const low = set[0]!;
   const high = set[set.length - 1]!;
-  return low === high ? `${low} °C` : `${low} to ${high} °C`;
+  return low === high ? `${low}\u00a0°C` : `${low} to ${high}\u00a0°C`;
 }
 
 function slug(text: string): string {
   return text
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .slice(0, 40)

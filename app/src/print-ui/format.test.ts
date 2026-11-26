@@ -59,8 +59,8 @@ describe('formatFilament', () => {
 
 describe('formatTemps', () => {
   it('names one temperature, or the range, and leaves out heaters turned off', () => {
-    expect(formatTemps([205, 205, 0])).toBe('205 °C');
-    expect(formatTemps([210, 200, 205])).toBe('200 to 210 °C');
+    expect(formatTemps([205, 205, 0])).toBe('205\u00a0°C');
+    expect(formatTemps([210, 200, 205])).toBe('200 to 210\u00a0°C');
     expect(formatTemps([0])).toBe('');
     expect(formatTemps([])).toBe('');
   });
