@@ -1,0 +1,162 @@
+/* Print status box */
+
+.status {
+  container-type: inline-size;
+}
+
+.status-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 18px;
+  font-size: 15px;
+}
+
+.status-ok {
+  background: var(--ok-bg);
+}
+
+.status-fix {
+  background: var(--warn-bg);
+}
+
+.status-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.status-head h2 svg {
+  flex: none;
+}
+
+/* focused only when the button that had focus went away, so the next Tab starts here */
+.status-head h2:focus-visible {
+  outline: none;
+}
+
+.status-box p,
+.status-list li {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.status-note {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.status-busy {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  visibility: hidden;
+}
+
+.status-busy[data-on='true'] {
+  visibility: visible;
+}
+
+/* in a narrow column the heading needs the room; the viewer beside or above already says it is updating */
+@container (max-width: 400px) {
+  .status-busy-word {
+    display: none;
+  }
+}
+
+.status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-fill);
+  animation: status-pulse 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes status-pulse {
+  to {
+    opacity: 0.25;
+  }
+}
+
+.status-checking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 18px;
+  border: var(--rule-soft);
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.button-dark {
+  min-height: var(--tap);
+  padding: 0 16px;
+  border: none;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button-dark:hover {
+  background: #3a3833;
+}
+
+.button-dark[aria-disabled='true'] {
+  background: var(--line-strong);
+  color: var(--ink);
+  cursor: not-allowed;
+}
+
+.button-link {
+  min-height: var(--tap);
+  margin-left: -8px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.button-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.button-link[aria-disabled='true'] {
+  color: var(--muted);
+  cursor: not-allowed;
+}
