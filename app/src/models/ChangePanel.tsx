@@ -68,6 +68,8 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
 
   // The field may have changed while the key panel was open, so it is read again.
   function keySet() {
+    // the key panel, which holds focus, is about to go, so focus moves to the field first
+    field.current?.focus();
     setKeyAsk(null);
     const instruction = instructionOrNote();
     if (instruction) void run(instruction);
