@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { checkStl, DEFAULT_BED, type Report } from '@gkod/checks';
+import { type Bed, checkStl, DEFAULT_BED, type Report } from '@gkod/checks';
 import { cleanLog, findFailure, stlTriangles } from './errors';
 import { type CompileRequest, CRASH_MESSAGE, LOAD_MESSAGE, type WorkerReply, type WorkerRequest } from './messages';
 
@@ -108,11 +108,11 @@ async function exportParams(compiler: Compiler, source: string): Promise<string>
   return json;
 }
 
-// The printer picker comes later; until then every part is checked against the default 256 mm bed.
+// The bed is the chosen printer's; without one the part is checked against the default 256 mm bed.
 // A fault in the checks must not lose a part that compiled, so the part is then shown without a report.
-function printChecks(stl: Uint8Array): { checks?: Report } {
+function printChecks(stl: Uint8Array, bed: Bed = DEFAULT_BED): { checks?: Report } {
   try {
-    return { checks: checkStl(stl, { bed: DEFAULT_BED }) };
+    return { checks: checkStl(stl, { bed }) };
   } catch {
     return {};
   }
@@ -123,7 +123,7 @@ const reply = (message: WorkerReply, transfer: Transferable[] = []) => scope.pos
 // compiles waiting for the compiler to load; a cancel message takes one out before it begins
 const waiting = new Set<number>();
 
-async function handle({ id, source, overrides }: CompileRequest): Promise<void> {
+async function handle({ id, source, overrides, bed }: CompileRequest): Promise<void> {
   waiting.add(id);
   let compiler: Compiler;
   try {
@@ -149,7 +149,7 @@ async function handle({ id, source, overrides }: CompileRequest): Promise<void> 
     const paramExport = await exportParams(compiler, source);
     const ms = performance.now() - started;
     const bytes = result.output;
-    const checks = printChecks(bytes);
+    const checks = printChecks(bytes, bed);
     const stl = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     reply({ type: 'done', id, ok: true, stl, paramExport, ...checks, log: result.log, ms }, [stl]);
   } catch (thrown) {

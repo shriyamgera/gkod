@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { type EngineProblem, engineSettings, gemini, keyStore, makePart } from '../engine';
 import { type Shown, shownOf } from '../part/liveCompile';
 import { CANCEL_MESSAGE, compile, CRASH_MESSAGE, LOAD_MESSAGE } from '../scad/client';
+import { getPrinter } from '../slicer/printerChoice';
 
 // failures of the compiler itself, which get no repair request
 const BROWSER_FAILURES = [CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE];
@@ -61,7 +62,7 @@ export function useFix(modelId?: string) {
     const compileFn: typeof compile = async (source, overrides, opts) => {
       compiles += 1;
       setStage('Building the shape');
-      const result = await compile(source, overrides, opts);
+      const result = await compile(source, overrides, { ...opts, bed: getPrinter().printable });
       if (!result.ok && compiles === 1 && !BROWSER_FAILURES.includes(result.error)) {
         setStage('Fixing a mistake and trying again');
       }

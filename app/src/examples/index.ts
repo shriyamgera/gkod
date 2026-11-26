@@ -1,11 +1,13 @@
 import cableClip from './cable_clip.scad?raw';
 import phoneStand from './phone_stand.scad?raw';
+import testCube from './test_cube.scad?raw';
 import wallHook from './wall_hook.scad?raw';
 
 export const examples: { id: string; name: string; source: string }[] = [
   { id: 'phone_stand', name: 'Phone stand', source: phoneStand },
   { id: 'wall_hook', name: 'Wall hook', source: wallHook },
   { id: 'cable_clip', name: 'Cable clip', source: cableClip },
+  { id: 'test_cube', name: 'Test cube', source: testCube },
 ];
 
 export function findExample(id: string) {

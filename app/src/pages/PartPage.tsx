@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckList } from '../checks-ui/CheckList';
 import { PrintStatus } from '../checks-ui/PrintStatus';
+import { usePrinterReport } from '../checks-ui/printerReport';
 import { handOverNote, useFix } from '../checks-ui/useFix';
 import { fixedNote, fixLabel, fixRequest, viewerMark } from '../checks-ui/wording';
 import { findExample } from '../examples';
 import { compiledModels } from '../models/compiled';
 import { modelStore } from '../models/store';
 import { Disclosure } from '../part/Disclosure';
+import { checksAllowSlicing, pageBlock } from '../print-ui/format';
+import { PrintPanel } from '../print-ui/PrintPanel';
 import { downloadFile } from '../part/download';
 import type { Sizes } from '../part/liveCompile';
 import { LiveProblemBox, statusText, viewerNote } from '../part/LiveStatus';
@@ -15,6 +18,9 @@ import { stlFileName, withValues } from '../part/sizes';
 import { useLiveCompile } from '../part/useLiveCompile';
 import '../part/part.css';
 import { links } from '../router';
+import { slice } from '../slicer/client';
+import { useChosenPrinter } from '../slicer/printerChoice';
+import { printers } from '../slicer/printers';
 import { Viewer } from '../viewer/Viewer';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -33,7 +39,7 @@ function PartScreen({ example }: { example: Example }) {
   // print with supports instead of fixing the overhang; an example has no versions, so it lives here
   const [supports, setSupports] = useState(false);
   const { shown, problem, status } = live;
-  const report = shown?.checks ?? null;
+  const report = usePrinterReport(shown?.checks ?? null, useChosenPrinter());
   const fixer = useFix();
   const heading = useRef<HTMLHeadingElement>(null);
   const retrying = useRef(false);
@@ -142,6 +148,16 @@ function PartScreen({ example }: { example: Example }) {
               onSupports={() => setSupports(!supports)}
             />
           )}
+          <PrintPanel
+            stl={problem ? null : (shown?.stl ?? null)}
+            blocked={pageBlock(report, problem !== null)}
+            title={example.name}
+            supports={supports}
+            onSupportsChange={setSupports}
+            checksOk={status === 'idle' && !fixer.fixing ? checksAllowSlicing(report, supports) : null}
+            slice={slice}
+            printers={printers}
+          />
 
           <div className="part-details">
             <Disclosure title="Sizes" defaultOpen>

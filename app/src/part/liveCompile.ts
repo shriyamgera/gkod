@@ -1,5 +1,5 @@
 import { CANCEL_MESSAGE, type CompileOptions, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE } from '../scad/client';
-import type { Report } from '@gkod/checks';
+import type { Bed, Report } from '@gkod/checks';
 import type { CompileResult, Param } from '../scad/types';
 
 export type Sizes = Record<string, number>;
@@ -46,6 +46,8 @@ type Options = {
   engine?: { ready: boolean };
   // told about each model compiled with the sizes written in its code, so it can be shown again without a compile
   onFresh?: (source: string, shown: Shown) => void;
+  // the bed of the chosen printer when each compile starts, for the print checks
+  bed?: () => Bed;
 };
 
 export const initialState: LiveState = { status: 'idle', shown: null, shownSource: null, defaults: null, problem: null };
@@ -68,6 +70,7 @@ export function createLiveCompile({
   cancelAfterMs = 300,
   engine = sharedEngine,
   onFresh,
+  bed,
 }: Options) {
   let source = firstSource;
   let state = initialState;
@@ -129,7 +132,8 @@ export function createLiveCompile({
       engine.ready = true;
       if (!stopped && state.status === 'loading') set({ status: 'working' });
     };
-    void compile(code, sizes, { onStart, signal: controller.signal }).then((result) => {
+    const opts: CompileOptions = bed ? { onStart, signal: controller.signal, bed: bed() } : { onStart, signal: controller.signal };
+    void compile(code, sizes, opts).then((result) => {
       running = null;
       if (cancelTimer) clearTimeout(cancelTimer);
       cancelTimer = null;

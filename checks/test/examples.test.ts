@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { checkStl } from '#checks/index';
 import cableClip from './fixtures/cable_clip.stl?inline';
 import phoneStand from './fixtures/phone_stand.stl?inline';
+import testCube from './fixtures/test_cube.stl?inline';
 import wallHook from './fixtures/wall_hook.stl?inline';
 import cableClipSource from '../../app/src/examples/cable_clip.scad?raw';
 import phoneStandSource from '../../app/src/examples/phone_stand.scad?raw';
+import testCubeSource from '../../app/src/examples/test_cube.scad?raw';
 import wallHookSource from '../../app/src/examples/wall_hook.scad?raw';
 import sources from './fixtures/sources.json';
 
@@ -26,6 +28,7 @@ const examples = [
   { id: 'phone_stand', stl: phoneStand, source: phoneStandSource, triangles: 80, size: [80, 90, 103.4] },
   { id: 'wall_hook', stl: wallHook, source: wallHookSource, triangles: 756, size: [35, 80, 20] },
   { id: 'cable_clip', stl: cableClip, source: cableClipSource, triangles: 400, size: [20, 9.9, 12] },
+  { id: 'test_cube', stl: testCube, source: testCubeSource, triangles: 28, size: [20, 20, 20] },
 ] as const;
 
 describe('built-in examples', () => {

@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { compiledModels } from '../models/compiled';
 import { compile } from '../scad/client';
+import { getPrinter } from '../slicer/printerChoice';
 import { createLiveCompile, type LiveState, type Shown, type Sizes, startState } from './liveCompile';
+
+// the space a part may fill on the chosen printer, as the slicer measures it
+const chosenBed = () => getPrinter().printable;
 
 export function useLiveCompile(source: string) {
   const [state, setState] = useState<LiveState>(startState);
   const live = useRef<ReturnType<typeof createLiveCompile> | null>(null);
 
   useEffect(() => {
-    const current = createLiveCompile({ source, compile, onChange: setState });
+    const current = createLiveCompile({ source, compile, onChange: setState, bed: chosenBed });
     live.current = current;
     current.request({}, { now: true });
     return () => current.dispose();
@@ -36,7 +40,7 @@ export function useVersionCompile(source: string) {
   const live = useRef<ReturnType<typeof createLiveCompile> | null>(null);
 
   useEffect(() => {
-    const current = createLiveCompile({ source: '', compile, onChange: setState, onFresh: compiledModels.set });
+    const current = createLiveCompile({ source: '', compile, onChange: setState, onFresh: compiledModels.set, bed: chosenBed });
     live.current = current;
     return () => current.dispose();
   }, []);

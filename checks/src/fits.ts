@@ -12,8 +12,14 @@ export function bedLabel(bed: Bed): string {
   return bed.x === bed.y && bed.y === bed.z ? `${mm(bed.x)} mm bed` : `${mm(bed.x)} x ${mm(bed.y)} x ${mm(bed.z)} mm bed`;
 }
 
-export function checkFits(size: Vec3, bed: Bed): CheckResult {
-  const title = `Fits your printer (${bedLabel(bed)})`;
+// "220 mm bed" for a square bed, else "220 x 250 mm bed"; the height is in the detail when it matters.
+function floorLabel(bed: Bed): string {
+  return bed.x === bed.y ? `${mm(bed.x)} mm bed` : `${mm(bed.x)} x ${mm(bed.y)} mm bed`;
+}
+
+/** printer: a short printer name for the title, e.g. "Fits your printer (Kobra 2 Neo, 220 mm bed)". */
+export function checkFits(size: Vec3, bed: Bed, printer?: string): CheckResult {
+  const title = printer ? `Fits your printer (${printer}, ${floorLabel(bed)})` : `Fits your printer (${bedLabel(bed)})`;
   const measured = `${mm(size[0])} x ${mm(size[1])} x ${mm(size[2])} mm`;
   const over = axes.flatMap((axis, i) => {
     const extra = size[i]! - bed[axis.key];

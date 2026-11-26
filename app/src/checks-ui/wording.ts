@@ -9,9 +9,9 @@ const PASSED: Record<CheckId, string> = {
   overhang: 'needs no supports',
 };
 
-// Nothing in the site adds supports yet, so the box says what to turn on in the visitor's own slicer.
+// The print panel below the box slices with supports when this is chosen.
 export const SUPPORTS_TITLE = 'Needs supports';
-export const SUPPORTS_LINE = 'Turn on supports in your slicer for the marked part that would sag. You break them off after printing.';
+export const SUPPORTS_LINE = 'Slicing here adds supports under the marked part that would sag. You break them off after printing.';
 
 export function problems(report: Report): CheckResult[] {
   return report.results.filter((result) => !result.ok);

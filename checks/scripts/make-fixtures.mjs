@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const root = new URL('../../', import.meta.url);
 const build = new URL('app/public/openscad/', root);
-const examples = ['phone_stand', 'wall_hook', 'cable_clip'];
+const examples = ['phone_stand', 'wall_hook', 'cable_clip', 'test_cube'];
 const sources = {};
 
 // The same hash as test/examples.test.ts, so the test can tell when an example changed after its fixture was made.

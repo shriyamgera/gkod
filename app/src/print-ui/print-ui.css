@@ -1,0 +1,299 @@
+/* Print panel: printer, settings, slicing and the G-code file */
+
+.print {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-size: 15px;
+}
+
+.print h2 {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.print-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.print-field > label,
+.print-field > legend,
+.print-label label {
+  font-weight: 600;
+}
+
+.print-field > legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.print-help {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.print-select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 40px 0 12px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--white) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23121212' stroke-width='2'/%3E%3C/svg%3E")
+    no-repeat right 14px center;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  appearance: none;
+  cursor: pointer;
+}
+
+.print-select-small {
+  flex: none;
+  width: 96px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+/* Quality: two radio buttons that read as one choice */
+.print-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.print-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.print-choice:hover {
+  background: var(--white);
+}
+
+.print-choice:has(input:checked) {
+  border-color: var(--ink);
+  background: var(--white);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.print-choice input,
+.print-check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+.print-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.print-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.print-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.print-check label {
+  cursor: pointer;
+}
+
+.print-go {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.print-slice {
+  width: 100%;
+}
+
+.print-note {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Progress */
+
+.print-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.print-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.print-progress-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.print-bar {
+  height: 8px;
+  border: 1px solid var(--ink);
+  background: var(--white);
+}
+
+.print-bar span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width 0.2s linear;
+}
+
+/* Result */
+
+.print-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: var(--rule-soft);
+}
+
+.print-time strong {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.print-time .muted {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.print-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.print-result[data-stale='true'] .print-time,
+.print-result[data-stale='true'] .print-facts {
+  color: var(--muted);
+}
+
+.print-stale,
+.print-safe {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.print-stale svg,
+.print-safe svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.print-stale {
+  font-weight: 600;
+}
+
+.print-safe {
+  font-size: 14px;
+}
+
+.print-download {
+  justify-content: center;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.print-file {
+  overflow-wrap: anywhere;
+}
+
+/* Safety check failed, or the slicer stopped */
+
+.print-problem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--warn-bg);
+}
+
+.print-problem h3 {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.print-problem h3 svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.print-problem p {
+  overflow-wrap: anywhere;
+}
+
+.print-problem .button-link {
+  align-self: flex-start;
+}
+
+.print-problem .button-quiet {
+  border-color: var(--ink);
+}
+
+.print-problem-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 20px;
+  font-size: 14px;
+}
+
+.print-problem-list code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}

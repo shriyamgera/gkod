@@ -14,9 +14,16 @@
   "scripts": {
     "dev": "npm run dev --workspace app",
     "build": "npm run build --workspace app",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p e2e",
     "test": "npm run test --workspaces --if-present",
     "fetch:openscad": "sh scripts/fetch-openscad.sh",
-    "licenses": "node scripts/third-party-licenses.mjs"
+    "fetch:kiri": "sh scripts/fetch-kiri.sh",
+    "licenses": "node scripts/third-party-licenses.mjs",
+    "check:gcode": "node scripts/check-gcode.mjs",
+    "slice:printers": "node scripts/slice-printers.mjs",
+    "e2e": "playwright test -c e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
   }
 }

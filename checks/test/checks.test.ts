@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type CheckId, checkMesh, checkStl, type Report } from '#checks/index';
+import { type CheckId, checkFits, checkMesh, checkStl, type Report, withBed } from '#checks/index';
 import {
   blockWithHole,
   box,
@@ -196,6 +196,23 @@ describe('fits the bed', () => {
 
   it('accepts a part exactly the size of the bed', () => {
     expect(result(run(box([0, 0, 0], [256, 256, 256])), 'fits-bed').ok).toBe(true);
+  });
+
+  it('names the printer in the title when it is given one', () => {
+    expect(checkFits([20, 20, 20], { x: 220, y: 220, z: 250 }, 'Kobra 2 Neo').title).toBe('Fits your printer (Kobra 2 Neo, 220 mm bed)');
+    expect(checkFits([20, 20, 20], { x: 250, y: 210, z: 220 }, 'MK3S').title).toBe('Fits your printer (MK3S, 250 x 210 mm bed)');
+  });
+
+  it('measures a report against another printer without checking again', () => {
+    const long = run(box([0, 0, 0], [240, 20, 10]));
+    const kobra = withBed(long, { x: 220, y: 220, z: 250 }, 'Kobra 2 Neo');
+    expect(kobra.ok).toBe(false);
+    expect(result(kobra, 'fits-bed').detail).toBe('It is 20 mm too wide (240 mm in X) for a 220 x 220 x 250 mm bed.');
+    const big = withBed(kobra, { x: 300, y: 300, z: 300 }, 'Ender-3 S1 Plus');
+    expect(big.ok).toBe(true);
+    expect(result(big, 'fits-bed').title).toBe('Fits your printer (Ender-3 S1 Plus, 300 mm bed)');
+    expect(big.results.filter((r) => r.id !== 'fits-bed')).toEqual(long.results.filter((r) => r.id !== 'fits-bed'));
+    expect(big.stats).toBe(long.stats);
   });
 });
 

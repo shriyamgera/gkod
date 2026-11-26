@@ -120,12 +120,12 @@ describe('StatusBox', () => {
   it('says to turn on supports in the slicer once they are chosen, with a way back, and never looks like a pass', () => {
     const html = box({ report: report(sag), supportsChosen: true });
     expect(visible(html)).toContain('Needs supports');
-    expect(visible(html)).toContain('Turn on supports in your slicer for the marked part that would sag.');
+    expect(visible(html)).toContain('Slicing here adds supports under the marked part that would sag.');
     expect(html).toContain('status-supports');
     expect(html).not.toContain('status-ok');
     expect(html).not.toContain('Fix it for me');
     expect(button(html, 'Print without supports')).not.toBe('');
-    expect(said(html)).toMatch(/^Needs supports\. Turn on supports in your slicer/);
+    expect(said(html)).toMatch(/^Needs supports\. Slicing here adds supports/);
   });
 
   it('ignores the supports choice once a problem supports cannot carry turns up, or once nothing sags', () => {
