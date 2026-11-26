@@ -1,3 +1,5 @@
+import type { Report } from '@gkod/checks';
+
 // Failures the page tells apart by their message; the worker and the client both use them.
 export const TIMEOUT_MESSAGE = 'This took too long and was stopped.';
 export const CRASH_MESSAGE = 'The compiler stopped unexpectedly. Try again.';
@@ -15,5 +17,6 @@ export type WorkerReply =
   // sent once the compiler is loaded and the compile is about to run, so loading does not count against the time limit
   | { type: 'start'; id: number }
   | { type: 'cancelled'; id: number }
-  | { type: 'done'; id: number; ok: true; stl: ArrayBuffer; paramExport: string; log: string[]; ms: number }
+  // checks: the print checks on the mesh; missing only if the checks themselves failed
+  | { type: 'done'; id: number; ok: true; stl: ArrayBuffer; paramExport: string; checks?: Report; log: string[]; ms: number }
   | { type: 'done'; id: number; ok: false; error: string; log: string[]; ms: number };

@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { checkStl, DEFAULT_BED, type Report } from '@gkod/checks';
 import { cleanLog, findFailure, stlTriangles } from './errors';
 import { type CompileRequest, CRASH_MESSAGE, LOAD_MESSAGE, type WorkerReply, type WorkerRequest } from './messages';
 
@@ -107,6 +108,16 @@ async function exportParams(compiler: Compiler, source: string): Promise<string>
   return json;
 }
 
+// The printer picker comes later; until then every part is checked against the default 256 mm bed.
+// A fault in the checks must not lose a part that compiled, so the part is then shown without a report.
+function printChecks(stl: Uint8Array): { checks?: Report } {
+  try {
+    return { checks: checkStl(stl, { bed: DEFAULT_BED }) };
+  } catch {
+    return {};
+  }
+}
+
 const reply = (message: WorkerReply, transfer: Transferable[] = []) => scope.postMessage(message, transfer);
 
 // compiles waiting for the compiler to load; a cancel message takes one out before it begins
@@ -136,10 +147,11 @@ async function handle({ id, source, overrides }: CompileRequest): Promise<void> 
       return;
     }
     const paramExport = await exportParams(compiler, source);
-    const bytes = result.output;
-    const stl = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const ms = performance.now() - started;
-    reply({ type: 'done', id, ok: true, stl, paramExport, log: result.log, ms }, [stl]);
+    const bytes = result.output;
+    const checks = printChecks(bytes);
+    const stl = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    reply({ type: 'done', id, ok: true, stl, paramExport, ...checks, log: result.log, ms }, [stl]);
   } catch (thrown) {
     const detail = thrown instanceof Error ? thrown.message : String(thrown);
     const ms = performance.now() - started;

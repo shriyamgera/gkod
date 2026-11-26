@@ -1,3 +1,5 @@
+import type { Report } from '@gkod/checks';
+
 export type Param = {
   name: string;
   value: number;
@@ -10,5 +12,6 @@ export type Param = {
 };
 
 export type CompileResult =
-  | { ok: true; stl: ArrayBuffer; params: Param[]; log: string[]; ms: number }
+  // ms: the compile alone; checks.ms is the time the print checks took on top
+  | { ok: true; stl: ArrayBuffer; params: Param[]; log: string[]; ms: number; checks?: Report }
   | { ok: false; error: string; log: string[]; ms: number };

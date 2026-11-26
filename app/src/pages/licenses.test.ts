@@ -4,7 +4,9 @@ import app from '../../package.json';
 
 describe('third-party licence texts', () => {
   it('has a full licence text for every package the site depends on', () => {
-    for (const name of Object.keys(app.dependencies)) {
+    // our own workspace packages come under GKod's own licence
+    const thirdParty = Object.keys(app.dependencies).filter((name) => !name.startsWith('@gkod/'));
+    for (const name of thirdParty) {
       expect(texts).toMatch(new RegExp(`^${name.replace('/', '\\/')} \\d`, 'm'));
     }
   });

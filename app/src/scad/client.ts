@@ -83,7 +83,8 @@ export function createCompiler(makeWorker: () => WorkerLike) {
           finish({ ok: false, error: CANCEL_MESSAGE, log: [], ms: performance.now() - began });
         } else if (data.ok) {
           const params = applyOverrides(parseParams(data.paramExport), overrides);
-          finish({ ok: true, stl: data.stl, params, log: data.log, ms: data.ms });
+          const checks = data.checks ? { checks: data.checks } : {};
+          finish({ ok: true, stl: data.stl, params, log: data.log, ms: data.ms, ...checks });
         } else {
           finish({ ok: false, error: data.error, log: data.log, ms: data.ms });
         }

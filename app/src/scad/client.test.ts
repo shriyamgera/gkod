@@ -1,3 +1,4 @@
+import type { Report } from '@gkod/checks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE, createCompiler, type WorkerLike } from './client';
 import phoneStand from './fixtures/phone_stand.param.json?raw';
@@ -26,9 +27,10 @@ class FakeWorker implements WorkerLike {
   start() {
     this.send({ type: 'start', id: this.last().id });
   }
-  succeed() {
+  succeed(checks?: Report) {
     const stl = new ArrayBuffer(134);
-    this.send({ type: 'done', id: this.last().id, ok: true, stl, paramExport: phoneStand, log: [], ms: 12 });
+    const reply: WorkerReply = { type: 'done', id: this.last().id, ok: true, stl, paramExport: phoneStand, log: [], ms: 12 };
+    this.send(checks ? { ...reply, checks } : reply);
   }
 }
 
@@ -66,6 +68,28 @@ describe('compile', () => {
     expect(result.params).toHaveLength(7);
     expect(result.params[0]).toMatchObject({ name: 'width', value: 120, min: 50, max: 160 });
     expect(result.ms).toBe(12);
+  });
+
+  it('passes on the print checks made in the worker', async () => {
+    const { workers, compile } = setup();
+    const checks: Report = {
+      ok: true,
+      results: [{ id: 'closed', ok: true, title: 'Solid, no holes', detail: 'The surface is closed.' }],
+      ms: 2.5,
+      stats: { triangles: 12, volume: 1, size: [1, 1, 1], min: [0, 0, 0] },
+    };
+    const pending = compile('cube(1);');
+    await flush();
+    workers[0]!.start();
+    workers[0]!.succeed(checks);
+    const result = await pending;
+    expect(result).toMatchObject({ ok: true, checks });
+
+    const without = compile('cube(2);');
+    await flush();
+    workers[0]!.start();
+    workers[0]!.succeed();
+    expect(await without).not.toHaveProperty('checks');
   });
 
   it('rejects banned calls without starting a worker', async () => {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { type EngineProblem, engineSettings, gemini, keyStore, makePart } from '../engine';
 import { KeyPanel } from '../engine-ui/KeyPanel';
 import { otherModel } from '../engine-ui/rules';
-import type { Shown } from '../part/liveCompile';
+import { type Shown, shownOf } from '../part/liveCompile';
 import { WarningIcon } from '../part/LiveStatus';
 import { CANCEL_MESSAGE, compile, CRASH_MESSAGE, LOAD_MESSAGE } from '../scad/client';
 import { ChangeBox } from './ChangeBox';
@@ -110,9 +110,8 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
     onBusy(false);
 
     if (result.ok) {
-      const { stl, params, ms } = result.result;
       const label = versionLabel(instruction);
-      const v = onChanged({ code: result.code, shown: { stl, params, ms }, model: result.model, label });
+      const v = onChanged({ code: result.code, shown: shownOf(result.result), model: result.model, label });
       setText('');
       const seconds = (result.ms / 1000).toFixed(1);
       // a no-break space keeps the number and its unit on one line

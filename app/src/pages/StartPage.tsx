@@ -6,6 +6,7 @@ import { chips, otherModel, requestText, titleFromRequest } from '../engine-ui/r
 import { countSizes, examples } from '../examples';
 import { compiledModels } from '../models/compiled';
 import { modelStore } from '../models/store';
+import { shownOf } from '../part/liveCompile';
 import { links } from '../router';
 import { CANCEL_MESSAGE, compile, CRASH_MESSAGE, LOAD_MESSAGE } from '../scad/client';
 import { showExamplesIfAsked } from '../shell/Header';
@@ -110,8 +111,7 @@ export function StartPage() {
     setStage(null);
 
     if (result.ok) {
-      const { stl, params, ms } = result.result;
-      compiledModels.set(result.code, { stl, params, ms });
+      compiledModels.set(result.code, shownOf(result.result));
       const saved = modelStore.create({
         title: job.title,
         request: job.text,

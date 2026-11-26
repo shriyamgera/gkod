@@ -1,9 +1,16 @@
 import { CANCEL_MESSAGE, type CompileOptions, CRASH_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE } from '../scad/client';
+import type { Report } from '@gkod/checks';
 import type { CompileResult, Param } from '../scad/types';
 
 export type Sizes = Record<string, number>;
 
-export type Shown = { stl: ArrayBuffer; params: Param[]; ms: number };
+// checks: the print checks on this mesh, made in the compile worker
+export type Shown = { stl: ArrayBuffer; params: Param[]; ms: number; checks?: Report };
+
+/** What the page keeps of a compiled part. */
+export function shownOf({ stl, params, ms, checks }: Extract<CompileResult, { ok: true }>): Shown {
+  return checks ? { stl, params, ms, checks } : { stl, params, ms };
+}
 
 export type LiveState = {
   // loading: the 3D engine is still being fetched; working: a model is being made or a change is waiting
@@ -79,7 +86,7 @@ export function createLiveCompile({
   function apply(result: CompileResult, sizes: Sizes, code: string) {
     if (result.ok) {
       const fresh = Object.keys(sizes).length === 0;
-      const shown = { stl: result.stl, params: result.params, ms: result.ms };
+      const shown = shownOf(result);
       if (fresh) onFresh?.(code, shown);
       set({
         status: 'idle',
