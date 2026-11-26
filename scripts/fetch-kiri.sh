@@ -37,5 +37,5 @@ mkdir "$tmp/src"
 tar xzf "$tmp/source.tgz" -C "$tmp/src" --strip-components=1 --exclude='*/docs/*'
 ln -s "$tmp/deps/node_modules" "$tmp/src/node_modules"
 
-node "$root/scripts/kiri/build.mjs" "$tmp/src" "$dest"
+node "$root/scripts/kiri/build.mjs" "$tmp/src" "$dest" "$COMMIT"
 echo "Kiri:Moto engine is in app/public/kiri/ (sha256, bytes, file above)"

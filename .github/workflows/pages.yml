@@ -62,7 +62,7 @@ jobs:
 
       - name: Check the Kiri:Moto files are in the site
         run: |
-          for f in kiri-eng.js kiri-work.js kiri-pool.js wasm/manifold.wasm wasm/kiri-geo.wasm LICENSE-kiri-moto.md; do
+          for f in kiri-eng.js kiri-work.js kiri-pool.js wasm/manifold.wasm wasm/kiri-geo.wasm LICENSE-kiri-moto.md LICENSES.txt; do
             test -s "app/dist/kiri/$f" || { echo "missing app/dist/kiri/$f"; exit 1; }
           done
 

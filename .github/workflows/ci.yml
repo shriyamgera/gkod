@@ -64,7 +64,7 @@ jobs:
 
       - name: Check the OpenSCAD and Kiri:Moto files are in the site
         run: |
-          for f in openscad/openscad.js openscad/openscad.wasm kiri/kiri-eng.js kiri/kiri-work.js kiri/kiri-pool.js kiri/wasm/manifold.wasm kiri/wasm/kiri-geo.wasm kiri/LICENSE-kiri-moto.md; do
+          for f in openscad/openscad.js openscad/openscad.wasm kiri/kiri-eng.js kiri/kiri-work.js kiri/kiri-pool.js kiri/wasm/manifold.wasm kiri/wasm/kiri-geo.wasm kiri/LICENSE-kiri-moto.md kiri/LICENSES.txt; do
             test -s "app/dist/$f" || { echo "missing app/dist/$f"; exit 1; }
           done
 
