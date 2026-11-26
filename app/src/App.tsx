@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+import { findExample } from './examples';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { NoticesPage } from './pages/NoticesPage';
 import { PartPage } from './pages/PartPage';
@@ -20,8 +22,29 @@ function Page({ route }: { route: Route }) {
   }
 }
 
+function pageTitle(route: Route): string {
+  switch (route.page) {
+    case 'start':
+      return 'GKod';
+    case 'part':
+      return `${findExample(route.exampleId)?.name ?? 'Page not found'} · GKod`;
+    case 'notices':
+      return 'Notices · GKod';
+    case 'notFound':
+      return 'Page not found · GKod';
+  }
+}
+
 export function App() {
   const route = useRoute();
+  const firstRoute = useRef(route);
+
+  useEffect(() => {
+    document.title = pageTitle(route);
+    // after a screen change, focus goes to the new heading so screen readers announce it
+    if (route !== firstRoute.current) document.querySelector<HTMLElement>('main h1')?.focus({ preventScroll: true });
+  }, [route]);
+
   return (
     <div className="app">
       <a className="skip-link" href="#main" onClick={skipToMain}>

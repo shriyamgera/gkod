@@ -129,7 +129,9 @@ function Fact({ term, children }: { term: string; children: ReactNode }) {
 export function Notices() {
   return (
     <>
-      <h1 className="display">Notices</h1>
+      <h1 className="display" tabIndex={-1}>
+        Notices
+      </h1>
       <p style={text}>
         GKod is free software under the GNU General Public License, version 3 or later. It uses that licence because
         this site ships a compiled copy of OpenSCAD, which is GPL software.

@@ -4,7 +4,9 @@ import { links } from '../router';
 export function StartPage() {
   return (
     <div className="start">
-      <h1 className="display">What do you want to print?</h1>
+      <h1 className="display" tabIndex={-1}>
+        What do you want to print?
+      </h1>
       <p className="start-note">
         Typing a request to make a new part comes next. For now, open an example part and change its sizes.
       </p>
