@@ -72,3 +72,30 @@ describe('check options', () => {
     for (const bad of ['200x200', '0', 'axbxc', '-5x10x10', '']) expect(() => parseBed(bad)).toThrow(UsageError);
   });
 });
+
+describe('render options', () => {
+  it('has defaults for size, view and output', () => {
+    expect(parseCommand(['render', 'parts/hook.stl'])).toEqual({
+      command: 'render',
+      input: 'parts/hook.stl',
+      out: 'parts/hook.png',
+      size: 900,
+      view: 'iso',
+      markOverhangs: false,
+      defines: {},
+      json: false,
+    });
+  });
+
+  it('reads every option', () => {
+    expect(
+      parseCommand(['render', 'a.scad', '-o', 'b.png', '--size', '400', '--view', 'top', '--mark-overhangs', '-D', 'w=3', '--json']),
+    ).toEqual({ command: 'render', input: 'a.scad', out: 'b.png', size: 400, view: 'top', markOverhangs: true, defines: { w: 3 }, json: true });
+  });
+
+  it('refuses bad sizes, views and standard input', () => {
+    for (const size of ['12', '4001', '300.5', 'big']) expect(() => parseCommand(['render', 'a.stl', '--size', size])).toThrow(/--size/);
+    expect(() => parseCommand(['render', 'a.stl', '--view', 'back'])).toThrow(/--view takes iso, front, side, top/);
+    expect(() => parseCommand(['render', '-'])).toThrow(/standard input/);
+  });
+});

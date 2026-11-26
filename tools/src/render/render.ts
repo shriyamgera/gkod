@@ -143,7 +143,8 @@ export function renderMesh(positions: Float32Array, opts: RenderOptions = {}): P
 
   // depth slack, in mm, worth about this many pixels of the big picture
   const pixels = (n: number) => n / frame.scale;
-  const line = Math.max(1, (1.15 * ss * size) / 900);
+  // ink lines about one pixel wide in the finished picture, a little more in a big one
+  const line = ss * Math.max(1, (1.15 * size) / 900);
 
   // the bed, a little behind its true depth so the part's lowest faces win
   const flat = Math.abs(basis.back[2]) > 0.05;
