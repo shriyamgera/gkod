@@ -30,8 +30,9 @@ describe('overhang', () => {
       const [a, b, c] = triangles[t]!;
       expect([a[2], b[2], c[2]]).toEqual([30, 30, 30]);
     }
+    // the marker sits on the far end of the top, the point farthest from the stem that holds it up
     const [x, y, z] = result.at!;
-    expect([12.5, 47.5]).toContain(Math.round(x * 10) / 10);
+    expect([0, 60]).toContain(Math.round(x * 10) / 10);
     expect(y).toBeCloseTo(10, 6);
     expect(z).toBeCloseTo(30, 6);
   });
@@ -147,17 +148,23 @@ describe('overhang', () => {
     expect(overhang(ledge(4)).ok).toBe(false);
   });
 
-  it('puts the marker on a ring-shaped area, not in its empty middle', () => {
+  it('puts the marker on the part of a ring-shaped area that sags, not on the edge by the stem', () => {
     const grid = [0, 45, 55, 100];
     const mushroom = cells(grid, grid, [0, 10, 12], (i, j, k) => k === 1 || (i === 1 && j === 1));
     const [x, y, z] = overhang(mushroom).at!;
-    expect(Math.max(Math.abs(x - 50), Math.abs(y - 50))).toBeGreaterThanOrEqual(5);
+    // the stem is 10 mm wide, and the cap only sags more than 5 mm from it
+    expect(Math.max(Math.abs(x - 50), Math.abs(y - 50))).toBeGreaterThan(10);
     expect(z).toBeCloseTo(10, 6);
   });
 
-  it('fails the underside of a ball resting on its lowest point', () => {
-    const result = overhang(sphere(10, 24, 12, [0, 0, 10]));
+  it('fails the underside of a ball resting on its lowest point, and says how high the area reaches', () => {
+    const result = overhang(sphere(15, 48, 24, [0, 0, 15]));
     expect(result.ok).toBe(false);
-    expect(result.at![2]).toBeLessThan(5);
+    // the area runs from the faces just above the ones that sag onto the bed, up to where the faces lean 45 degrees
+    expect(result.detail).toBe('An area underneath, about 305 mm² and 0.5 to 4.4 mm above the bed, would sag while printing.');
+    // the marker is on the outer edge of the area, the part farthest from the faces on the bed
+    const [x, y, z] = result.at!;
+    expect(Math.hypot(x, y)).toBeGreaterThan(9);
+    expect(z).toBeGreaterThan(4);
   });
 });

@@ -40,3 +40,28 @@ function root(parent: Int32Array, t: number): number {
   }
   return t;
 }
+
+// Corner weights for the points a patch is sampled at: corners, edge middles and the centre of each triangle.
+const samples = [
+  [1, 0, 0], [0, 1, 0], [0, 0, 1],
+  [0.5, 0.5, 0], [0, 0.5, 0.5], [0.5, 0, 0.5],
+  [1 / 3, 1 / 3, 1 / 3],
+] as const;
+
+/** Points sampled per face. */
+export const SAMPLES = samples.length;
+
+/** Visits the sampled points of the faces, until visit returns false. Returns false when it stopped early. */
+export function eachPoint(mesh: Mesh, faces: number[], visit: (x: number, y: number, z: number) => boolean): boolean {
+  const p = mesh.positions;
+  for (const t of faces) {
+    const o = t * 9;
+    for (const [a, b, c] of samples) {
+      const x = a * p[o]! + b * p[o + 3]! + c * p[o + 6]!;
+      const y = a * p[o + 1]! + b * p[o + 4]! + c * p[o + 7]!;
+      const z = a * p[o + 2]! + b * p[o + 5]! + c * p[o + 8]!;
+      if (!visit(x, y, z)) return false;
+    }
+  }
+  return true;
+}

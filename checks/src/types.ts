@@ -18,7 +18,7 @@ export type CheckResult = {
   fix?: string;
   /** Overhang only: indices of the triangles in the problem areas. */
   triangles?: number[];
-  /** Overhang only: the centre of the biggest problem area, for the "Would sag here" marker. */
+  /** Overhang only: where the biggest problem area sags most, for the "Would sag here" marker. */
   at?: Vec3;
 };
 

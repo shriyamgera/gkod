@@ -23,7 +23,7 @@ report.results; // closed, fits-bed, flat-base, overhang, always in that order
 
 Every threshold, with the reason for its value, is in [src/limits.ts](src/limits.ts).
 
-A failed check has a plain sentence in `detail` and an instruction for the engine in `fix`. The overhang check also lists the triangles to mark in `triangles` and the centre of the biggest problem area in `at`.
+A failed check has a plain sentence in `detail` and an instruction for the engine in `fix`. The overhang check also lists the triangles to mark in `triangles`, and in `at` the point of the biggest problem area that is farthest from what holds it up (its middle, when nothing holds it up).
 
 ## Command
 

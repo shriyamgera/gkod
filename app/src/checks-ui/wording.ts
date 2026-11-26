@@ -112,7 +112,7 @@ export function fixedNote(v: number, from: number, before: Report, after: Report
 export function overhangMark(report: Report | null | undefined): ViewerMark | null {
   const overhang = report?.results.find((result) => result.id === 'overhang' && !result.ok);
   if (!report || !overhang?.triangles?.length) return null;
-  // to a tenth of a mm, the same as the sentence in the box
+  // the height of the point the marker is on, to a tenth of a mm like the heights in the box
   const height = overhang.at ? Math.round((overhang.at[2] - report.stats.min[2]) * 10) / 10 : null;
   return {
     triangles: overhang.triangles,
