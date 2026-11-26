@@ -38,5 +38,14 @@ jobs:
         run: npm run fetch:openscad
 
       - run: npm run typecheck
+
+      # The print checks run the same tests in Node and in the runner's own Chrome.
+      - name: Show the Chrome used by the browser tests
+        run: google-chrome --version
+
       - run: npm test
+
+      - name: Run the print checks command on the example parts
+        run: npx gkod-check checks/test/fixtures/*.stl
+
       - run: npm run build
