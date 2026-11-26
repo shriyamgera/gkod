@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckList } from '../checks-ui/CheckList';
 import { PrintStatus } from '../checks-ui/PrintStatus';
+import { usePrinterReport } from '../checks-ui/printerReport';
 import { useFix } from '../checks-ui/useFix';
 import { fixedNote, fixLabel, fixRequest, viewerMark } from '../checks-ui/wording';
 import { gemini } from '../engine';
@@ -11,6 +12,8 @@ import { downloadName } from '../models/names';
 import { currentVersion, modelStore, type SavedModel, useSavedModel } from '../models/store';
 import '../models/models.css';
 import { Disclosure } from '../part/Disclosure';
+import { checksAllowSlicing, pageBlock } from '../print-ui/format';
+import { PrintPanel } from '../print-ui/PrintPanel';
 import { downloadFile } from '../part/download';
 import type { Sizes } from '../part/liveCompile';
 import { LiveProblemBox, statusText, viewerNote } from '../part/LiveStatus';
@@ -19,6 +22,9 @@ import { withValues } from '../part/sizes';
 import { useVersionCompile } from '../part/useLiveCompile';
 import '../part/part.css';
 import { links } from '../router';
+import { slice } from '../slicer/client';
+import { useChosenPrinter } from '../slicer/printerChoice';
+import { printers } from '../slicer/printers';
 import { Viewer } from '../viewer/Viewer';
 
 export function ModelPage({ modelId }: { modelId: string }) {
@@ -58,7 +64,7 @@ function ModelScreen({ model }: { model: SavedModel }) {
   const [changing, setChanging] = useState(false);
   const { shown, problem, status } = live;
   const { id } = model;
-  const report = shown?.checks ?? null;
+  const report = usePrinterReport(shown?.checks ?? null, useChosenPrinter());
   const supports = version.supports === true;
   const fixer = useFix(id);
 
@@ -187,6 +193,17 @@ function ModelScreen({ model }: { model: SavedModel }) {
               onSupports={() => modelStore.setSupports(id, version.v, !supports)}
             />
           )}
+          <PrintPanel
+            stl={problem ? null : (thisVersion?.stl ?? null)}
+            blocked={pageBlock(report, problem !== null)}
+            title={model.title}
+            version={version.v}
+            supports={supports}
+            onSupportsChange={(value) => modelStore.setSupports(id, version.v, value)}
+            checksOk={status === 'idle' && !changing && !fixer.fixing ? checksAllowSlicing(report, supports) : null}
+            slice={slice}
+            printers={printers}
+          />
 
           <p role="status" className="visually-hidden">
             {said}

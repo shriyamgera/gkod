@@ -40,10 +40,14 @@ function slug(text: string): string {
 
 const BRANDS = /^(anycubic|bambu lab|creality|prusa research|prusa|elegoo|sovol|qidi|flashforge|artillery|voron)\s+/i;
 
+/** The printer without its maker: "Anycubic Kobra 2 Neo" becomes "Kobra 2 Neo", "Other printer, 220 x 220 mm" "Other printer". */
+export function printerShortName(name: string): string {
+  return (name.split(',')[0] ?? '').trim().replace(BRANDS, '');
+}
+
 /** The short printer name in a file name: "Anycubic Kobra 2 Neo" becomes "kobra2neo". */
 export function printerSlug(name: string): string {
-  const model = (name.split(',')[0] ?? '').trim().replace(BRANDS, '');
-  const short = model.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20);
+  const short = printerShortName(name).toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20);
   return !short || short.startsWith('other') ? 'printer' : short;
 }
 
@@ -65,6 +69,18 @@ export function checksAllowSlicing(report: Report | null, supports: boolean): bo
 export const NO_SHAPE = 'There is no shape to slice yet.';
 export const WAIT_FOR_CHECKS = 'Waiting for the print checks.';
 export const FIX_FIRST = 'Fix the problems above first, or choose Print with supports.';
+// A failed change leaves the last part that worked on screen, which is not what the code now says.
+export const BUILD_FAILED = 'The last change did not build. Fix it above first.';
+export const FIX_PROBLEMS = 'Fix the problems above first.';
+
+/**
+ * Why a page turns slicing off before the panel's own reasons: the last change did not build, or a problem that
+ * supports cannot help with. Null leaves it to the panel.
+ */
+export function pageBlock(report: Report | null, buildFailed: boolean): string | null {
+  if (buildFailed) return BUILD_FAILED;
+  return report && !report.ok && !onlyOverhang(report) ? FIX_PROBLEMS : null;
+}
 
 /** Why the slice button is off, or null when it is on. */
 export function blockReason(hasShape: boolean, checksOk: boolean | null): string | null {

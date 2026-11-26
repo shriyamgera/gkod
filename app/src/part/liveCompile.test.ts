@@ -50,6 +50,27 @@ afterEach(() => {
 });
 
 describe('createLiveCompile', () => {
+  it('checks each compile against the bed chosen when it starts', async () => {
+    const calls: CompileOptions[] = [];
+    let bed = { x: 220, y: 220, z: 250 };
+    const live = createLiveCompile({
+      source: 'cube(10);',
+      compile: (_source, _sizes, opts) => {
+        calls.push(opts);
+        return Promise.resolve(good(80));
+      },
+      onChange: () => {},
+      engine: { ready: true },
+      bed: () => bed,
+    });
+    live.request({}, { now: true });
+    await vi.advanceTimersByTimeAsync(0);
+    bed = { x: 300, y: 300, z: 300 };
+    live.request({ width: 90 }, { now: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.map((opts) => opts.bed?.x)).toEqual([220, 300]);
+  });
+
   it('says the engine is loading until the first compile starts', async () => {
     const { calls, engine, live, last } = setup();
     live.request({}, { now: true });

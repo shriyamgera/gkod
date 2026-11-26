@@ -49,3 +49,9 @@ export function subscribePrinterId(listener: (id: string) => void): () => void {
 export function usePrinterId(): string {
   return useSyncExternalStore(subscribePrinterId, getPrinterId, () => DEFAULT_PRINTER_ID);
 }
+
+/** The chosen printer, for React components. */
+export function useChosenPrinter(): Printer {
+  const id = usePrinterId();
+  return findPrinter(id) ?? findPrinter(DEFAULT_PRINTER_ID)!;
+}

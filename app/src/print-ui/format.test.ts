@@ -1,14 +1,18 @@
 import type { CheckResult, Report } from '@gkod/checks';
 import { describe, expect, it } from 'vitest';
 import {
+  BUILD_FAILED,
   blockReason,
   checksAllowSlicing,
   FIX_FIRST,
+  FIX_PROBLEMS,
   formatDuration,
   formatFilament,
   formatTemps,
   gcodeFileName,
   NO_SHAPE,
+  pageBlock,
+  printerShortName,
   printerSlug,
   WAIT_FOR_CHECKS,
 } from './format';
@@ -124,5 +128,31 @@ describe('blockReason', () => {
     expect(blockReason(true, null)).toBe(WAIT_FOR_CHECKS);
     expect(blockReason(true, false)).toBe(FIX_FIRST);
     expect(blockReason(true, true)).toBeNull();
+  });
+});
+
+describe('pageBlock', () => {
+  it('turns slicing off when the last change did not build', () => {
+    expect(pageBlock(report(), true)).toBe(BUILD_FAILED);
+    expect(pageBlock(null, true)).toBe(BUILD_FAILED);
+  });
+
+  it('does not offer supports for a problem they cannot fix', () => {
+    expect(pageBlock(report('fits-bed'), false)).toBe(FIX_PROBLEMS);
+    expect(pageBlock(report('fits-bed', 'overhang'), false)).toBe(FIX_PROBLEMS);
+  });
+
+  it('leaves an overhang and a passing part to the panel', () => {
+    expect(pageBlock(report('overhang'), false)).toBeNull();
+    expect(pageBlock(report(), false)).toBeNull();
+    expect(pageBlock(null, false)).toBeNull();
+  });
+});
+
+describe('printerShortName', () => {
+  it('drops the maker and anything after a comma', () => {
+    expect(printerShortName('Anycubic Kobra 2 Neo')).toBe('Kobra 2 Neo');
+    expect(printerShortName('Creality Ender-3 S1 Plus')).toBe('Ender-3 S1 Plus');
+    expect(printerShortName('Other printer, 220 x 220 mm, Marlin')).toBe('Other printer');
   });
 });

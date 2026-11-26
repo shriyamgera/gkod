@@ -9,6 +9,7 @@ import { modelStore } from '../models/store';
 import { shownOf } from '../part/liveCompile';
 import { links } from '../router';
 import { CANCEL_MESSAGE, compile, CRASH_MESSAGE, LOAD_MESSAGE } from '../scad/client';
+import { getPrinter } from '../slicer/printerChoice';
 import { showExamplesIfAsked } from '../shell/Header';
 
 // failures of the compiler itself, which get no repair request
@@ -98,7 +99,7 @@ export function StartPage() {
     const compileFn: typeof compile = async (source, overrides, opts) => {
       compiles += 1;
       setStage('Building the shape');
-      const result = await compile(source, overrides, opts);
+      const result = await compile(source, overrides, { ...opts, bed: getPrinter().bed });
       if (!result.ok && compiles === 1 && !BROWSER_FAILURES.includes(result.error)) {
         setStage('Fixing a mistake and trying again');
       }

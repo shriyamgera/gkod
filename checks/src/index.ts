@@ -5,11 +5,11 @@ import { DEFAULT_OVERHANG_DEG } from '#checks/limits';
 import { buildMesh, signedVolume } from '#checks/mesh';
 import { checkOverhang } from '#checks/overhang';
 import { readStl } from '#checks/stl';
-import { type CheckOptions, DEFAULT_BED, type Report, type Vec3 } from '#checks/types';
+import { type Bed, type CheckOptions, DEFAULT_BED, type Report, type Vec3 } from '#checks/types';
 
 export type { Bed, CheckId, CheckOptions, CheckResult, Report, Vec3 } from '#checks/types';
 export { DEFAULT_BED } from '#checks/types';
-export { bedLabel } from '#checks/fits';
+export { bedLabel, checkFits } from '#checks/fits';
 export * as limits from '#checks/limits';
 export {
   checkGcode,
@@ -44,6 +44,15 @@ export function checkMesh(positions: Float32Array, opts: CheckOptions = {}): Rep
     ms: now() - started,
     stats: { triangles: mesh.triangles, volume, size, min: mesh.min },
   };
+}
+
+/**
+ * The same report measured against another printer. Only the fits-bed check depends on the bed, and it needs only
+ * the part's size, so nothing is compiled or checked again. printer: a short name for the check's title.
+ */
+export function withBed(report: Report, bed: Bed, printer?: string): Report {
+  const results = report.results.map((result) => (result.id === 'fits-bed' ? checkFits(report.stats.size, bed, printer) : result));
+  return { ...report, ok: results.every((result) => result.ok), results };
 }
 
 /** Runs the print checks on a binary STL file. */

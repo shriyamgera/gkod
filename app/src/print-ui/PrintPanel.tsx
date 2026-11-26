@@ -24,6 +24,8 @@ export type PrintPanelProps = {
   onSupportsChange: (v: boolean) => void;
   // every check passed, or only the overhang failed and supports are on; null while checking
   checksOk: boolean | null;
+  // why slicing is off, when the page knows better than the checks (e.g. the last change did not build)
+  blocked?: string | null;
   slice: typeof sliceFn;
   printers: Printer[];
   // the chosen printer, when the page keeps it; otherwise the one remembered on this device
@@ -58,7 +60,7 @@ export function PrintPanel(props: PrintPanelProps) {
     () => (sliced && phase.kind !== 'slicing' ? staleNote(sliced, stl, settings) : null),
     [sliced, phase.kind, stl, settings.printerId, quality, infill, supports],
   );
-  const reason = printer ? blockReason(stl !== null, checksOk) : 'No printer to slice for.';
+  const reason = printer ? props.blocked || blockReason(stl !== null, checksOk) : 'No printer to slice for.';
   // progress and a fresh file take the place of the button
   const showButton = phase.kind !== 'slicing' && !(phase.kind === 'done' && !stale);
 
