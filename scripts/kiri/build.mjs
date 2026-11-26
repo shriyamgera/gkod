@@ -25,10 +25,10 @@ for (const type of (await fs.readdir(devRoot)).sort()) {
 await fs.mkdir('src/pack', { recursive: true });
 await fs.writeFile('src/pack/kiri-devs.js', `export const devices = ${JSON.stringify(devs)};`);
 
-// 2. Two paths that point at the site root. The wasm files are served next to the bundles instead.
+// 2. Two wasm paths that point at the site root. They are made relative to the bundle, which sits next to its wasm folder.
 const patches = [
-  { file: 'src/geo/csg.js', from: '"../wasm/manifold.wasm"', to: '"./wasm/manifold.wasm"' },
-  { file: 'src/geo/wasm.js', from: "fetch('/wasm/kiri-geo.wasm')", to: "fetch('./wasm/kiri-geo.wasm')" },
+  { file: 'src/geo/csg.js', from: '"../wasm/manifold.wasm"', to: 'new URL("./wasm/manifold.wasm", import.meta.url).href' },
+  { file: 'src/geo/wasm.js', from: "fetch('/wasm/kiri-geo.wasm')", to: "fetch(new URL('./wasm/kiri-geo.wasm', import.meta.url))" },
 ];
 const patchPlugin = {
   name: 'gkod-paths',
