@@ -1,0 +1,121 @@
+import { describe, expect, it } from 'vitest';
+import {
+  chips,
+  isSubmitKey,
+  keyHint,
+  keyProblem,
+  otherModel,
+  PHOTO_ONLY_REQUEST,
+  requestText,
+  titleFromRequest,
+} from './rules';
+
+describe('isSubmitKey', () => {
+  it('makes the part on Enter', () => {
+    expect(isSubmitKey({ key: 'Enter', shiftKey: false })).toBe(true);
+  });
+
+  it('keeps Shift+Enter for a new line', () => {
+    expect(isSubmitKey({ key: 'Enter', shiftKey: true })).toBe(false);
+  });
+
+  it('ignores Enter while an input method is choosing a word', () => {
+    expect(isSubmitKey({ key: 'Enter', shiftKey: false, isComposing: true })).toBe(false);
+  });
+
+  it('ignores other keys', () => {
+    expect(isSubmitKey({ key: 'a', shiftKey: false })).toBe(false);
+  });
+});
+
+describe('requestText', () => {
+  it('sends the typed words without outer spaces', () => {
+    expect(requestText('  Phone stand, 80 mm wide \n', false)).toBe('Phone stand, 80 mm wide');
+  });
+
+  it('sends nothing when nothing is typed and there is no picture', () => {
+    expect(requestText('', false)).toBeNull();
+    expect(requestText(' \n ', false)).toBeNull();
+  });
+
+  it('sends a stand-in sentence when there is only a picture', () => {
+    expect(requestText('  ', true)).toBe(PHOTO_ONLY_REQUEST);
+  });
+
+  it('sends each chip as typed words', () => {
+    expect(chips).toEqual(['Phone stand', 'Wall hook with two screw holes', 'Cable clip']);
+    for (const chip of chips) expect(requestText(chip, false)).toBe(chip);
+  });
+});
+
+describe('titleFromRequest', () => {
+  it('keeps a short request as it is, with a capital letter', () => {
+    expect(titleFromRequest('phone stand, 80 mm wide')).toBe('Phone stand, 80 mm wide');
+  });
+
+  it('takes the first sentence only', () => {
+    expect(titleFromRequest('A cable clip. It should hold two 5 mm cables.')).toBe('A cable clip');
+    expect(titleFromRequest('Wall hook\nwith two screw holes')).toBe('Wall hook');
+  });
+
+  it('does not cut at a decimal point', () => {
+    expect(titleFromRequest('Phone stand, 80.5 mm wide')).toBe('Phone stand, 80.5 mm wide');
+  });
+
+  it('shortens a long request at a word break', () => {
+    const title = titleFromRequest('a phone stand for a 9 mm thick phone, tilted back a little, with a slot');
+    expect(title).toBe('A phone stand for a 9 mm thick phone…');
+    expect(title.length).toBeLessThanOrEqual(41);
+  });
+
+  it('names a part made from a picture only', () => {
+    expect(titleFromRequest(PHOTO_ONLY_REQUEST, true)).toBe('Part from a picture');
+    expect(titleFromRequest('', false)).toBe('New part');
+  });
+});
+
+describe('keyHint', () => {
+  it('shows only the last four characters', () => {
+    const key = 'AQ.Ab8RN6LtestOnlyNotARealKeyxab12';
+    const hint = keyHint(key);
+    expect(hint).toBe('Key set (ends in ab12)');
+    expect(hint).not.toContain(key.slice(0, 5));
+  });
+
+  it('shows none of a short key', () => {
+    expect(keyHint('short-key-123')).toBe('Key set');
+  });
+
+  it('says when no key is set', () => {
+    expect(keyHint(null)).toBe('No key set');
+    expect(keyHint('')).toBe('No key set');
+  });
+});
+
+describe('keyProblem', () => {
+  it('accepts a pasted key with outer spaces', () => {
+    expect(keyProblem('  AQ.Ab8RN6LtestOnlyNotARealKey  ')).toBeNull();
+  });
+
+  it('asks for a key when the field is empty', () => {
+    expect(keyProblem('   ')).toBe('Paste your key first.');
+  });
+
+  it('refuses spaces inside and keys that are too short', () => {
+    expect(keyProblem('AQ.Ab8RN6L testOnlyNotARealKey')).toMatch(/no spaces/);
+    expect(keyProblem('AQ.short')).toMatch(/too short/);
+  });
+});
+
+describe('otherModel', () => {
+  const models = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+
+  it('suggests the first model that is not the busy one', () => {
+    expect(otherModel(models, 'a')?.id).toBe('b');
+    expect(otherModel(models, 'b')?.id).toBe('a');
+  });
+
+  it('has nothing to suggest when there is one model', () => {
+    expect(otherModel([{ id: 'a' }], 'a')).toBeUndefined();
+  });
+});
