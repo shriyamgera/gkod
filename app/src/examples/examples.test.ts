@@ -12,10 +12,20 @@ describe('examples', () => {
     expect(findExample('nope')).toBeUndefined();
   });
 
-  it.each(examples)('$id has 4 to 7 named sizes and avoids slow or unsupported calls', ({ source }) => {
+  const parts = examples.filter((example) => example.id !== 'test_cube');
+
+  it.each(parts)('$id has 4 to 7 named sizes and avoids slow or unsupported calls', ({ source }) => {
     const sizes = countSizes(source);
     expect(sizes).toBeGreaterThanOrEqual(4);
     expect(sizes).toBeLessThanOrEqual(7);
     expect(source).not.toMatch(/\b(minkowski|text)\s*\(/);
+  });
+
+  it('has a 20 mm test cube with one named size and no text', () => {
+    const cube = findExample('test_cube');
+    expect(cube?.name).toBe('Test cube');
+    expect(countSizes(cube!.source)).toBe(1);
+    expect(cube!.source).toMatch(/^size = 20; \/\/ \[/m);
+    expect(cube!.source).not.toMatch(/\b(minkowski|text)\s*\(/);
   });
 });
