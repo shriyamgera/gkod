@@ -76,3 +76,15 @@ jobs:
       # production build, then checks every G-code file again in Node. Any failed check fails the run.
       - name: Slice for every printer and check the G-code
         run: npm run slice:printers
+
+      # The MCP server is Python; its tests call the gkod command, so they run after the Node steps.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: mcp/requirements-dev.txt
+
+      - name: Test the MCP server
+        run: |
+          python -m pip install -r mcp/requirements-dev.txt -e mcp
+          python -m pytest -q mcp
