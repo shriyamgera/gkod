@@ -1,9 +1,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { checkStl } from '@gkod/checks';
-import { type CheckArgs, type CompileArgs, parseCommand, USAGE, UsageError } from './args.ts';
+import { parseStl } from '../../app/src/viewer/stl.ts';
+import { type CheckArgs, type CompileArgs, parseCommand, type RenderArgs, USAGE, UsageError } from './args.ts';
 import { bedText, reportLines } from './check.ts';
 import { compileScad } from './compile.ts';
 import { PRINTERS } from './printers.ts';
+import { renderMesh } from './render/render.ts';
 
 // Exit codes: 0 done, 1 the part failed (compile or checks), 2 wrong options or a file that cannot be read or written.
 export async function main(argv: string[]): Promise<number> {
@@ -14,6 +16,7 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (args.command === 'check') return checkCommand(args);
+    if (args.command === 'render') return await renderCommand(args);
     return await compileCommand(args);
   } catch (error) {
     if (error instanceof UsageError) {
@@ -69,4 +72,30 @@ function checkCommand(args: CheckArgs): number {
     console.log(reportLines(args.input, report, printer).join('\n'));
   }
   return report.ok ? 0 : 1;
+}
+
+async function renderCommand(args: RenderArgs): Promise<number> {
+  let stl: Uint8Array;
+  if (/\.scad$/i.test(args.input)) {
+    const result = await compileScad(readInput(args.input), args.defines);
+    if (!result.ok) {
+      if (args.json) console.log(JSON.stringify({ ok: false, png: null, error: result.error }));
+      else console.error(`${args.input}: ${result.error}`);
+      return 1;
+    }
+    stl = result.stl!;
+  } else {
+    stl = readInput(args.input, true);
+  }
+  const mesh = parseStl(stl.buffer.slice(stl.byteOffset, stl.byteOffset + stl.byteLength) as ArrayBuffer);
+  const marked = args.markOverhangs ? (checkStl(stl).results.find((r) => r.id === 'overhang')?.triangles ?? []) : [];
+  const picture = renderMesh(mesh.positions, { size: args.size, view: args.view, marked });
+  write(args.out, picture.png);
+  const size = picture.size.map((value) => Math.round(value * 10) / 10);
+  if (args.json) {
+    console.log(JSON.stringify({ ok: true, png: args.out, view: args.view, size, triangles: picture.triangles, marked: marked.length }));
+  } else {
+    console.log(`${args.out}: ${args.view} view, ${size.join(' x ')} mm, ${picture.triangles} triangles${marked.length ? `, ${marked.length} marked` : ''}`);
+  }
+  return 0;
 }
