@@ -126,7 +126,10 @@ for (const run of runs) {
   const ok = result.ok && result.safetyOk && node?.ok;
   if (!ok) failed++;
   rows.push({ file: name, printer: run.printer.name, part: run.part, settings: run.settings, ok, ...result, node: node && { ok: node.ok, problems: node.problems, stats: node.stats } });
-  const hm = (s) => `${Math.floor(s / 3600)} h ${String(Math.round((s % 3600) / 60)).padStart(2, '0')} min`;
+  const hm = (s) => {
+    const minutes = Math.round(s / 60);
+    return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
+  };
   console.log(
     result.ok
       ? `${ok ? 'pass' : 'FAIL'}  ${name}  ${(result.ms / 1000).toFixed(1)} s, ${result.layers} layers, about ${hm(result.seconds)}, ${(result.filamentMm / 1000).toFixed(2)} m, ${(result.bytes / 1e6).toFixed(2)} MB, Node check ${node.ok ? 'pass' : 'FAIL'}`
