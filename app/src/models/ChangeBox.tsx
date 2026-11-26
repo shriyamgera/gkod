@@ -40,7 +40,7 @@ export function ChangeBox({ value, onChange, onSubmit, busy, inputRef, children 
           type="text"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Change anything, e.g. make it 10 mm wider"
+          placeholder="e.g. make it 10 mm wider"
           autoComplete="off"
           enterKeyHint="send"
         />

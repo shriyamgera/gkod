@@ -103,7 +103,8 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
       const v = onChanged({ code: result.code, shown: { stl, params, ms }, model: result.model, label });
       setText('');
       const seconds = (result.ms / 1000).toFixed(1);
-      setNote(`Version ${v} ready. ${modelName(result.model, gemini.models)} took ${seconds} s.`);
+      // a no-break space keeps the number and its unit on one line
+      setNote(`Version ${v} ready. ${modelName(result.model, gemini.models)} took ${seconds}\u00a0s.`);
       return;
     }
     if (result.problem === 'cancelled') {
