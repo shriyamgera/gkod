@@ -122,6 +122,8 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
     if (result.problem === 'cancelled') {
       setNote('Stopped. The part is as it was.');
     } else if (result.problem === 'no-key' || result.problem === 'bad-key') {
+      // a key Google turned down is not kept, so it is not sent again
+      if (result.problem === 'bad-key') keyStore.forget();
       askForKey(result.problem === 'bad-key' ? result.message : undefined);
     } else {
       setFailure({ problem: result.problem, message: result.message, model });
