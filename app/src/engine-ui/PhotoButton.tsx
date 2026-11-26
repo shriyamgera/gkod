@@ -35,8 +35,9 @@ export function PhotoButton({ image, onChange }: Props) {
       onChange(prepared);
       setSaid('Picture added');
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : 'Could not read this picture.');
-      setSaid('');
+      const message = problem instanceof Error ? problem.message : 'Could not read this picture.';
+      setError(message);
+      setSaid(message);
     } finally {
       setReading(false);
     }
