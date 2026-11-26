@@ -69,6 +69,26 @@ describe('model store', () => {
     expect(model.current).toBe(4);
   });
 
+  it('keeps the supports choice on its own version through undo, redo and a reload', () => {
+    const { store, storage } = setup();
+    const { id } = store.create(first);
+    store.addVersion(id, { code: 'width = 90;', label: 'Make it 10 mm wider' });
+    expect(store.setSupports(id, 1, true)!.versions.map((version) => version.supports)).toEqual([true, undefined]);
+    store.addVersion(id, { code: 'width = 100;', label: 'Wider again' });
+
+    expect(currentVersion(store.undo(id)!).supports).toBeUndefined();
+    expect(currentVersion(store.undo(id)!).supports).toBe(true);
+    expect(currentVersion(store.redo(id)!).supports).toBeUndefined();
+
+    const again = createModelStore({ getStorage: () => storage });
+    expect(again.get(id)!.versions.map((version) => version.supports)).toEqual([true, undefined, undefined]);
+
+    const before = store.get(id);
+    expect(store.setSupports(id, 1, true)).toBe(before);
+    expect(store.setSupports(id, 9, true)).toBe(before);
+    expect(store.setSupports(id, 1, false)!.versions[0]).not.toHaveProperty('supports');
+  });
+
   it('keeps the same object when nothing changes, and tells listeners only about real changes', () => {
     const { store } = setup();
     const { id } = store.create(first);

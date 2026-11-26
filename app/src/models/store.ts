@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
-export type ModelVersion = { v: number; code: string; label: string; at: number; model?: string };
+// supports: the visitor chose to print this version with supports instead of fixing its overhang
+export type ModelVersion = { v: number; code: string; label: string; at: number; model?: string; supports?: boolean };
 
 // current is the v of the version on screen. Versions are never dropped: a change made while an older
 // version is shown is added at the end, so undo and redo simply step through the list.
@@ -38,7 +39,14 @@ const isText = (value: unknown): value is string => typeof value === 'string';
 function readVersion(value: unknown): ModelVersion | null {
   const v = value as Partial<ModelVersion> | null;
   if (!v || typeof v.v !== 'number' || !isText(v.code) || !isText(v.label) || typeof v.at !== 'number') return null;
-  return { v: v.v, code: v.code, label: v.label, at: v.at, ...(isText(v.model) ? { model: v.model } : {}) };
+  return {
+    v: v.v,
+    code: v.code,
+    label: v.label,
+    at: v.at,
+    ...(isText(v.model) ? { model: v.model } : {}),
+    ...(v.supports === true ? { supports: true } : {}),
+  };
 }
 
 // What comes back from storage is checked, so a damaged entry is dropped instead of breaking the page.
@@ -109,12 +117,24 @@ export function createModelStore({ getStorage, now = Date.now, makeId = randomId
     );
   }
 
+  // The choice belongs to one version, so undo and redo show each version with its own choice.
+  function setSupports(id: string, v: number, on: boolean): SavedModel | undefined {
+    return replace(id, (saved) => {
+      const version = saved.versions[v - 1];
+      if (!version || (version.supports === true) === on) return saved;
+      const { supports: _, ...rest } = version;
+      const next: ModelVersion = on ? { ...rest, supports: true } : rest;
+      return { ...saved, versions: saved.versions.map((item) => (item.v === v ? next : item)) };
+    });
+  }
+
   return {
     get,
     list: all,
     create,
     addVersion,
     select,
+    setSupports,
     undo: (id: string) => replace(id, (saved) => (saved.current > 1 ? { ...saved, current: saved.current - 1 } : saved)),
     redo: (id: string) =>
       replace(id, (saved) => (saved.current < saved.versions.length ? { ...saved, current: saved.current + 1 } : saved)),
