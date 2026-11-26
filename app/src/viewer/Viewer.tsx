@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { GRID_MM } from './grid';
+import type { ViewerMark } from './mark';
 import type { ViewHandle } from './Scene';
 import { describeMesh, type Mesh, parseStl } from './stl';
 import './viewer.css';
@@ -32,11 +33,14 @@ type Props = {
   live?: string;
   // shown in the same corner while a new model is being made
   busyText?: string;
+  // faces to pick out on the part, with a label at one point, e.g. where it would sag
+  mark?: ViewerMark | null;
 };
 
-export function Viewer({ stl, busy = false, note, live, busyText = 'Updating' }: Props) {
+export function Viewer({ stl, busy = false, note, live, busyText = 'Updating', mark }: Props) {
   const { mesh, error } = useMemo(() => load(stl), [stl]);
   const view = useRef<ViewHandle | null>(null);
+  const markLabel = useRef<HTMLDivElement | null>(null);
   const summaryId = useId();
   const spin = !useReducedMotion();
 
@@ -68,11 +72,20 @@ export function Viewer({ stl, busy = false, note, live, busyText = 'Updating' }:
           {mesh && (
             <ViewFailure>
               <Suspense fallback={<p className="viewer-note">Loading the 3D view</p>}>
-                <View3D mesh={mesh} spin={spin} handle={view} />
+                <View3D mesh={mesh} spin={spin} handle={view} mark={mark} markLabel={markLabel} />
               </Suspense>
             </ViewFailure>
           )}
         </div>
+
+        {/* placed by the 3D view, which also hides it while the point is out of sight */}
+        {mesh && mark?.at && (
+          <div className="viewer-mark" ref={markLabel} aria-hidden="true">
+            <span className="viewer-mark-dot" />
+            <span className="viewer-mark-line" />
+            <span className="viewer-mark-text">{mark.label}</span>
+          </div>
+        )}
 
         {!mesh && (
           <p className="viewer-note" role={error ? 'alert' : undefined}>
@@ -108,7 +121,7 @@ export function Viewer({ stl, busy = false, note, live, busyText = 'Updating' }:
 
       <div className="viewer-summary">
         <p id={summaryId} className="mono">
-          {mesh ? describeMesh(mesh) : error ? 'No model to measure' : 'No model yet'}
+          {mesh ? summary(mesh, mark) : error ? 'No model to measure' : 'No model yet'}
         </p>
         {mesh && <p className="mono muted">Grid squares {GRID_MM} mm</p>}
       </div>
@@ -133,6 +146,10 @@ class ViewFailure extends Component<{ children: ReactNode }, { failed: boolean }
       </p>
     );
   }
+}
+
+function summary(mesh: Mesh, mark: ViewerMark | null | undefined): string {
+  return mark ? `${describeMesh(mesh)}. ${mark.description}` : describeMesh(mesh);
 }
 
 function load(stl: ArrayBuffer | null): Loaded {

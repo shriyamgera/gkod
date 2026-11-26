@@ -1,10 +1,11 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { type RefObject, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import type { PerspectiveCamera } from 'three';
+import { DoubleSide, type PerspectiveCamera } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { fits, frame, orbitBy, radiusOf, setClipRange, zoomBy } from './camera';
 import { bedGeometry, edgeGeometry, partGeometry } from './geometry';
 import { type Bounds, sceneBounds } from './grid';
+import { type LabelSpot, labelSpot, markGeometry, type ViewerMark } from './mark';
 import type { Mesh } from './stl';
 
 export type ViewHandle = {
@@ -16,13 +17,21 @@ export type ViewHandle = {
 const INK = '#121212';
 const GRID = '#d3cfc6';
 const GRID_EDGE = '#bdb8ad';
+const MARK = '#f04a00';
 const SPIN_RADIANS_PER_SECOND = 0.18;
 // A part this much smaller than the one last framed would look lost, so frame it again.
 const SHRINK_TO_REFRAME = 1 / 3;
 
-type Props = { mesh: Mesh; spin: boolean; handle: RefObject<ViewHandle | null> };
+type Props = {
+  mesh: Mesh;
+  spin: boolean;
+  handle: RefObject<ViewHandle | null>;
+  mark?: ViewerMark | null;
+  // the label element outside the canvas, moved here to follow the marked point
+  markLabel?: RefObject<HTMLElement | null>;
+};
 
-export function Scene({ mesh, spin, handle }: Props) {
+export function Scene({ mesh, spin, handle, mark, markLabel }: Props) {
   const camera = useThree((state) => state.camera) as PerspectiveCamera;
   const canvas = useThree((state) => state.gl.domElement);
   const invalidate = useThree((state) => state.invalidate);
@@ -36,9 +45,14 @@ export function Scene({ mesh, spin, handle }: Props) {
   const part = useMemo(() => partGeometry(mesh), [mesh]);
   const edges = useMemo(() => edgeGeometry(part), [part]);
   const bed = useMemo(() => bedGeometry(mesh), [mesh]);
+  const triangles = mark?.triangles;
+  const at = mark?.at;
+  const marked = useMemo(() => (triangles ? markGeometry(mesh, triangles) : null), [mesh, triangles]);
 
   useEffect(() => () => part.dispose(), [part]);
   useEffect(() => () => edges.dispose(), [edges]);
+  useEffect(() => () => marked?.dispose(), [marked]);
+  useEffect(() => invalidate(), [marked, at, invalidate]);
   useEffect(
     () => () => {
       bed.lines.dispose();
@@ -123,11 +137,17 @@ export function Scene({ mesh, spin, handle }: Props) {
     [camera, invalidate],
   );
 
-  useFrame((_, seconds) => {
+  useFrame((state, seconds) => {
     const orbit = controls.current;
-    if (!spinning.current || !orbit) return;
-    orbitBy(camera, orbit.target, Math.min(seconds, 0.1) * SPIN_RADIANS_PER_SECOND, 0);
-    invalidate();
+    if (spinning.current && orbit) {
+      orbitBy(camera, orbit.target, Math.min(seconds, 0.1) * SPIN_RADIANS_PER_SECOND, 0);
+      invalidate();
+    }
+    const label = markLabel?.current;
+    if (label) {
+      const spot = marked && at ? labelSpot(at, camera, state.size.width, state.size.height) : null;
+      placeLabel(label, spot);
+    }
   });
 
   return (
@@ -141,11 +161,39 @@ export function Scene({ mesh, spin, handle }: Props) {
       <mesh geometry={part}>
         <meshBasicMaterial vertexColors polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
       </mesh>
+      {marked && (
+        <>
+          <mesh geometry={marked}>
+            <meshBasicMaterial color={MARK} polygonOffset polygonOffsetFactor={0.5} polygonOffsetUnits={0.5} />
+          </mesh>
+          {/* a faint copy drawn through the part, so a mark underneath still shows from above */}
+          <mesh geometry={marked} renderOrder={2}>
+            <meshBasicMaterial
+              color={MARK}
+              side={DoubleSide}
+              transparent
+              opacity={0.3}
+              depthTest={false}
+              depthWrite={false}
+            />
+          </mesh>
+        </>
+      )}
       <lineSegments geometry={edges}>
         <lineBasicMaterial color={INK} />
       </lineSegments>
     </>
   );
+}
+
+function placeLabel(label: HTMLElement, spot: LabelSpot | null) {
+  if (!spot) {
+    label.style.visibility = 'hidden';
+    return;
+  }
+  label.style.transform = `translate(${spot.x.toFixed(1)}px, ${spot.y.toFixed(1)}px)`;
+  label.dataset.side = spot.side;
+  label.style.visibility = 'visible';
 }
 
 function lookAtWhole(camera: PerspectiveCamera, orbit: OrbitControls, part: Bounds) {
