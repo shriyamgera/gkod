@@ -37,6 +37,18 @@ jobs:
         if: steps.openscad.outputs.cache-hit != 'true'
         run: npm run fetch:openscad
 
+      # The script holds the pinned commit and its sha256; the lock file pins the libraries it bundles.
+      - name: Restore Kiri:Moto engine build
+        id: kiri
+        uses: actions/cache@v6
+        with:
+          path: app/public/kiri
+          key: kiri-${{ hashFiles('scripts/fetch-kiri.sh', 'scripts/kiri/**') }}
+
+      - name: Build Kiri:Moto engine
+        if: steps.kiri.outputs.cache-hit != 'true'
+        run: npm run fetch:kiri
+
       - run: npm run typecheck
 
       # The print checks run the same tests in Node and in the runner's own Chrome.
@@ -49,3 +61,9 @@ jobs:
         run: npx gkod-check checks/test/fixtures/*.stl
 
       - run: npm run build
+
+      - name: Check the OpenSCAD and Kiri:Moto files are in the site
+        run: |
+          for f in openscad/openscad.js openscad/openscad.wasm kiri/kiri-eng.js kiri/kiri-work.js kiri/kiri-pool.js kiri/wasm/manifold.wasm kiri/wasm/kiri-geo.wasm kiri/LICENSE-kiri-moto.md; do
+            test -s "app/dist/$f" || { echo "missing app/dist/$f"; exit 1; }
+          done
