@@ -4,9 +4,9 @@
 //   line of the slicer's own between the start and end code
 // Everything else is kept as it is.
 
-/** The last line of every start code and the first line of every end code we give the slicer. */
-export const START_DONE = '; gkod: start code done';
-export const END_BEGINS = '; gkod: end code';
+import { END_BEGINS, START_DONE } from './printers';
+
+export { END_BEGINS, START_DONE };
 
 export const FAN_SPEED = 255;
 // Kiri numbers layers from 0, so this is the second layer.

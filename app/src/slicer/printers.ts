@@ -1,5 +1,5 @@
+// No imports but types, so Node scripts can read this file as it is.
 import type { Bed } from '@gkod/checks';
-import { END_BEGINS, START_DONE } from './postprocess';
 
 export type Printer = { id: string; name: string; bed: Bed; source: string; device: unknown /* the Kiri device JSON we build */ };
 
@@ -7,6 +7,10 @@ export type Printer = { id: string; name: string; bed: Bed; source: string; devi
 export const PLA = { nozzle: 205, bed: 60 };
 
 export const DEFAULT_PRINTER_ID = 'anycubic-kobra-2-neo';
+
+/** The last line of every start code and the first line of every end code we give the slicer. */
+export const START_DONE = '; gkod: start code done';
+export const END_BEGINS = '; gkod: end code';
 
 type Facts = {
   id: string;
