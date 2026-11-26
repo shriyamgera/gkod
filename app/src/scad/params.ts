@@ -50,6 +50,8 @@ function optionRange(options: unknown): { min: number; max: number; step: number
 
 function toParam(entry: ExportedParam): Param | null {
   if (typeof entry.name !== 'string' || entry.type !== 'number' || !isNumber(entry.initial)) return null;
+  // $fn and the other special variables set how finely curves are drawn; they are not sizes
+  if (entry.name.startsWith('$')) return null;
   const value = entry.initial;
   let range: { min: number; max: number; step: number };
   if (isNumber(entry.min) && isNumber(entry.max) && entry.min < entry.max) {

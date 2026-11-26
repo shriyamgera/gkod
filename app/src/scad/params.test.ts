@@ -34,6 +34,16 @@ describe('parseParams', () => {
     expect(byName.small?.caption).toBeUndefined();
   });
 
+  it('leaves out special variables such as $fn', () => {
+    const exported = {
+      parameters: [
+        { name: '$fn', type: 'number', initial: 6, min: 3, max: 64, step: 1 },
+        { name: 'width', type: 'number', initial: 20 },
+      ],
+    };
+    expect(parseParams(exported).map((p) => p.name)).toEqual(['width']);
+  });
+
   it('returns an empty list for output it cannot read', () => {
     expect(parseParams('')).toEqual([]);
     expect(parseParams('{"title":"in"}')).toEqual([]);
