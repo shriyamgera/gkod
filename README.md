@@ -6,18 +6,21 @@ The name is a short form of G-code, the file a 3D printer runs.
 
 ## Status
 
-Build day 1 (26 November 2026). This section is updated as each piece lands.
+Build day 2 (26 November 2026). This section is updated as each piece lands.
 
 What works today:
 
-- The site opens with three example parts (phone stand, wall hook, cable clip), each written as OpenSCAD code with named sizes.
-- The code compiles to a 3D shape in your browser, in a Web Worker, with a 10 second limit per compile.
-- A 3D viewer that turns with the mouse or the keyboard, with a text summary of the part's size.
-- A slider and a number box for each named size. The part recompiles as you change them, and the code shown changes with it.
-- The STL file can be downloaded.
-- Tests, type checks and a build run on every push, with a deploy to GitHub Pages from `main`.
+- **Make a part from words.** Type a request, such as "Phone stand, 80 mm wide", and Gemini writes it as OpenSCAD code with named sizes. If the code does not compile, the compiler's error goes back once for a fix.
+- **Photo or sketch.** Add a picture to the request. It is shrunk in the browser before it is sent.
+- **Change it by typing.** "Make it 10 mm wider" sends the current code back and makes a new version. Every version is listed, with the model that wrote it. Undo and Redo (or Ctrl+Z and Shift+Ctrl+Z) move between them.
+- **Sizes.** A slider and a number box for each named size. The part recompiles as you change them.
+- **On your device.** The code compiles in a Web Worker (10 second limit) and is shown in a 3D viewer that works with the mouse or the keyboard. The STL file can be downloaded.
+- **No key needed for the examples.** Three built-in parts (phone stand, wall hook, cable clip) open without a key.
+- **Tests, type checks and a build** run on every push, with a deploy to GitHub Pages from `main`.
 
-Not built yet: making a part from a description, the fine-tuned model, the print checks and the slicer. Everything under "How it will work" below is the plan, not the current state.
+The Gemini engine uses **your own free Gemini key**. It stays in your browser: in memory by default, or on your device only if you tick "Remember on this device". It is sent only to Google, in a request header. Parts you make are kept in the browser tab that made them. Gemini's output is shown to you only; it is never used to train the GKod model.
+
+Not built yet: the fine-tuned model, the print checks and the slicer. Everything under "How it will work" below is the plan, not the current state.
 
 Four feasibility tests were done before the build started. Their code and measured results are in [spikes/](spikes/).
 
@@ -62,6 +65,7 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 | Piece | Project | Licence | State |
 |---|---|---|---|
 | Part code | [OpenSCAD](https://openscad.org) compiled to WebAssembly | GPL-2.0-or-later | In use |
+| Engine option | [Gemini API](https://ai.google.dev/gemini-api/docs/interactions-overview), called with the visitor's own key | Google's API terms | In use |
 | 3D viewer | [three.js](https://threejs.org) with [react-three-fiber](https://github.com/pmndrs/react-three-fiber) | MIT | In use |
 | Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) | MIT | Planned |
 | Training | [MLX LM](https://github.com/ml-explore/mlx-lm) | MIT | Planned |
