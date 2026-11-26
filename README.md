@@ -15,7 +15,7 @@ What works today:
 - **Change it by typing.** "Make it 10 mm wider" sends the current code back and makes a new version. Every version is listed, with the model that wrote it. Undo and Redo (or Ctrl+Z and Shift+Ctrl+Z) move between them.
 - **Sizes.** A slider and a number box for each named size. The part recompiles as you change them.
 - **On your device.** The code compiles in a Web Worker (10 second limit) and is shown in a 3D viewer that works with the mouse or the keyboard. The STL file can be downloaded.
-- **Print checks.** After every compile, four checks run on the mesh in the same worker. They take about a millisecond for the examples and about 40 ms for a 160,000-triangle part:
+- **Print checks.** After every compile, four checks run on the mesh in the same worker. They take about a millisecond for the examples and about 70 ms for a 160,000-triangle part:
   - the surface is closed, with no holes;
   - it fits the printer bed, which is 256 x 256 x 256 mm for now (a printer picker comes with the slicer);
   - it sits flat on the bed;
