@@ -146,8 +146,8 @@ export function Notices() {
       </p>
       <p className="muted" style={text}>
         This page lists the third-party software and fonts the site ships or loads. The full licence texts are in
-        one text file that ships with the site. The list grows as pieces are added: the print checks and the slicer
-        are not in the site yet. Last checked 26 November 2026.
+        one text file that ships with the site. The list grows as pieces are added: the slicer is not in the site
+        yet. The print checks are GKod's own code and add no third-party software. Last checked 26 November 2026.
       </p>
 
       <section style={section} aria-labelledby="notices-openscad">

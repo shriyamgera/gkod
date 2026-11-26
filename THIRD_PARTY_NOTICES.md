@@ -4,7 +4,7 @@ GKod is free software under the GNU General Public License, version 3 or later. 
 
 GKod uses version 3 or later because the site ships a compiled copy of OpenSCAD, which is GPL software.
 
-This file lists the third-party software and fonts that the site ships to the browser or loads there. It is checked against each project's own licence file. **The list grows as pieces are added**: the print checks and the slicer are not in the site yet.
+This file lists the third-party software and fonts that the site ships to the browser or loads there. It is checked against each project's own licence file. **The list grows as pieces are added**: the slicer is not in the site yet. The print checks are GKod's own code and add no third-party software.
 
 Last checked: 26 November 2026.
 
@@ -68,4 +68,4 @@ The font files ship with the site, so a page load asks no other server for them.
 
 ## Build tools
 
-Vite, TypeScript and Vitest are used to build and test the site. They are not shipped to the browser, so they are not listed here.
+Vite, TypeScript, Vitest and Playwright are used to build and test the site. They are not shipped to the browser, so they are not listed here.
