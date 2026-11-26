@@ -1,4 +1,15 @@
-import { type KeyboardEvent, lazy, Suspense, useEffect, useId, useMemo, useRef, useSyncExternalStore } from 'react';
+import {
+  Component,
+  type KeyboardEvent,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import { GRID_MM } from './grid';
 import type { ViewHandle } from './Scene';
 import { describeMesh, type Mesh, parseStl } from './stl';
@@ -45,9 +56,11 @@ export function Viewer({ stl, busy = false, note }: { stl: ArrayBuffer | null; b
           onKeyDown={onKeyDown}
         >
           {mesh && (
-            <Suspense fallback={<p className="viewer-note">Loading the 3D view</p>}>
-              <View3D mesh={mesh} spin={spin} handle={view} />
-            </Suspense>
+            <ViewFailure>
+              <Suspense fallback={<p className="viewer-note">Loading the 3D view</p>}>
+                <View3D mesh={mesh} spin={spin} handle={view} />
+              </Suspense>
+            </ViewFailure>
           )}
         </div>
 
@@ -83,6 +96,25 @@ export function Viewer({ stl, busy = false, note }: { stl: ArrayBuffer | null; b
       </div>
     </div>
   );
+}
+
+// WebGL can be missing or switched off, and the three.js file can fail to download. Either way the rest
+// of the page (sizes, download) still works, so only the view is replaced.
+class ViewFailure extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <p className="viewer-note" role="alert">
+        This browser could not draw the 3D view. The sizes and the download still work.
+      </p>
+    );
+  }
 }
 
 function load(stl: ArrayBuffer | null): Loaded {

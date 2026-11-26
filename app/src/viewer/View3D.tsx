@@ -13,7 +13,6 @@ export default function View3D({ mesh, spin, handle }: Props) {
       frameloop="demand"
       dpr={[1, 2]}
       camera={{ fov: 30, up: [0, 0, 1], position: [100, -160, 90] }}
-      fallback={<p className="viewer-note">This browser cannot draw the 3D view.</p>}
     >
       <Scene mesh={mesh} spin={spin} handle={handle} />
     </Canvas>
