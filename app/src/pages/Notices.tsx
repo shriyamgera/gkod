@@ -4,6 +4,7 @@ const OPENSCAD_COMMIT = '77a103b912c69e86f6b1217bd68500d2926ed1b2';
 const OPENSCAD_REPO = 'https://github.com/openscad/openscad';
 const OPENSCAD_ZIP = 'https://files.openscad.org/snapshots/OpenSCAD-2026.11.23-WebAssembly-web.zip';
 const GKOD_REPO = 'https://github.com/shriyamgera/gkod';
+const LICENCE_TEXTS = `${import.meta.env.BASE_URL}third-party-licenses.txt`;
 
 type Item = { name: string; version?: string; licence: string; href: string; note?: string };
 
@@ -140,10 +141,13 @@ export function Notices() {
         <a href={GKOD_REPO}>Source code for this site</a>
         {' · '}
         <a href={`${GKOD_REPO}/blob/main/LICENSE`}>Licence text</a>
+        {' · '}
+        <a href={LICENCE_TEXTS}>Full licence texts of the third-party software</a>
       </p>
       <p className="muted" style={text}>
-        This page lists the third-party software and fonts the site ships or loads. The list grows as pieces are
-        added: the print checks and the slicer are not in the site yet. Last checked 26 November 2026.
+        This page lists the third-party software and fonts the site ships or loads. The full licence texts are in
+        one text file that ships with the site. The list grows as pieces are added: the print checks and the slicer
+        are not in the site yet. Last checked 26 November 2026.
       </p>
 
       <section style={section} aria-labelledby="notices-openscad">
@@ -179,8 +183,7 @@ export function Notices() {
         <p className="muted" style={{ ...text, fontSize: 15 }}>
           The build also contains other libraries, each under its own licence, such as lib3mf, Clipper2, FreeType,
           HarfBuzz, Fontconfig, libxml2, libzip, zlib, GLib, cairo, GMP, MPFR, Boost, Eigen and double-conversion.
-          Their licences have
-          not been checked one by one here.{' '}
+          Their licences have not been checked one by one here.{' '}
           <a href={`${OPENSCAD_REPO}/blob/${OPENSCAD_COMMIT}/README.md#prerequisites`}>OpenSCAD's own list</a>
         </p>
       </section>

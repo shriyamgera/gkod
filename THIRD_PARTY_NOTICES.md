@@ -8,6 +8,8 @@ This file lists the third-party software and fonts that the site ships to the br
 
 Last checked: 26 November 2026.
 
+The full licence texts of everything below that the site ships are in [app/public/third-party-licenses.txt](app/public/third-party-licenses.txt). The site serves that file next to its pages, and the Notices page links to it. `npm run licenses` rebuilds it.
+
 ## OpenSCAD web build
 
 The site serves two unmodified files from the official OpenSCAD WebAssembly build: `openscad.js` and `openscad.wasm`. They compile part code to a mesh in the browser. They are not stored in this repository; `scripts/fetch-openscad.sh` downloads them and checks the sha256.

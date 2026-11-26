@@ -14,6 +14,7 @@
     "build": "npm run build --workspace app",
     "typecheck": "npm run typecheck --workspace app",
     "test": "npm run test --workspace app",
-    "fetch:openscad": "sh scripts/fetch-openscad.sh"
+    "fetch:openscad": "sh scripts/fetch-openscad.sh",
+    "licenses": "node scripts/third-party-licenses.mjs"
   }
 }
