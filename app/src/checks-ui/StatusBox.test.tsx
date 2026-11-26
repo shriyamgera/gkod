@@ -2,7 +2,7 @@ import type { CheckResult, Report } from '@gkod/checks';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { StatusBox } from './StatusBox';
-import { announcement, fixedNote, fixLabel, fixRequest, overhangMark, readyLine } from './wording';
+import { announcement, fixedNote, fixLabel, fixRequest, overhangMark, readyLine, viewerMark } from './wording';
 
 const passed: CheckResult[] = [
   { id: 'closed', ok: true, title: 'Solid, no holes', detail: '' },
@@ -177,5 +177,12 @@ describe('wording', () => {
     );
     expect(overhangMark(report(tooBig))).toBeNull();
     expect(overhangMark(null)).toBeNull();
+  });
+
+  it('drops the mark only while the box says the part prints with supports', () => {
+    expect(viewerMark(report(sag), false)).toEqual(overhangMark(report(sag)));
+    expect(viewerMark(report(sag), true)).toBeNull();
+    // supports cannot fix the size, so the box lists the overhang again and the viewer marks it
+    expect(viewerMark(report(tooBig, sag), true)).toEqual(overhangMark(report(tooBig, sag)));
   });
 });

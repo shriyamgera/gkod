@@ -108,6 +108,11 @@ export function fixedNote(v: number, from: number, before: Report, after: Report
   }
 }
 
+/** What the viewer marks: the steep overhang, unless the box says the part prints with supports. */
+export function viewerMark(report: Report | null | undefined, supportsChosen: boolean): ViewerMark | null {
+  return boxKind(report ?? null, supportsChosen) === 'supports' ? null : overhangMark(report);
+}
+
 /** The viewer mark for a steep overhang, or null when there is none to show. */
 export function overhangMark(report: Report | null | undefined): ViewerMark | null {
   const overhang = report?.results.find((result) => result.id === 'overhang' && !result.ok);

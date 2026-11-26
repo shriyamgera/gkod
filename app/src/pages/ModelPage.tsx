@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckList } from '../checks-ui/CheckList';
 import { PrintStatus } from '../checks-ui/PrintStatus';
 import { useFix } from '../checks-ui/useFix';
-import { fixedNote, fixLabel, fixRequest, overhangMark } from '../checks-ui/wording';
+import { fixedNote, fixLabel, fixRequest, viewerMark } from '../checks-ui/wording';
 import { gemini } from '../engine';
 import { ChangePanel, type Changed } from '../models/ChangePanel';
 import { Changes } from '../models/Changes';
@@ -164,7 +164,7 @@ function ModelScreen({ model }: { model: SavedModel }) {
             busyText={fixer.fixing ? 'Fixing' : changing ? 'Changing' : 'Updating'}
             note={viewerNote(live)}
             live={liveLabel}
-            mark={supports ? null : overhangMark(report)}
+            mark={viewerMark(report, supports)}
           />
           <ChangePanel currentCode={() => withValues(version.code, values)} onChanged={changed} onBusy={setChanging} />
         </section>

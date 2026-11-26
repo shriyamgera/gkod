@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CheckList } from '../checks-ui/CheckList';
 import { PrintStatus } from '../checks-ui/PrintStatus';
 import { handOverNote, useFix } from '../checks-ui/useFix';
-import { fixedNote, fixLabel, fixRequest, overhangMark } from '../checks-ui/wording';
+import { fixedNote, fixLabel, fixRequest, viewerMark } from '../checks-ui/wording';
 import { findExample } from '../examples';
 import { compiledModels } from '../models/compiled';
 import { modelStore } from '../models/store';
@@ -120,7 +120,7 @@ function PartScreen({ example }: { example: Example }) {
             busy={status !== 'idle' || fixer.fixing}
             busyText={fixer.fixing ? 'Fixing' : 'Updating'}
             note={viewerNote(live)}
-            mark={supports ? null : overhangMark(report)}
+            mark={viewerMark(report, supports)}
           />
         </section>
 
