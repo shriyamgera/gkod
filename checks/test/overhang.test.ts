@@ -77,6 +77,14 @@ describe('overhang', () => {
     expect(overhang(ledge(4)).ok).toBe(false);
   });
 
+  it('puts the marker on a ring-shaped area, not in its empty middle', () => {
+    const grid = [0, 45, 55, 100];
+    const mushroom = cells(grid, grid, [0, 10, 12], (i, j, k) => k === 1 || (i === 1 && j === 1));
+    const [x, y, z] = overhang(mushroom).at!;
+    expect(Math.max(Math.abs(x - 50), Math.abs(y - 50))).toBeGreaterThanOrEqual(5);
+    expect(z).toBeCloseTo(10, 6);
+  });
+
   it('fails the underside of a ball resting on its lowest point', () => {
     const result = overhang(sphere(10, 24, 12, [0, 0, 10]));
     expect(result.ok).toBe(false);

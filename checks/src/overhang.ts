@@ -153,22 +153,24 @@ function distanceSq(s: number[], o: number, x: number, y: number, z: number): nu
   return ex * ex + ey * ey + ez * ez;
 }
 
-// The patch's centre, moved onto the plane of the triangle nearest to it so the marker sits on the surface.
+// The sampled point of the patch nearest to its centre, so the marker sits on the patch even when it is a ring.
 function centre(mesh: Mesh, patch: Patch): Vec3 {
-  const c: Vec3 = [patch.sum[0] / patch.size, patch.sum[1] / patch.size, patch.sum[2] / patch.size];
+  const [cx, cy, cz] = patch.sum.map((value) => value / patch.size) as Vec3;
   const p = mesh.positions;
-  let nearest = patch.faces[0]!;
   let best = Infinity;
+  let at: Vec3 = [cx, cy, cz];
   for (const t of patch.faces) {
-    let d = 0;
-    for (let k = 0; k < 3; k++) d += ((p[t * 9 + k]! + p[t * 9 + 3 + k]! + p[t * 9 + 6 + k]!) / 3 - c[k]!) ** 2;
-    if (d < best) {
-      best = d;
-      nearest = t;
+    const o = t * 9;
+    for (const [a, b, c] of samples) {
+      const x = a * p[o]! + b * p[o + 3]! + c * p[o + 6]!;
+      const y = a * p[o + 1]! + b * p[o + 4]! + c * p[o + 7]!;
+      const z = a * p[o + 2]! + b * p[o + 5]! + c * p[o + 8]!;
+      const d = (x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2;
+      if (d < best) {
+        best = d;
+        at = [x, y, z];
+      }
     }
   }
-  const n = mesh.normals;
-  const o = nearest * 9;
-  const off = (c[0] - p[o]!) * n[nearest * 3]! + (c[1] - p[o + 1]!) * n[nearest * 3 + 1]! + (c[2] - p[o + 2]!) * n[nearest * 3 + 2]!;
-  return [c[0] - off * n[nearest * 3]!, c[1] - off * n[nearest * 3 + 1]!, c[2] - off * n[nearest * 3 + 2]!];
+  return at;
 }
