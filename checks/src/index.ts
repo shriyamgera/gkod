@@ -17,6 +17,7 @@ export {
   createLineSplitter,
   DEFAULT_ALLOWED,
   FAN_BY_LAYER,
+  FAN_MIN_SPEED,
   MAX_E_PER_MOVE_MM,
   MAX_LINE_CHARS,
   PLA_LIMITS,

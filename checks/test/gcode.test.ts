@@ -323,6 +323,47 @@ describe('checkGcode', () => {
     expect(check(file(8, (l) => replace(l, ';LAYER:5', [';LAYER:5', 'M106 P1 S0']))).ok).toBe(true);
   });
 
+  it('counts a fan below half speed as off', () => {
+    const slow = check(file(6, (l) => replace(l, 'M106 S255', ['M106 S1'])));
+    expect(reasons(slow)).toEqual(['The part fan is still below half speed at layer 4. PLA needs it on by layer 3.']);
+    expect(slow.stats.fanOnLayer).toBe(null);
+    expect(check(file(6, (l) => replace(l, 'M106 S255', ['M106 S128']))).stats.fanOnLayer).toBe(2);
+    expect(reasons(check(file(8, (l) => replace(l, ';LAYER:5', [';LAYER:5', 'M106 S100']))))).toEqual([
+      'The part fan is turned down below half speed again at layer 5.',
+    ]);
+  });
+
+  it('allows only S and P on fan lines', () => {
+    for (const extra of ['M106 I1', 'M106 S255 T1', 'M107 S0']) {
+      const code = extra.slice(0, 4);
+      const key = extra.includes('I1') ? 'I' : extra.includes('T1') ? 'T' : 'S';
+      expect(reasons(check(file(6, (l) => replace(l, 'M107', [extra, 'M107']))))).toEqual([
+        `${code} ${key} is not allowed. A fan line may only give the speed with S and the fan with P.`,
+      ]);
+    }
+  });
+
+  it('fails a file whose moves do not push the filament total it states, as when E values do not match M82 or M83', () => {
+    // 40 layers of 2 mm and a 20 mm purge line
+    const stated = (mm: number) => (l: string[]) => l.push(`; --- filament used: ${mm} mm ---`);
+    expect(check(file(40, stated(100))).ok).toBe(true);
+    expect(check(file(40, stated(80))).ok).toBe(true);
+    const mismatch = check(file(40, (l) => {
+      replace(l, 'M83', ['M82']);
+      stated(100)(l);
+    }));
+    expect(reasons(mismatch)).toEqual([
+      'The moves push 21 mm of filament, but the file says it uses 100 mm, so the extruder mode is probably wrong.',
+    ]);
+    expect(mismatch.problems[0]!.line).toBe(file(40, stated(100)).split('\n').length);
+    // the layers are still counted, so the fan check still runs
+    expect(mismatch.stats.fanOnLayer).toBe(2);
+    expect(reasons(check(file(40, (l) => {
+      replace(l, 'M83', ['M82']);
+      replace(l, 'M106 S255', []);
+    })))).toEqual(['The part fan is still off at layer 4. PLA needs it on by layer 3.']);
+  });
+
   it('counts the first layer again when it starts below the purge line', () => {
     const report = check(file(6));
     expect(report.stats.fanOnLayer).toBe(2);

@@ -29,6 +29,12 @@ export const DEFAULT_ALLOWED = [
 
 // The fan must be on by this layer (1 is the first layer).
 export const FAN_BY_LAYER = 3;
+// Below half speed (M106 S128 of 255) the fan does not cool PLA enough to count as on.
+export const FAN_MIN_SPEED = 128;
+// Slicers state the filament a file uses. The moves that print along the bed must push about that much: only the
+// start code's purge line (up to 30 mm in our printers) and rounding may differ. A wrong extruder mode is far off.
+const FILAMENT_SLACK_MM = 40;
+const FILAMENT_SLACK_SHARE = 0.03;
 // One move pushing more filament than this means the extruder mode is wrong. Purge lines use 15 to 25 mm.
 export const MAX_E_PER_MOVE_MM = 50;
 // Coordinates are written with a few decimals; this only absorbs rounding.
@@ -88,6 +94,9 @@ export function createGcodeChecker(limits: GcodeLimits) {
   let fanLateReported = false;
   let layer = 0;
   let layerZ: number | null = null;
+  // filament pushed by moves along the bed, and the total the slicer wrote in a comment
+  let printed = 0;
+  let stated: { mm: number; line: number } | null = null;
 
   function problem(text: string, reason: string, kind = reason) {
     const count = kinds.get(kind) ?? 0;
@@ -144,7 +153,10 @@ export function createGcodeChecker(limits: GcodeLimits) {
     if (Math.abs(de) > MAX_E_PER_MOVE_MM) {
       problem(text, `Moves ${round(Math.abs(de))} mm of filament in one move, so the extruder mode is probably wrong.`, 'e-big');
     }
+    // every printing move counts toward the layers, so E values that do not match the extruder mode cannot hide them
+    if (movedXY && pos.Z !== null) countLayer(text, pos.Z);
     if (de <= 0) return;
+    if (movedXY) printed += de;
     // Homing leaves the head wherever the printer's firmware chooses, so filament may only go down from a known place.
     if ([from.X, from.Y, from.Z, pos.X, pos.Y, pos.Z].includes(null)) {
       problem(text, 'Pushes filament from a place that is not known, right after homing (G28). Move to X, Y and Z first.', 'e-unknown');
@@ -152,10 +164,9 @@ export function createGcodeChecker(limits: GcodeLimits) {
     if (!extruded) {
       extruded = true;
       extruderMode = eMode;
-      if (!eStated) problem(text, 'Extrudes before the extruder mode is set (M82 or M83).');
-      if (!heated) problem(text, 'Extrudes before waiting for the nozzle to heat (M109).');
+      if (!eStated) problem(text, 'Extrudes before the extruder mode is set (M82 or M83).', 'e-mode');
+      if (!heated) problem(text, 'Extrudes before waiting for the nozzle to heat (M109).', 'cold');
     }
-    if (movedXY && pos.Z !== null) countLayer(text, pos.Z);
   }
 
   function countLayer(text: string, z: number) {
@@ -166,16 +177,17 @@ export function createGcodeChecker(limits: GcodeLimits) {
       layer++;
       layerZ = z;
     }
-    if (fan > 0) {
+    if (fan >= FAN_MIN_SPEED) {
       fanOnLayer ??= layer;
       return;
     }
+    const state = fan === 0 ? 'off' : 'below half speed';
     if (fanOnLayer !== null && layer > fanOnLayer && !fanOffReported) {
       fanOffReported = true;
-      problem(text, `The part fan is turned off again at layer ${layer}.`);
+      problem(text, `The part fan is turned ${fan === 0 ? 'off' : 'down below half speed'} again at layer ${layer}.`, 'fan');
     } else if (fanOnLayer === null && layer > FAN_BY_LAYER && !fanLateReported) {
       fanLateReported = true;
-      problem(text, `The part fan is still off at layer ${layer}. PLA needs it on by layer ${FAN_BY_LAYER}.`);
+      problem(text, `The part fan is still ${state} at layer ${layer}. PLA needs it on by layer ${FAN_BY_LAYER}.`, 'fan');
     }
   }
 
@@ -283,7 +295,12 @@ export function createGcodeChecker(limits: GcodeLimits) {
     }
   }
 
-  function fanCommand(code: string, words: Words) {
+  function fanCommand(text: string, code: string, words: Words) {
+    const extra = [...words.keys()].find((key) => key !== 'P' && (code === 'M106' ? key !== 'S' : true));
+    if (extra) {
+      problem(text, `${code} ${extra} is not allowed. A fan line may only give the speed with S and the fan with P.`, 'fan-word');
+      return;
+    }
     if ((words.get('P') ?? 0) !== 0) return;
     fan = code === 'M107' ? 0 : Math.max(0, words.get('S') ?? 255);
   }
@@ -327,7 +344,11 @@ export function createGcodeChecker(limits: GcodeLimits) {
     }
     // a trailing "*71" is a checksum, not part of the command
     const code = before.trim().replace(/\*\d*$/, '').trim();
-    if (!code) return;
+    if (!code) {
+      const used = FILAMENT_USED.exec(text);
+      if (used) stated = { mm: Number(used[1]), line: lineNo };
+      return;
+    }
     const parts = code.split(/\s+/);
     let head = parts[0]!.toUpperCase();
     let first = 1;
@@ -384,7 +405,7 @@ export function createGcodeChecker(limits: GcodeLimits) {
         break;
       case 'M106':
       case 'M107':
-        fanCommand(cmd, words);
+        fanCommand(text, cmd, words);
         break;
       case 'M420':
         if ([...words.keys()].some((key) => key !== 'S') || ![0, 1].includes(words.get('S') ?? -1)) {
@@ -396,9 +417,17 @@ export function createGcodeChecker(limits: GcodeLimits) {
 
   function finish(): GcodeReport {
     const lines = lineNo;
+    if (stated && Math.abs(printed - stated.mm) > FILAMENT_SLACK_MM + FILAMENT_SLACK_SHARE * stated.mm) {
+      lineNo = stated.line;
+      problem(
+        '',
+        `The moves push ${round(printed)} mm of filament, but the file says it uses ${round(stated.mm)} mm, so the extruder mode is probably wrong.`,
+        'e-total',
+      );
+    }
     if (moves === 0) {
       lineNo = 0;
-      problem('', 'The file has no moves.');
+      problem('', 'The file has no moves.', 'no-moves');
     }
     return {
       ok: problems.length === 0,
@@ -486,6 +515,9 @@ function normalize(command: string): string {
   const match = /^([A-Z])0*(\d+(?:\.\d+)?)$/i.exec(command);
   return match ? `${match[1]!.toUpperCase()}${match[2]}` : command.toUpperCase();
 }
+
+// The total Kiri:Moto writes at the end of a file: "; --- filament used: 1457.21 mm ---"
+const FILAMENT_USED = /^\s*;\s*-*\s*filament used:\s*(\d+(?:\.\d+)?)\s*mm\b/i;
 
 // Plain decimals only. Marlin stops a number at "E" or "X", so "X300E-1" is X 300 and E -1 to the printer,
 // not X 30 as Number() reads it; hex and exponents are refused.
