@@ -171,7 +171,7 @@ function Heading({ busy, icon, heading, children }: HeadingProps) {
       </h2>
       <span className="status-busy" data-on={busy}>
         <span className="status-dot" aria-hidden="true" />
-        <span className="status-busy-word">Checking</span>
+        <span>Checking</span>
       </span>
     </div>
   );

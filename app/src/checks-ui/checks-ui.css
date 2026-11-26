@@ -1,9 +1,5 @@
 /* Print status box */
 
-.status {
-  container-type: inline-size;
-}
-
 .status-box {
   display: flex;
   flex-direction: column;
@@ -27,11 +23,13 @@
   background: var(--surface);
 }
 
+/* "Checking" fits beside every heading in the side column; if it ever runs out of room it moves under the heading */
 .status-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
 }
 
 .status-head h2 {
@@ -90,13 +88,6 @@
 
 .status-busy[data-on='true'] {
   visibility: visible;
-}
-
-/* in a narrow column the heading needs the room; the viewer beside or above already says it is updating */
-@container (max-width: 400px) {
-  .status-busy-word {
-    display: none;
-  }
 }
 
 .status-dot {
