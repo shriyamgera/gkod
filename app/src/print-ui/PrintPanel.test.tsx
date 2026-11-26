@@ -56,6 +56,18 @@ describe('PrintPanel', () => {
     expect(visible(html)).toContain('0.12 mm layers, slower');
   });
 
+  it('shows all three sides of the bed for the printer the page chose, even a cube', () => {
+    expect(visible(panel({ printerId: 'bambu-lab-a1' }))).toContain('256 x 256 x 256 mm bed, PLA only');
+    expect(visible(panel({ printerId: 'prusa-mk4' }))).toContain('250 x 210 x 220 mm bed, PLA only');
+  });
+
+  it('shows the reason the page gives before its own', () => {
+    const html = panel({ blocked: 'The last change did not build. Fix it above first.', checksOk: null });
+    expect(visible(html)).toContain('The last change did not build. Fix it above first.');
+    expect(visible(html)).not.toContain(WAIT_FOR_CHECKS);
+    expect(sliceButton(html)).toContain('aria-disabled="true"');
+  });
+
   it('puts the Kobra 2 Neo first in the real printer list and chooses it', () => {
     const html = panel({ printers: shipped });
     expect(/<option value="([^"]+)"/.exec(html)?.[1]).toBe('anycubic-kobra-2-neo');

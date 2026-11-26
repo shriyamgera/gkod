@@ -1,4 +1,3 @@
-import { bedLabel } from '@gkod/checks';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { slice as sliceFn } from '../slicer/client';
 import { setPrinterId, usePrinterId } from '../slicer/printerChoice';
@@ -138,7 +137,7 @@ export function PrintPanel(props: PrintPanelProps) {
           ))}
         </select>
         <p id={`${ids.printer}-help`} className="print-help">
-          {printer ? `${bedLabel(printer.bed)}, PLA only` : 'PLA only'}
+          {printer ? `${printer.bed.x} x ${printer.bed.y} x ${printer.bed.z} mm bed, PLA only` : 'PLA only'}
         </p>
       </div>
 
