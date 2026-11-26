@@ -34,6 +34,15 @@ describe('describeParam', () => {
     expect(describeParam({ name: 'lip' })).toEqual({ label: 'Lip', unit: 'mm', unitName: 'millimetres' });
   });
 
+  it('drops help text that only repeats the label', () => {
+    expect(describeParam({ name: 'cable_d', caption: 'Cable diameter (mm)' })).toEqual({
+      label: 'Cable diameter',
+      unit: 'mm',
+      unitName: 'millimetres',
+    });
+    expect(describeParam({ name: 'pad_width', caption: 'pad width' }).help).toBeUndefined();
+  });
+
   it('keeps an unknown unit as written', () => {
     expect(describeParam({ name: 'rows', caption: 'Rows of holes (holes)' })).toMatchObject({
       unit: 'holes',

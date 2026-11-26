@@ -38,7 +38,8 @@ export function describeParam(param: Pick<Param, 'name' | 'caption'>): SizeInfo 
   const unit = known ?? (written ? { unit: written, unitName: written } : units.mm!);
   const help = (match ? caption.slice(0, match.index) : caption).trim();
   const info: SizeInfo = { label: labelOf(param.name), ...unit };
-  if (help) info.help = help;
+  // a caption that only repeats the label would be shown and read out twice
+  if (help && help.toLowerCase() !== info.label.toLowerCase()) info.help = help;
   return info;
 }
 
