@@ -1,47 +1,263 @@
+import { useEffect, useRef, useState } from 'react';
+import { type EngineProblem, type EngineRequest, engineSettings, gemini, type ImageInput, keyStore, makePart } from '../engine';
+import { KeyPanel } from '../engine-ui/KeyPanel';
+import { PromptBox } from '../engine-ui/PromptBox';
+import { chips, otherModel, requestText, titleFromRequest } from '../engine-ui/rules';
 import { countSizes, examples } from '../examples';
+import { compiledModels } from '../models/compiled';
+import { modelStore } from '../models/store';
 import { links } from '../router';
+import { CANCEL_MESSAGE, compile, CRASH_MESSAGE, LOAD_MESSAGE } from '../scad/client';
+import { showExamplesIfAsked } from '../shell/Header';
+
+// failures of the compiler itself, which get no repair request
+const BROWSER_FAILURES = [CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE];
+
+type Pending = { request: EngineRequest; title: string; text: string };
+type Failure = { problem: EngineProblem | 'compile'; message: string; model: string };
 
 export function StartPage() {
+  const [prompt, setPrompt] = useState('');
+  const [image, setImage] = useState<ImageInput | null>(null);
+  const [keyAsk, setKeyAsk] = useState<{ message?: string } | null>(null);
+  const [stage, setStage] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+  const [note, setNote] = useState('');
+  const pending = useRef<Pending | null>(null);
+  const running = useRef<AbortController | null>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const makeButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    showExamplesIfAsked();
+    return () => {
+      running.current?.abort();
+      running.current = null;
+    };
+  }, []);
+
+  function currentJob(): Pending | null {
+    const text = requestText(prompt, image !== null);
+    if (!text) return null;
+    const request: EngineRequest = image ? { kind: 'create', prompt: text, image } : { kind: 'create', prompt: text };
+    return { request, text, title: titleFromRequest(text, image !== null) };
+  }
+
+  function make() {
+    const job = currentJob();
+    if (!job) {
+      setNote('Type what you want to print, or add a photo.');
+      textarea.current?.focus();
+      return;
+    }
+    if (keyStore.get()) void run(job);
+    else askForKey(job);
+  }
+
+  function askForKey(job: Pending, message?: string) {
+    pending.current = job;
+    setFailure(null);
+    setNote('');
+    setKeyAsk(message ? { message } : {});
+  }
+
+  function keySet() {
+    const job = pending.current;
+    pending.current = null;
+    setKeyAsk(null);
+    if (job) void run(job);
+  }
+
+  function cancelKey() {
+    pending.current = null;
+    setKeyAsk(null);
+    makeButton.current?.focus();
+  }
+
+  async function run(job: Pending, model = engineSettings.model()) {
+    running.current?.abort();
+    const controller = new AbortController();
+    running.current = controller;
+    setFailure(null);
+    setNote('');
+    setStage('Writing the code');
+    makeButton.current?.focus();
+
+    let compiles = 0;
+    const compileFn: typeof compile = async (source, overrides, opts) => {
+      compiles += 1;
+      setStage('Building the shape');
+      const result = await compile(source, overrides, opts);
+      if (!result.ok && compiles === 1 && !BROWSER_FAILURES.includes(result.error)) {
+        setStage('Fixing a mistake and trying again');
+      }
+      return result;
+    };
+
+    const result = await makePart(gemini, job.request, { model, signal: controller.signal, compileFn });
+    if (running.current !== controller) return;
+    running.current = null;
+    setStage(null);
+
+    if (result.ok) {
+      const { stl, params, ms } = result.result;
+      compiledModels.set(result.code, { stl, params, ms });
+      const saved = modelStore.create({
+        title: job.title,
+        request: job.text,
+        code: result.code,
+        label: 'First version',
+        model: result.model,
+      });
+      window.location.hash = links.model(saved.id);
+      return;
+    }
+    if (result.problem === 'cancelled') {
+      setNote('Stopped.');
+    } else if (result.problem === 'no-key' || result.problem === 'bad-key') {
+      askForKey(job, result.problem === 'bad-key' ? result.message : undefined);
+    } else {
+      setFailure({ problem: result.problem, message: result.message, model });
+    }
+  }
+
+  function stop() {
+    // the Stop button is about to go, so focus moves back to the main button first
+    makeButton.current?.focus();
+    running.current?.abort();
+  }
+
+  function tryOther(modelId: string) {
+    engineSettings.setModel(modelId);
+    const job = currentJob();
+    if (job) void run(job, modelId);
+  }
+
+  function fillChip(chip: string) {
+    setPrompt(chip);
+    setNote('');
+    const box = textarea.current;
+    if (!box) return;
+    box.focus();
+    requestAnimationFrame(() => box.setSelectionRange(chip.length, chip.length));
+  }
+
+  const busy = stage !== null;
+  const other = failure?.problem === 'busy' ? otherModel(gemini.models, failure.model) : undefined;
+
   return (
     <div className="start">
       <h1 className="display" tabIndex={-1}>
         What do you want to print?
       </h1>
-      <p className="start-note">
-        Typing a request to make a new part comes next. For now, open an example part and change its sizes.
-      </p>
 
-      <ul className="example-list" aria-label="Example parts">
-        {examples.map((example) => (
-          <li key={example.id}>
-            <a href={links.part(example.id)}>
-              <span className="example-name">{example.name}</span>
-              <span className="example-meta mono">
-                {countSizes(example.source)} sizes
-                <svg width="20" height="14" viewBox="0 0 20 14" aria-hidden="true">
-                  <path d="M0 7h18M12 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.2" />
-                </svg>
-              </span>
-            </a>
-          </li>
+      <div className="start-make">
+        <PromptBox
+          value={prompt}
+          onChange={setPrompt}
+          image={image}
+          onImage={setImage}
+          busy={busy}
+          onSubmit={make}
+          textareaRef={textarea}
+          buttonRef={makeButton}
+        />
+
+        {keyAsk && (
+          <section className="key-inline" aria-label="Gemini key">
+            <KeyPanel title="GKod uses your own free Gemini key" message={keyAsk.message} autoFocus onKeySet={keySet} onCancel={cancelKey} />
+          </section>
+        )}
+
+        <div className={stage || note ? 'make-status has-text' : 'make-status'}>
+          <p role="status">
+            {stage ? (
+              <>
+                <span className="make-spinner" aria-hidden="true" />
+                {stage}
+              </>
+            ) : (
+              note
+            )}
+          </p>
+          {stage && (
+            <button type="button" className="eu-quiet" onClick={stop}>
+              Stop
+            </button>
+          )}
+        </div>
+
+        {failure && (
+          <div className="make-problem" role="alert">
+            <h2>
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M10 1.5 19 18H1z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                <path d="M10 7.5v5M10 14.5v2" stroke="currentColor" strokeWidth="1.8" />
+              </svg>
+              {failure.problem === 'busy' ? 'Gemini is busy' : 'Could not make the part'}
+            </h2>
+            <p>{failure.message}</p>
+            <div className="make-problem-actions">
+              <button type="button" className="eu-quiet" onClick={make}>
+                Try again
+              </button>
+              {other && (
+                <button type="button" className="eu-quiet" onClick={() => tryOther(other.id)}>
+                  Try {other.label}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="chips" role="group" aria-labelledby="chips-label">
+        <span className="muted" id="chips-label">
+          Or try
+        </span>
+        {chips.map((chip) => (
+          <button key={chip} type="button" className="chip" onClick={() => fillChip(chip)}>
+            {chip}
+          </button>
         ))}
-      </ul>
+      </div>
 
-      <ol className="steps" aria-label="How a part is made">
+      <section className="start-examples" aria-labelledby="examples">
+        <h2 id="examples" tabIndex={-1}>
+          Or open an example <span className="muted">(no key needed)</span>
+        </h2>
+        <ul className="example-list">
+          {examples.map((example) => (
+            <li key={example.id}>
+              <a href={links.part(example.id)}>
+                <span className="example-name">{example.name}</span>
+                <span className="example-meta mono">
+                  {countSizes(example.source)} sizes
+                  <svg width="20" height="14" viewBox="0 0 20 14" aria-hidden="true">
+                    <path d="M0 7h18M12 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.2" />
+                  </svg>
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <ol className="steps" aria-label="How it works">
         <li>
           <span className="mono muted">1</span>
-          <strong>A part is code</strong>
-          <span className="step-text">Each part is a short OpenSCAD program, not a fixed mesh.</span>
+          <strong>Describe it</strong>
+          <span className="step-text">In words, or with a photo or a sketch.</span>
         </li>
         <li>
           <span className="mono muted">2</span>
-          <strong>Sizes have names</strong>
-          <span className="step-text">Width, angle, wall thickness. Change one and nothing else moves.</span>
+          <strong>Change it live</strong>
+          <span className="step-text">Type “make it wider”, or move a size slider.</span>
         </li>
         <li>
           <span className="mono muted">3</span>
-          <strong>It runs in your browser</strong>
-          <span className="step-text">The code is compiled to a 3D shape on your device.</span>
+          <strong>Download and print</strong>
+          <span className="step-text">The part is built on your device and saved as an STL file for your slicer.</span>
         </li>
       </ol>
     </div>
