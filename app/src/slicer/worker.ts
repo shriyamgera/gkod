@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { createGcodeChecker, DEFAULT_ALLOWED, type GcodeReport, PLA_LIMITS } from '@gkod/checks';
+import { createGcodeChecker, createLineSplitter, DEFAULT_ALLOWED, type GcodeReport, PLA_LIMITS } from '@gkod/checks';
 import { LOAD_MESSAGE, SLICE_MESSAGE, type SliceReply, type SliceRequest, TOO_BIG_MESSAGE, UNSAFE_MESSAGE } from './messages';
 import { createPostProcessor, kiriExtrudeAbs } from './postprocess';
 import { printerFacts } from './printers';
@@ -150,12 +150,15 @@ async function handle({ id, stl, settings }: SliceRequest): Promise<void> {
       checker.line(line);
       output.push(line);
     });
+    // Kiri sends whole lines in batches; they are split as the printer splits them
+    const split = createLineSplitter(post.line);
     const exported = await new Promise<KiriExport>((resolve, reject) => {
       kiri.client.export(
         engine.settings,
         (segment) => {
           if (typeof segment !== 'string' || segment === '') return;
-          eachLine(segment, post.line);
+          split.push(segment);
+          split.end();
           progress(0.8 + 0.2 * Math.min(1, post.summary().layers / expected));
         },
         (result, error) => (result && !error ? resolve(result) : reject(error ?? new Error('no output'))),
@@ -182,16 +185,6 @@ async function handle({ id, stl, settings }: SliceRequest): Promise<void> {
     });
   } catch (thrown) {
     reply({ type: 'done', id, ok: false, error: SLICE_MESSAGE, detail: describe(thrown), ...(safety ? { safety } : {}) });
-  }
-}
-
-function eachLine(text: string, line: (text: string) => void) {
-  let start = 0;
-  while (start <= text.length) {
-    let end = text.indexOf('\n', start);
-    if (end === -1) end = text.length;
-    line(text.slice(start, end));
-    start = end + 1;
   }
 }
 

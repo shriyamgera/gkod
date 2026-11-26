@@ -33,6 +33,11 @@ export const FAN_BY_LAYER = 3;
 export const MAX_E_PER_MOVE_MM = 50;
 // Coordinates are written with a few decimals; this only absorbs rounding.
 const EPS = 1e-6;
+// Marlin keeps 95 characters of a line before its comment (MAX_CMD_SIZE 96) and drops the rest.
+export const MAX_LINE_CHARS = 95;
+// Marlin ends a line at "\r" as well as "\n", and a backspace (0x08) erases what it read before it. Tab is harmless.
+const CONTROL = /[\x00-\x08\x0a-\x1f\x7f]/;
+const NOT_ASCII = /[^\x00-\x7f]/;
 // Only the first few problems of each kind are kept, so a broken file of millions of lines cannot fill memory.
 const MAX_PER_KIND = 5;
 
@@ -87,7 +92,7 @@ export function createGcodeChecker(limits: GcodeLimits) {
   function problem(text: string, reason: string, kind = reason) {
     const count = kinds.get(kind) ?? 0;
     kinds.set(kind, count + 1);
-    if (count < MAX_PER_KIND) problems.push({ line: lineNo, text: text.slice(0, 120), reason });
+    if (count < MAX_PER_KIND) problems.push({ line: lineNo, text: shown(text), reason });
   }
 
   function remember(list: number[], value: number) {
@@ -289,9 +294,24 @@ export function createGcodeChecker(limits: GcodeLimits) {
 
   function line(raw: string) {
     lineNo++;
-    const text = raw.trim();
+    // one "\r" left over from a "\r\n" line end
+    const text = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    const at = text.indexOf(';');
+    const before = at === -1 ? text : text.slice(0, at);
+    if (CONTROL.test(text)) {
+      problem(text, 'Has a control character, such as a carriage return or a backspace, that changes what the printer reads.', 'control');
+      return;
+    }
+    if (NOT_ASCII.test(before)) {
+      problem(text, 'Has a character that is not plain text before its comment, which the printer reads differently.', 'not-ascii');
+      return;
+    }
+    if (before.length > MAX_LINE_CHARS) {
+      problem(text, `Is longer than the ${MAX_LINE_CHARS} characters the printer reads from a line.`, 'too-long');
+      return;
+    }
     // a trailing "*71" is a checksum, not part of the command
-    const code = stripComment(text).replace(/\*\d*$/, '').trim();
+    const code = before.trim().replace(/\*\d*$/, '').trim();
     if (!code) return;
     const parts = code.split(/\s+/);
     let head = parts[0]!.toUpperCase();
@@ -389,19 +409,43 @@ export function createGcodeChecker(limits: GcodeLimits) {
 /** Checks a whole G-code file. It reads one line at a time and keeps no copy of the text. */
 export function checkGcode(gcode: string, limits: GcodeLimits): GcodeReport {
   const checker = createGcodeChecker(limits);
-  let start = 0;
-  while (start < gcode.length) {
-    let end = gcode.indexOf('\n', start);
-    if (end === -1) end = gcode.length;
-    checker.line(gcode.slice(start, end));
-    start = end + 1;
-  }
+  const lines = createLineSplitter(checker.line);
+  lines.push(gcode);
+  lines.end();
   return checker.finish();
 }
 
-function stripComment(text: string): string {
-  const at = text.indexOf(';');
-  return (at === -1 ? text : text.slice(0, at)).trim();
+/**
+ * Splits text that arrives in pieces into lines the way the printer does: "\r\n", "\r" and "\n" each end a line.
+ * The site's slicer, the file check command and checkGcode all read lines with this.
+ */
+export function createLineSplitter(line: (text: string) => void) {
+  let rest = '';
+  const ends = /\r\n?|\n/g;
+  return {
+    push(chunk: string) {
+      const text = rest ? rest + chunk : chunk;
+      let start = 0;
+      ends.lastIndex = 0;
+      for (let end = ends.exec(text); end; end = ends.exec(text)) {
+        // a "\r" at the very end may be the first half of a "\r\n" in the next piece
+        if (end[0] === '\r' && end.index === text.length - 1) break;
+        line(text.slice(start, end.index));
+        start = end.index + end[0].length;
+      }
+      rest = text.slice(start);
+    },
+    end() {
+      const last = rest.endsWith('\r') ? rest.slice(0, -1) : rest;
+      if (rest !== '') line(last);
+      rest = '';
+    },
+  };
+}
+
+// Control characters are written as \x08 so the report can be shown.
+function shown(text: string): string {
+  return text.slice(0, 120).replace(/[\x00-\x08\x0a-\x1f\x7f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
 }
 
 // "G01" and "g1" are the same command as "G1".

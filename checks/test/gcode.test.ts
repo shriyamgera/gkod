@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkGcode, createGcodeChecker, type GcodeReport, PLA_LIMITS } from '#checks/index';
+import { checkGcode, createGcodeChecker, createLineSplitter, type GcodeReport, MAX_LINE_CHARS, PLA_LIMITS } from '#checks/index';
 
 const limits = { bed: { x: 220, y: 220, z: 250 }, ...PLA_LIMITS };
 
@@ -72,6 +72,68 @@ describe('checkGcode', () => {
   it('reads Windows line ends, comments, line numbers and checksums', () => {
     const text = file(6, (lines) => lines.splice(5, 0, '', '; only a comment', 'N12 G1 X50 Y50*71'));
     expect(check(text.replace(/\n/g, '\r\n')).problems).toEqual([]);
+  });
+
+  it('ends a line at a lone carriage return, as the printer does', () => {
+    const cases: [string, string][] = [
+      ['G1 X50 ;wipe\rM502', 'M502 resets the printer’s settings to factory defaults, which a print file must never do.'],
+      ['G4 P0\rG1 X300 Y300', 'Moves outside the bed: X 300 mm, the printer allows 0 to 220 mm.'],
+      ['M117 hi\rM104 S280', 'Sets the nozzle to 280 °C. PLA must be 190 to 230 °C.'],
+      ['G1 X50 ; wipe\rM500', 'M500 saves settings to the printer’s memory, which a print file must never do.'],
+    ];
+    for (const [extra, reason] of cases) expect(reasons(check(file(6, (l) => l.push(extra))))).toContain(reason);
+  });
+
+  it('fails a control character left inside a line, such as a backspace that erases text on the printer', () => {
+    const control = 'Has a control character, such as a carriage return or a backspace, that changes what the printer reads.';
+    const backspaces = [
+      `M117 abc${'\b'.repeat(8)}M502`,
+      `M117 x${'\b'.repeat(6)}G1 X300 Y300`,
+      `M117 x${'\b'.repeat(6)}M104 S275`,
+      'G1 X10 ; note\u0000',
+    ];
+    for (const extra of backspaces) {
+      const report = check(file(6, (l) => l.push(extra)));
+      expect(reasons(report)).toEqual([control]);
+      expect(report.problems[0]!.text).toMatch(/\\x0[08]/);
+    }
+    // a line handed over with a "\r" inside it is not split again
+    const checker = createGcodeChecker(limits);
+    for (const line of file(6, (l) => l.push('G4 P0\rM502')).split('\n')) checker.line(line);
+    expect(reasons(checker.finish())).toEqual([control]);
+    expect(check(file(6, (l) => l.push('G4\tP0'))).ok).toBe(true);
+  });
+
+  it('fails a byte order mark or other character that is not plain text before the comment', () => {
+    const notPlain = 'Has a character that is not plain text before its comment, which the printer reads differently.';
+    expect(reasons(check(`\uFEFF${file()}`))).toContain(notPlain);
+    expect(reasons(check(file(6, (l) => replace(l, 'M104 S205', ['M104\u00a0S205']))))).toEqual([notPlain]);
+    expect(check(file(6, (l) => replace(l, 'G1 X10 Y5', ['G1 X10 Y5 ; to the purge line, 205 °C'])))).toMatchObject({ ok: true });
+  });
+
+  it('fails a line longer than the printer reads, which would cut off its end', () => {
+    expect(MAX_LINE_CHARS).toBe(95);
+    const fits = `G1 X10${' '.repeat(86)}Y10`;
+    expect(fits.length).toBe(95);
+    expect(reasons(check(file(6, (l) => l.push(` ${fits}`))))).toEqual(['Is longer than the 95 characters the printer reads from a line.']);
+    expect(check(file(6, (l) => l.push(`${fits}; a long comment does not count${'.'.repeat(80)}`))).ok).toBe(true);
+  });
+
+  it('splits lines the same way when the file arrives in pieces', () => {
+    const text = `G28\r\nM83\rM104 S205\n\nM109 S205\r`;
+    const whole: string[] = [];
+    const split = createLineSplitter((line) => whole.push(line));
+    split.push(text);
+    split.end();
+    expect(whole).toEqual(['G28', 'M83', 'M104 S205', '', 'M109 S205']);
+    for (let cut = 0; cut <= text.length; cut++) {
+      const pieces: string[] = [];
+      const parts = createLineSplitter((line) => pieces.push(line));
+      parts.push(text.slice(0, cut));
+      parts.push(text.slice(cut));
+      parts.end();
+      expect(pieces).toEqual(whole);
+    }
   });
 
   it('fails a move past the bed in X, with its line number', () => {

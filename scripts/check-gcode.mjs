@@ -5,10 +5,9 @@
 // Exit code: 0 when every file passes, 1 when one fails, 2 when the options or a file cannot be read.
 import { createReadStream, readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { createGcodeChecker, DEFAULT_ALLOWED, PLA_LIMITS } from '../checks/src/index.ts';
+import { createGcodeChecker, createLineSplitter, DEFAULT_ALLOWED, PLA_LIMITS } from '../checks/src/index.ts';
 import { printers } from '../app/src/slicer/printers.ts';
 
 export function printerFor(file, id) {
@@ -20,8 +19,10 @@ export function printerFor(file, id) {
 
 export async function checkGcodeFile(file, printer) {
   const checker = createGcodeChecker({ bed: printer.bed, ...PLA_LIMITS, allowed: DEFAULT_ALLOWED });
-  const lines = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
-  for await (const line of lines) checker.line(line);
+  // the same line splitting as the site: "\r\n", "\r" and "\n" each end a line, as on the printer
+  const lines = createLineSplitter(checker.line);
+  for await (const chunk of createReadStream(file, { encoding: 'utf8' })) lines.push(chunk);
+  lines.end();
   return checker.finish();
 }
 

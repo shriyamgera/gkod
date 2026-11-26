@@ -14,9 +14,11 @@ export * as limits from '#checks/limits';
 export {
   checkGcode,
   createGcodeChecker,
+  createLineSplitter,
   DEFAULT_ALLOWED,
   FAN_BY_LAYER,
   MAX_E_PER_MOVE_MM,
+  MAX_LINE_CHARS,
   PLA_LIMITS,
   type GcodeLimits,
   type GcodeProblem,
