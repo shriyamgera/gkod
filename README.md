@@ -11,10 +11,11 @@ Build day 1 (26 November 2026). This section is updated as each piece lands.
 What works today:
 
 - The site opens with three example parts (phone stand, wall hook, cable clip), each written as OpenSCAD code with named sizes.
-- Each part's code can be read on its own page.
-- Tests, type checks and a build are set up to run on every push, with a deploy to GitHub Pages from `main`.
-
-In progress today, not finished: compiling the code in the browser, the 3D viewer, and the size sliders.
+- The code compiles to a 3D shape in your browser, in a Web Worker, with a 10 second limit per compile.
+- A 3D viewer that turns with the mouse or the keyboard, with a text summary of the part's size.
+- A slider and a number box for each named size. The part recompiles as you change them, and the code shown changes with it.
+- The STL file can be downloaded.
+- Tests, type checks and a build run on every push, with a deploy to GitHub Pages from `main`.
 
 Not built yet: making a part from a description, the fine-tuned model, the print checks and the slicer. Everything under "How it will work" below is the plan, not the current state.
 
@@ -30,7 +31,9 @@ npm run fetch:openscad   # downloads the pinned OpenSCAD web build (about 3.4 MB
 npm run dev
 ```
 
-Other commands: `npm test`, `npm run typecheck`, `npm run build`.
+Other commands: `npm test`, `npm run typecheck`, `npm run build`, and `npm run licenses` to rebuild the third-party licence texts the site ships.
+
+Deploying needs one manual step first: in the repository settings, set Pages > Build and deployment > Source to "GitHub Actions". After that, the Pages workflow publishes every push to `main`.
 
 ## What makes it different
 
@@ -58,8 +61,8 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 
 | Piece | Project | Licence | State |
 |---|---|---|---|
-| Part code | [OpenSCAD](https://openscad.org) compiled to WebAssembly | GPL-2.0-or-later | In progress |
-| 3D viewer | [three.js](https://threejs.org) with [react-three-fiber](https://github.com/pmndrs/react-three-fiber) | MIT | In progress |
+| Part code | [OpenSCAD](https://openscad.org) compiled to WebAssembly | GPL-2.0-or-later | In use |
+| 3D viewer | [three.js](https://threejs.org) with [react-three-fiber](https://github.com/pmndrs/react-three-fiber) | MIT | In use |
 | Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) | MIT | Planned |
 | Training | [MLX LM](https://github.com/ml-explore/mlx-lm) | MIT | Planned |
 
