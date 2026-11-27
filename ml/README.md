@@ -276,8 +276,10 @@ the split it is read from.
   ms a part. 0 when there is no part.
 - **Edits: the size block.** The answer's named sizes, read by the compiler as the site's sliders read them, against
   code B: every kept size has the same name, value and caption; every changed size has its new value; every removed
-  size is gone. Added sizes are only counted, since their names are free. A size left in that no longer does anything
-  counts as not removed.
+  size is gone; every added size is there as a new size (a name code A did not have) with its value. Names of added
+  sizes are free, so one is matched by its own name first and then by value. A size left in that no longer does
+  anything counts as not removed. An answer that is code A, or whose part is code A's part (same STL), fails the size
+  block, so sending code A back never passes an add, or a count edit that changes no named size (two gussets for one).
 - **Slider ends** (extra). The answer is compiled at the min and at the max of each of its named sizes (up to 30).
 
 Every scored prompt also compiles the reference again and saves whether its STL sha256 still matches the set's label.

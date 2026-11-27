@@ -151,10 +151,12 @@ def _close(a: Any, b: Any) -> bool:
 
 def size_block(answer_params: list[dict], row: dict, b_params: list[dict]) -> dict:
     """The answer's named sizes against code B: kept sizes have the same name, value and caption; changed sizes
-    have their new value; removed sizes are gone. Added sizes are only counted, since their names are free."""
+    have their new value; removed sizes are gone; each added size is there as a new size (a name code A did not
+    have) with its value. Names of added sizes are free, so one is matched by its own name first, then by value."""
     ans = {p["name"]: p for p in answer_params}
     b = {p["name"]: p for p in b_params}
     facts = row["facts"]
+    a_names = {x["name"] for key in ("kept", "changed", "removed") for x in facts[key]}
     kept = []
     for k in facts["kept"]:
         got = ans.get(k["name"])
@@ -167,13 +169,23 @@ def size_block(answer_params: list[dict], row: dict, b_params: list[dict]) -> di
         ok = got is not None and _close(got["value"], c["to"])
         changed.append({"name": c["name"], "to": c["to"], "ok": ok, **({"got": got["value"] if got else None} if not ok else {})})
     removed = [{"name": r["name"], "ok": r["name"] not in ans} for r in facts["removed"]]
+    new = [p for p in answer_params if p["name"] not in a_names]
+    used: set[str] = set()
+    added = []
+    for x in facts["added"]:
+        options = sorted((p for p in new if p["name"] not in used and _close(p["value"], x["value"])), key=lambda p: p["name"] != x["name"])
+        got = options[0] if options else None
+        if got:
+            used.add(got["name"])
+        added.append({"name": x["name"], "value": x["value"], "ok": got is not None, **({"as": got["name"]} if got and got["name"] != x["name"] else {})})
+    every = kept + changed + removed + added
     return {
-        "sizes_ok": all(x["ok"] for x in kept + changed + removed),
+        "sizes_ok": all(x["ok"] for x in every),
         "kept": {"n": len(kept), "ok": sum(x["ok"] for x in kept)},
         "changed": {"n": len(changed), "ok": sum(x["ok"] for x in changed)},
         "removed": {"n": len(removed), "ok": sum(x["ok"] for x in removed)},
-        "added": len(facts["added"]),
-        "wrong": [x for x in kept + changed + removed if not x["ok"]],
+        "added": {"n": len(added), "ok": sum(x["ok"] for x in added)},
+        "wrong": [x for x in every if not x["ok"]],
     }
 
 
@@ -279,10 +291,21 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
         if task == "edit":
             b_params = ref.get("params") or []
             block = size_block(params, row, b_params) if ok else None
+            same_code = code is not None and code.strip() == row["a"]["code"].strip()
+            same_mesh = None
+            if ok:
+                # code A sent back, or code that makes code A's part, never passes, even when no named size changes
+                for _ in range(REFERENCE_TRIES):
+                    a = gkod.compile(row["a"]["code"], check=False)
+                    if a.get("ok"):
+                        break
+                a_sha = a.get("stl_sha256") if a.get("ok") else None
+                same_mesh = a_sha is not None and a_sha != ref.get("stl_sha256") and compiled.get("stl_sha256") == a_sha
             scores["edit"] = {
-                "sizes_ok": bool(block and block["sizes_ok"]),
+                "sizes_ok": bool(block and block["sizes_ok"]) and not same_code and not same_mesh,
                 "size_block": block,
-                "same_as_a": code is not None and code.strip() == row["a"]["code"].strip(),
+                "same_as_a": same_code,
+                "same_mesh_as_a": same_mesh,
             }
         scores["slider_ends"] = _slider_ends(gkod, code, params) if ok and slider_ends and params else None
     scores["score_s"] = round(time.perf_counter() - started, 3)

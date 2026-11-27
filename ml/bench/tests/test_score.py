@@ -154,6 +154,32 @@ def test_size_block_wrong_in_each_way():
     assert not size_block([p for p in B_PARAMS if p["name"] != "hole_d"], EDIT_ROW, B_PARAMS)["sizes_ok"]
 
 
+def test_added_sizes_must_be_new_sizes_with_their_values():
+    row = {
+        "facts": {
+            "changed": [],
+            "kept": [{"name": "thickness", "value": 8}],
+            "removed": [],
+            "added": [{"name": "rib_count", "value": 3}, {"name": "rib_height", "value": 8}],
+        }
+    }
+    b = [
+        {"name": "thickness", "value": 8, "caption": "Plate thickness (mm)"},
+        {"name": "rib_count", "value": 3, "caption": "Number of ribs"},
+        {"name": "rib_height", "value": 8, "caption": "Rib height (mm)"},
+    ]
+    block = size_block([dict(p) for p in b], row, b)
+    assert block["sizes_ok"] and block["added"] == {"n": 2, "ok": 2}
+    # the names of new sizes are free
+    block = size_block([b[0], {"name": "ribs", "value": 3}, {"name": "rib_h", "value": 8}], row, b)
+    assert block["sizes_ok"] and block["added"] == {"n": 2, "ok": 2}
+    # code A back: nothing added
+    assert size_block([b[0]], row, b)["added"] == {"n": 2, "ok": 0}
+    # one new size only, and a size code A had cannot stand in for the other (thickness is 8 too)
+    block = size_block([b[0], {"name": "rib_count", "value": 3}], row, b)
+    assert not block["sizes_ok"] and block["wrong"] == [{"name": "rib_height", "value": 8, "ok": False}]
+
+
 # ---- the whole scorer, with the real compiler ----
 
 PLATE = """// Plate
@@ -282,6 +308,32 @@ def test_an_edit_answer_against_code_b(gkod):
     # changing a kept size as well
     s = score_answer(gkod, row, "edit", f"```openscad\n{b.replace('depth = 30;', 'depth = 32;')}```", slider_ends=False)
     assert not s["edit"]["sizes_ok"] and s["edit"]["size_block"]["kept"] == {"n": 3, "ok": 2}
+
+
+@needs_compiler
+def test_an_edit_that_changes_no_named_size_is_not_passed_by_code_a(gkod):
+    # a third hole in the middle: the part changes, no named size does
+    b = PLATE.replace("for (x = [15, width - 15])", "for (x = [15, width / 2, width - 15])")
+    row = {
+        "id": "hand-edit-2",
+        "a": {"code": PLATE},
+        "b": {"code": b},
+        "labels": {"stl_sha256": None},
+        "facts": {
+            "stated": [fact("hole_count", 3, "count")],
+            "changed": [],
+            "kept": [{"name": "width", "value": 60}, {"name": "depth", "value": 30}, {"name": "thickness", "value": 4}, {"name": "hole_d", "value": 5}],
+            "removed": [],
+            "added": [],
+        },
+    }
+    s = score_answer(gkod, row, "edit", f"```openscad\n{b}```", slider_ends=False)
+    assert s["edit"]["sizes_ok"] and s["edit"]["same_mesh_as_a"] is False
+    s = score_answer(gkod, row, "edit", f"```openscad\n{PLATE}```", slider_ends=False)
+    assert s["edit"]["same_as_a"] and s["edit"]["size_block"]["sizes_ok"] and not s["edit"]["sizes_ok"]
+    # code A with a line that changes nothing still makes code A's part
+    s = score_answer(gkod, row, "edit", f"```openscad\n{PLATE}// three holes\n```", slider_ends=False)
+    assert not s["edit"]["same_as_a"] and s["edit"]["same_mesh_as_a"] and not s["edit"]["sizes_ok"]
 
 
 @needs_compiler

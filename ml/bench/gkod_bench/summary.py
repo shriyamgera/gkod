@@ -55,6 +55,7 @@ def _group(records: list[dict]) -> dict:
     if edits:
         out["edit_sizes_ok"] = rate(sum(e["sizes_ok"] for e in edits), len(edits))
         out["edit_same_as_a"] = sum(e["same_as_a"] for e in edits)
+        out["edit_same_mesh_as_a"] = sum(bool(e.get("same_mesh_as_a")) for e in edits)
     out["no_code"] = dict(Counter(x["extract"]["problem"] for x in s if not x["extract"]["ok"]))
     out["check_failures"] = dict(Counter(k for x in compiled for k, ok in (x["checks"] or {}).items() if not ok))
     secs = [r["timings"]["engine_s"] for r in records]
