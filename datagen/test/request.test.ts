@@ -102,8 +102,9 @@ describe('compose', () => {
   });
 
   it('varies the wording and keeps a short title', () => {
-    const texts = parts.map(({ tree, rng }) => compose(tree, modelOf(tree), rng));
-    expect(new Set(texts.map((t) => t.request)).size).toBe(texts.length);
+    // the wording rules are checked on more parts than the facts, from a second seed too
+    const texts = [...parts, ...samples(1, 3000)].map(({ tree, rng }) => compose(tree, modelOf(tree), rng));
+    expect(new Set(texts.slice(0, parts.length).map((t) => t.request)).size).toBe(parts.length);
     expect(texts.some((t) => / mm\b/.test(t.request))).toBe(true);
     expect(texts.some((t) => /\dmm\b/.test(t.request))).toBe(true);
     expect(texts.some((t) => /^(Make|I need|Design|Create|Print) /.test(t.request))).toBe(true);

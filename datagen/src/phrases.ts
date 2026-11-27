@@ -171,7 +171,7 @@ function holes(say: Say, f: Extract<Feature, { kind: 'holes' }>): Phrase {
     text += ` ${text.endsWith('mm') ? 'spaced ' : ''}${mm(s, place.spacing)} apart`;
     facts.push(sized(say, `${p}hole_spacing`, place.spacing));
   } else if (place.pattern === 'grid' && rng.chance(0.6)) {
-    text += ` on a ${pair(s, place.x, place.y)} pattern`;
+    text += ` on ${a(`${pair(s, place.x, place.y)} pattern`)}`;
     facts.push(sized(say, `${p}hole_spacing_x`, place.x), sized(say, `${p}hole_spacing_y`, place.y));
   }
   if (p) text += ` in the ${p === 'base_' ? 'base' : 'upright'}`;
@@ -218,7 +218,7 @@ export function featurePhrase(say: Say, f: Feature): Phrase | null {
         facts.push(sized(say, 'boss_hole_d', f.hole));
       }
       if (f.place.pattern === 'grid' && rng.chance(0.7)) {
-        text += ` on a ${pair(s, f.place.x, f.place.y)} pattern`;
+        text += ` on ${a(`${pair(s, f.place.x, f.place.y)} pattern`)}`;
         facts.push(sized(say, 'boss_spacing_x', f.place.x), sized(say, 'boss_spacing_y', f.place.y));
       }
       return np(text, ...facts);
