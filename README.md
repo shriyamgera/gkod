@@ -33,6 +33,8 @@ What works today:
 - **No key needed for the examples.** Four built-in parts (phone stand, wall hook, cable clip and a 20 mm test cube) open without a key.
 - **Tests, type checks and a build** run on every push, with a deploy to GitHub Pages from `main`. CI and the deploy also slice the examples, a cube, and a bar and a column as large as the print checks allow for every printer in the picker and check each file, and one Playwright test opens the test cube on the built site, slices it for the Kobra 2 Neo, downloads the file and checks it.
 
+- **Claude Code on the owner's Mac.** A second engine, "Claude Code (on this Mac)", hands the request to Claude Code through a small local bridge. It only works on a computer where the bridge runs; see [below](#claude-code-engine-on-your-own-mac).
+
 The Gemini engine uses **your own free Gemini key**. It stays in your browser: in memory by default, or on your device only if you tick "Remember on this device". It is sent only to Google, in a request header. Parts you make are kept in the browser tab that made them. Gemini's output is shown to you only; it is never used to train the GKod model.
 
 Not built yet: the fine-tuned model. The slicer has no layer preview yet. The print checks do not yet look at wall thickness or compare the sizes with your words, and the size check measures the part as it is placed, without trying to turn it on the bed. Everything under "How it will work" below is the plan, not the current state.
@@ -59,6 +61,26 @@ Deploying needs one manual step first: in the repository settings, set Pages > B
 ## Use GKod's tools from an MCP client
 
 The `mcp/` folder holds a small Python server that lets an MCP client compile parts, run the print checks and look at each part as a picture, with the same compiler and checks as the site. How to set it up and register it is in [mcp/README.md](mcp/README.md). The `gkod` command it calls also works on its own; see [tools/](tools/README.md).
+
+## Claude Code engine (on your own Mac)
+
+GKod can also hand a request to **Claude Code** on your own Mac, so you type a prompt on the site exactly as with Gemini and a Claude Code session there writes the part. The bridge in [bridge/](bridge/README.md) runs `claude` headless with only GKod's MCP tools: it compiles the part, runs the print checks, looks at the picture and fixes what is wrong (at most 4 rounds), then sends the code back. The site then compiles it, checks it and makes a version, exactly as for Gemini, so the answer is never trusted blindly. A typed change to a part Claude Code made continues the same Claude Code session.
+
+It only works on the computer where the bridge runs, with your own Claude Code login and plan. For visitors without the bridge the site works as before, with Gemini.
+
+Start it (needs Claude Code installed and logged in, and the MCP server set up as in [mcp/README.md](mcp/README.md)):
+
+```sh
+python3.12 -m venv bridge/.venv
+bridge/.venv/bin/python -m pip install -r bridge/requirements.txt -e bridge
+bridge/.venv/bin/python -m gkod_bridge
+```
+
+It prints a **pairing code**. In GKod, open **Engine**, choose **Claude Code (on this Mac)** and type the code; it is kept in memory unless you tick "Remember on this device", and "Forget code" removes it. On a page served from this computer (`npm run dev` or a preview), the Engine dialog finds the bridge on its own. On the public site, press "Look for Claude Code on this Mac" at the end of the Engine dialog first: Chrome asks before a public page may reach apps on your computer, so the site never looks on its own until the bridge has been found once. A job takes a minute or two, and the status line shows each step: writing, compiling, checking, looking at the picture, fixing.
+
+**Privacy.** The bridge listens on 127.0.0.1 only, answers only the GKod site and your local dev servers, and needs the pairing code for everything but its health check. Each job runs in its own temp folder outside the repository, with no shell, file or web tools, and with none of your Claude Code settings, memory or project instructions loaded. Your request, code and picture go only to your own Claude Code.
+
+**Training.** Claude Code's output is shown to you only. It is never used to train the GKod model.
 
 ## What makes it different
 
@@ -88,6 +110,8 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 |---|---|---|---|
 | Part code | [OpenSCAD](https://openscad.org) compiled to WebAssembly | GPL-2.0-or-later | In use |
 | Engine option | [Gemini API](https://ai.google.dev/gemini-api/docs/interactions-overview), called with the visitor's own key | Google's API terms | In use |
+| Engine option on the owner's Mac | [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), run headless by the local bridge with the owner's own login | Anthropic's terms | In use (owner only) |
+| Local bridge | [FastAPI](https://fastapi.tiangolo.com) and [uvicorn](https://www.uvicorn.org) | MIT and BSD-3-Clause | In use (owner only) |
 | 3D viewer | [three.js](https://threejs.org) with [react-three-fiber](https://github.com/pmndrs/react-three-fiber) | MIT | In use |
 | Slicer | [Kiri:Moto](https://github.com/GridSpace/grid-apps) engine, built from a pinned commit | MIT | In use |
 | Training | [MLX LM](https://github.com/ml-explore/mlx-lm) | MIT | Planned |
