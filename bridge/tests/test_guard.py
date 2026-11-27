@@ -114,3 +114,37 @@ def test_a_body_over_8_mb_is_refused_before_it_is_read(bridge):
     with bridge.client(**{"X-GKod-Pairing": CODE}) as client:
         response = client.post("/run", content=b"x" * (8 * 1024 * 1024 + 1), headers={"content-type": "application/json"})
     assert response.status_code == 413
+
+
+def test_a_chunked_body_over_8_mb_is_refused_while_it_is_read(bridge):
+    # no Content-Length: the body comes in chunks, so only counting the bytes can stop it
+    sent = 0
+
+    def chunks():
+        nonlocal sent
+        piece = b" " * (256 * 1024)
+        while sent < 40 * 1024 * 1024:
+            sent += len(piece)
+            yield piece
+
+    with bridge.client(**{"X-GKod-Pairing": CODE}) as client:
+        response = client.post("/run", content=chunks(), headers={"content-type": "application/json"})
+    assert response.status_code == 413
+    assert response.json()["error"] == "too-big"
+    assert sent < 40 * 1024 * 1024
+    assert bridge.fake.calls() == []
+
+
+def test_a_small_chunked_body_still_runs(bridge):
+    import json
+
+    def chunks():
+        text = json.dumps(CREATE).encode()
+        yield text[:10]
+        yield text[10:]
+
+    with bridge.client(**{"X-GKod-Pairing": CODE}) as client:
+        with client.stream("POST", "/run", content=chunks(), headers={"content-type": "application/json"}) as response:
+            assert response.status_code == 200
+            assert "event: final" in response.read().decode()
+    assert len(bridge.fake.calls()) == 1

@@ -69,9 +69,18 @@ class Guard:
             await _plain(401, "pairing", "The pairing code is missing or wrong.", cors)(scope, receive, send)
             return
 
+        # the connection is closed after a 413, so the rest of a big body is not even taken in
+        too_big = _plain(413, "too-big", "The request is too big.", {**cors, "Connection": "close"})
         length = headers.get("content-length")
         if length and (not length.isdigit() or int(length) > MAX_BODY_BYTES):
-            await _plain(413, "too-big", "The request is too big.", cors)(scope, receive, send)
+            await too_big(scope, receive, send)
+            return
+        # The body is read here, counting bytes, so the cap also holds for a chunked body with no Content-Length.
+        body = await _read_body(receive, MAX_BODY_BYTES)
+        if body is None:
+            await too_big(scope, receive, send)
+            return
+        if body is _GONE:
             return
 
         async def send_with_cors(message: Message) -> None:
@@ -81,7 +90,41 @@ class Guard:
                 message = {**message, "headers": raw}
             await send(message)
 
-        await self.app(scope, receive, send_with_cors)
+        await self.app(scope, _replay(body, receive), send_with_cors)
+
+
+_GONE = b"\0gone"
+
+
+async def _read_body(receive: Receive, limit: int) -> bytes | None:
+    """The whole request body, None once it passes limit, or _GONE when the page went away while sending."""
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        message = await receive()
+        if message["type"] == "http.disconnect":
+            return _GONE
+        chunk = message.get("body", b"")
+        size += len(chunk)
+        if size > limit:
+            return None
+        chunks.append(chunk)
+        if not message.get("more_body", False):
+            return b"".join(chunks)
+
+
+def _replay(body: bytes, receive: Receive) -> Receive:
+    """Gives the app the body already read, then the real messages (so a closed page is still noticed)."""
+    given = False
+
+    async def replay() -> Message:
+        nonlocal given
+        if not given:
+            given = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        return await receive()
+
+    return replay
 
 
 class RunBody(BaseModel):
