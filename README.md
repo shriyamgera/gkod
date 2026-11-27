@@ -60,6 +60,18 @@ Deploying needs one manual step first: in the repository settings, set Pages > B
 
 The `mcp/` folder holds a small Python server that lets an MCP client compile parts, run the print checks and look at each part as a picture, with the same compiler and checks as the site. How to set it up and register it is in [mcp/README.md](mcp/README.md). The `gkod` command it calls also works on its own; see [tools/](tools/README.md).
 
+## Backend
+
+The `api/` folder holds the backend: a FastAPI service in front of the parts library, a PostgreSQL 17 database with pgvector that holds the parts the generator makes, with their code, requests and print-check results. It runs locally with Docker Compose, on 127.0.0.1 only:
+
+```sh
+npm run api:up                      # copies .env.example to .env if needed, then docker compose up
+curl http://127.0.0.1:8000/health
+npm run api:down
+```
+
+Today it loads the generator's `parts.jsonl` files (refusing any row that does not name the generator, version and commit that made it) and answers `/health`, `/parts`, `/parts/{id}` and `/stats`. Embeddings and search come on day 8, and the local model behind the API on day 9. How to load parts, the endpoints and the tests are in [api/README.md](api/README.md).
+
 ## What makes it different
 
 Most "text to 3D" tools return a fixed mesh. If the hole is 2 mm too small, you start again.
