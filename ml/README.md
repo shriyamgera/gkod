@@ -111,3 +111,49 @@ the owner.
 and a restart, giving up, a missing command, too little disk before the start, the disk filling up during a run, a
 command that ignores SIGTERM, battery, Ctrl-C, a closed terminal, a fake trainer that crashes and resumes from its newest
 checkpoint while the last two and the best are kept, and a run started again after the script died.
+
+## Tonight: baseline rows on the dev set
+
+```sh
+sh ml/scripts/night-baseline.sh
+```
+
+[scripts/night-baseline.sh](scripts/night-baseline.sh) runs two rows of the untrained model on the 400 dev prompts (300
+create, 100 edit), one after the other, each under the night-run script:
+
+```sh
+DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib ml/.venv/bin/python ml/scripts/night-run.py --name baseline-dev-0shot -- \
+  ml/.venv/bin/python -m gkod_bench run --engine local --split dev --shots 0
+# then the same with --name baseline-dev-3shot and --shots 3
+```
+
+The benchmark names the rows `local-qwen2.5-coder-1.5b-instruct-0shot` and `-3shot`: greedy decoding, at most 1,024
+answer tokens, the site's system prompt, and for `-3shot` the 3 fixed training examples (`gkod_bench fewshot` lists
+them). A low-disk stop or Ctrl-C ends the night. A row that still fails after three restarts lets the next row run.
+Started again, the script carries on: a finished row is not run again and an unfinished one resumes at its first
+missing prompt. Only `--split dev` is read; the benchmark refuses the test split without `--final`.
+
+Before starting: the Mac plugged in (the script refuses to start on battery), the lid open, the browser closed and no
+other heavy work.
+
+**How long: about 3.5 to 4.6 hours.** Worked out from the speeds measured above and the real prompt lengths (the
+model's tokenizer on the benchmark's own prompts), plus 1 s a prompt for scoring:
+
+| Part | Prompts | Prompt tokens (mean) | Answer tokens | Seconds a prompt | Hours |
+|---|---|---|---|---|---|
+| 0-shot, create | 300 | 433 | 250 to 405 | 10 to 15.5 | 0.8 to 1.3 |
+| 0-shot, edit | 100 | 884 | 400 to 525 | 16 to 20 | 0.4 to 0.6 |
+| 3-shot, create | 300 | 1,503 | 460 to 573 | 20 to 24 | 1.7 to 2.0 |
+| 3-shot, edit | 100 | 2,872 | 460 to 573 | 21 to 26 | 0.6 to 0.7 |
+| All | 800 | | | | 3.5 to 4.6 |
+
+- Answer lengths: the low end is answers that stop by themselves (the four smoke answers that stopped averaged 245
+  tokens; the reference code averages about 400 tokens for create and for edit; two 3-shot answers in a two-prompt
+  check of this command were 458 and 464 tokens). The high end has 1 answer in 5 running to the 1,024-token limit, as 1
+  in 5 did in the smoke test.
+- Speeds: reading 850 tokens/s; writing 29 tokens/s for 0-shot (measured with nothing else running) and 27 for 3-shot
+  (assumed a little slower for the longer prompts). With other work running the Mac wrote 21 to 22 tokens/s, and at 4%
+  battery 15 to 25. At 22 tokens/s the night takes about 4.5 to 6 hours.
+- Writing 8 answers at once gave 144 tokens/s in a throwaway test, about five times faster. The benchmark answers one
+  prompt at a time, so tonight does not use it. Batched answers may not match one-at-a-time greedy answers token for
+  token, so it would need its own check before any row used it.
