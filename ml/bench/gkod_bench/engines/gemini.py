@@ -3,7 +3,8 @@ system instruction, input, store false, thinking level low) and the same reading
 
 Differences from the site, on purpose: there is no fallback to another model (a row is one model), and a request
 that got no answer (rate limit, busy, network) is sent again after a wait, since no answer was given; an answer,
-once received, is final. The key is read from .env when a request is sent and is never printed, logged or saved.
+once received, is final. A prompt the model turns down (400, after the try without the thinking setting) is an
+answer with no code, so it counts against the row instead of dropping out of the rates. The key is read from .env when a request is sent and is never printed, logged or saved.
 """
 
 from __future__ import annotations
@@ -154,8 +155,9 @@ class GeminiEngine:
                 # a wrong key or a model this key cannot use: nothing later in the run would work either
                 raise GeminiStop(f"Gemini answered {status} for model {self.model}: {message[:200]}")
             if status == 400:
-                # turned down; left without an answer so it shows as missing, and the run stops if every prompt is
-                break
+                # turned down: that is the model's answer to this prompt, and it has no code
+                meta = {"model": self.model, "date": datetime.now(UTC).isoformat(timespec="seconds"), "tries": tries, "failure": "turned-down"}
+                return Answer(text="", seconds=time.perf_counter() - started, error=f"turned down: {message[:200]}", meta=meta)
             # no answer yet: rate limit, busy or network; wait and send the same request again
             if attempt < self.retries:
                 self._sleep(min(120.0, 15.0 * (attempt + 1)) if status == 429 else min(60.0, 5.0 * (attempt + 1)))

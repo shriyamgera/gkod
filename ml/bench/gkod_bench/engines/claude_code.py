@@ -30,6 +30,8 @@ TOOL_NOTE = (
     "You may use them to test the code before you answer. Your last message is read as the answer."
 )
 TIMEOUT_S = 900
+# results that end a session that ran without giving an answer: counted as answers with no code
+FAILED_RESULTS = ("error_max_turns", "error_max_budget_usd")
 
 
 @functools.cache
@@ -169,10 +171,15 @@ class ClaudeCodeEngine:
             "usage": result.get("usage"),
         }
         if code is None:
-            return Answer(text=None, seconds=seconds, error=f"no answer within {self.timeout:g} s", meta=meta)
+            # out of time: that is this session's answer, with no code, not a missing one
+            return Answer(text="", seconds=seconds, error=f"no answer within {self.timeout:g} s", meta={**meta, "failure": "timeout"})
         if stream["tools"] is None:
             return Answer(text=None, seconds=seconds, error=f"the session did not start (exit {code}): {stderr[-300:]}", meta=meta)
+        if result.get("subtype") in FAILED_RESULTS:
+            # the session ran and ended without an answer (out of turns or budget): no code
+            return Answer(text="", seconds=seconds, error=f"no answer: {result.get('subtype')}", meta={**meta, "failure": result.get("subtype")})
         if not result or result.get("is_error") or result.get("subtype") != "success":
+            # an API error, a usage limit or a crash: no answer yet, so a later run asks again
             detail = result.get("result") or result.get("subtype") or stderr[-300:]
             return Answer(text=None, seconds=seconds, error=f"no answer: {str(detail)[:300]}", meta=meta)
         return Answer(text=result.get("result") or "", seconds=seconds, meta=meta)

@@ -71,6 +71,27 @@ def test_prompts_with_no_answer_are_kept_as_errors_and_tried_again(fake):
     assert len(fixed.calls) == 4 and summary["complete"] and summary["engine_errors"] == 0
 
 
+def test_a_prompt_the_engine_turns_down_counts_as_no_code(fake):
+    turned_down = Answer(text="", seconds=0.01, error="turned down: blocked", meta={"failure": "turned-down"})
+    script = lambda m: turned_down if "70 mm wide" in m.user else echo_reference(m)  # noqa: E731
+    first = ScriptedEngine(script)
+    summary = run_row(first, "picky", "dev", **fake)
+    # scored, not missing: it is in every rate, and it is not asked again
+    assert summary["complete"] and summary["done"] == 4 and summary["engine_errors"] == 0 and summary["engine_failures_scored"] == 1
+    assert summary["overall"]["compiles"]["k"] == 3 and summary["overall"]["compiles"]["n"] == 4
+    assert summary["overall"]["engine_failures"] == {"turned-down": 1}
+    again = ScriptedEngine(script)
+    run_row(again, "picky", "dev", **fake)
+    assert again.calls == []
+
+
+def test_a_run_stops_when_prompts_keep_being_turned_down(fake):
+    turned_down = Answer(text="", seconds=0.01, error="turned down: blocked", meta={"failure": "turned-down"})
+    engine = ScriptedEngine(lambda m: turned_down)
+    summary = run_row(engine, "setup", "dev", max_errors=2, **fake)
+    assert len(engine.calls) == 2 and summary["done"] == 2 and not summary["complete"]
+
+
 def test_a_resumed_row_must_keep_its_settings(fake):
     run_row(ScriptedEngine(echo_reference), "fixed", "dev", limit=1, **fake)
     changed = ScriptedEngine(echo_reference, settings={"engine": "scripted", "temperature": 0.7})

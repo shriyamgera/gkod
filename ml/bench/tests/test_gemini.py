@@ -87,8 +87,10 @@ def test_gemini_gives_up_or_stops(env_file):
     assert answer.text is None and len(answer.meta["tries"]) == 3
     with pytest.raises(GeminiStop):
         GeminiEngine(env_file=env_file, sender=lambda p, k: (403, {"error": {"message": "API key not valid"}}), sleep=lambda s: None, rpm=0).answer(ZERO)
+    # turned down is an answer with no code, not a missing one, so it counts against the row
     turned_down = GeminiEngine(env_file=env_file, sender=lambda p, k: (400, {"error": {"message": "blocked"}}), sleep=lambda s: None, rpm=0).answer(ZERO)
-    assert turned_down.text is None and len(turned_down.meta["tries"]) == 1
+    assert turned_down.text == "" and turned_down.error == "turned down: blocked"
+    assert turned_down.meta["failure"] == "turned-down" and len(turned_down.meta["tries"]) == 1
 
 
 def test_gemini_keeps_its_rate(env_file, monkeypatch):

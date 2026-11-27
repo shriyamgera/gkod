@@ -66,7 +66,11 @@ def test_claude_code_stops_on_other_tools_or_no_server(mcp_python):
 def test_claude_code_without_an_answer(mcp_python):
     failed = ClaudeCodeEngine(runner=lambda *a: (1, stream(is_error=True, result="usage limit reached"), "")).answer(ZERO)
     assert failed.text is None and "usage limit" in failed.error
+    # out of time or out of turns: the session answered, with no code
     timed_out = ClaudeCodeEngine(runner=lambda *a: (None, [], "timeout")).answer(ZERO)
-    assert timed_out.text is None and "within" in timed_out.error
+    assert timed_out.text == "" and "within" in timed_out.error and timed_out.meta["failure"] == "timeout"
+    lines = [line.replace('"subtype": "error_during_execution"', '"subtype": "error_max_turns"') for line in stream(is_error=True, result=None)]
+    out_of_turns = ClaudeCodeEngine(runner=lambda *a: (1, lines, "")).answer(ZERO)
+    assert out_of_turns.text == "" and out_of_turns.meta["failure"] == "error_max_turns"
     no_start = ClaudeCodeEngine(runner=lambda *a: (1, [], "not logged in")).answer(ZERO)
     assert no_start.text is None and "not logged in" in no_start.error

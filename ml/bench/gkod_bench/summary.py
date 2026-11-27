@@ -60,6 +60,8 @@ def _group(records: list[dict]) -> dict:
         out["edit_same_as_a"] = sum(e["same_as_a"] for e in edits)
         out["edit_same_mesh_as_a"] = sum(bool(e.get("same_mesh_as_a")) for e in edits)
     out["no_code"] = dict(Counter(x["extract"]["problem"] for x in s if not x["extract"]["ok"]))
+    # answers with no code because the engine turned the prompt down, or ran out of time or turns
+    out["engine_failures"] = dict(Counter(r["engine_meta"].get("failure", "other") for r in records if r.get("engine_error")))
     out["check_failures"] = dict(Counter(k for x in compiled for k, ok in (x["checks"] or {}).items() if not ok))
     secs = [r["timings"]["engine_s"] for r in records]
     out["engine_seconds"] = {"mean": sum(secs) / n if n else None, "median": median(secs)}
@@ -87,6 +89,7 @@ def summarize(records: list[dict], expected: list[dict], config: dict) -> dict:
         "done": len(done),
         "missing": len(missing),
         "engine_errors": len(errors),
+        "engine_failures_scored": sum(1 for r in done if r.get("engine_error")),
         "complete": not missing,
         "overall": _group(done) if done else None,
         "tiers": {},

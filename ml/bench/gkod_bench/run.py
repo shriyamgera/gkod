@@ -3,7 +3,9 @@ by code, one record per prompt in results/raw/<row>/<split>/<id>.json, then resu
 
 A run resumes: prompts with a done record are skipped, so a crash, a stop or a --limit stage loses nothing. A
 resumed row must have the same engine settings, few-shot examples and system prompt as when it began. Prompts the
-engine gave no answer for are recorded as errors and tried again by the next run.
+engine gave no answer for, for a reason that passes (a rate limit, a busy server, the network), are recorded as errors
+and tried again by the next run. A prompt the engine turned down, or ran out of time or turns on, is an answer with no
+code: it is scored, and counts in every rate.
 """
 
 from __future__ import annotations
@@ -169,7 +171,7 @@ def run_row(
             write_json(config_path, {**config, "started": datetime.now(UTC).isoformat(timespec="seconds")})
         log(f"{row} on {split}: {len(done)} done before, {len(todo)} to run now, {len(items)} in all")
 
-        errors_in_a_row = 0
+        errors_in_a_row = failures_in_a_row = 0
         for n, item in enumerate(todo, 1):
             if shutil.disk_usage(results.parent if not results.exists() else results).free < MIN_FREE_BYTES:
                 log("Stopping: less than 5 GB of disk is free.")
@@ -206,7 +208,12 @@ def run_row(
             code = scores.pop("code")
             record.update(status="done", code=code, scores=scores, timings={"engine_s": round(answer.seconds, 3), "score_s": scores.pop("score_s")})
             write_json(path, record)
-            log(_line(n, len(todo), item, scores, answer.seconds))
+            log(_line(n, len(todo), item, scores, answer.seconds) + (f" [{answer.error}]" if answer.error else ""))
+            failures_in_a_row = failures_in_a_row + 1 if answer.error else 0
+            if failures_in_a_row >= max_errors:
+                # every prompt turned down or timed out is more likely the setup than the model: stop and look
+                log(f"Stopping: {failures_in_a_row} prompts in a row were turned down or ran out of time ({answer.error}). Check the engine's settings; they are scored as no code.")
+                break
     return write_summary(results, row, split, items, config)
 
 

@@ -113,6 +113,8 @@ class ScriptedEngine:
     def answer(self, messages):
         self.calls.append(messages)
         text = self.script(messages)
+        if isinstance(text, Answer):
+            return text
         if text is Answer:
             return Answer(text=None, seconds=0.01, error="no answer (scripted)")
         return Answer(text=text, seconds=0.01, meta={"generation_tokens": 10})

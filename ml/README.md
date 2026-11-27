@@ -214,9 +214,13 @@ the split it is read from.
   [bench/gkod_bench/extract.py](bench/gkod_bench/extract.py) is a line-for-line copy; the shared cases in
   [bench/tests/fixtures/extract_cases.json](bench/tests/fixtures/extract_cases.json) are checked against the site's own
   code by `npm test` (tools) and against the copy by pytest.
-- **One answer.** Single-shot rows ask once. An answer, once received, is final. A request that got no answer at all
-  (a rate limit, a busy server, a dropped connection) is recorded as an error, not as a wrong answer, and the next run
-  asks again; a run stops after 3 such prompts in a row.
+- **One answer.** Single-shot rows ask once. An answer, once received, is final. A request that got no answer for a
+  reason that passes (a rate or usage limit, a busy server, a dropped connection, a session that did not start) is
+  recorded as an error, not as a wrong answer, and the next run asks again; a run stops after 3 such prompts in a row.
+  A prompt the engine turns down (Gemini's 400, after the try without the thinking setting), or that runs out of time
+  (Claude Code's 900 s) or turns, is the engine's answer: it is scored as no code and counts in every rate, so a row
+  cannot drop the prompts it fails on. Summaries count these as `engine_failures`. A run stops after 3 of them in a
+  row, since that is more likely the setup than the model.
 - **Few-shot.** `--shots 3` puts 3 fixed training examples before the request, as earlier turns: the site's words for
   the example's request, then its code as one block (the way training rows write answers). They are picked by a rule
   written down in [bench/gkod_bench/data.py](bench/gkod_bench/data.py), not by how well they work: for create, the first
@@ -237,7 +241,8 @@ the split it is read from.
   saved with it.
 - **Gemini.** The key is read from `.env` (`GEMINI_API_KEY`) when a request is sent, and is never printed, logged or
   saved. Unlike the site there is no fallback to another model: a row is one model. A 429, 5xx or network failure is
-  sent again after a wait; a wrong key or a model the key cannot use stops the run.
+  sent again after a wait; a wrong key or a model the key cannot use stops the run; a prompt turned down is an answer
+  with no code.
 - **Claude Code.** The session gets the site's system prompt (`--system-prompt`) plus one line saying the tools are
   there and that its last message is read as the answer (`--append-system-prompt`); the request goes in on standard
   input. Built-in tools are off (`--tools ""`), only the GKod server is loaded (`--strict-mcp-config`), no user or
