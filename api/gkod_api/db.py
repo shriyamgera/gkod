@@ -4,6 +4,7 @@ import time
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
+from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from .settings import Settings
@@ -43,12 +44,15 @@ def connect(settings: Settings, wait_s: float = 0) -> psycopg.Connection:
 
 
 def make_pool(settings: Settings) -> AsyncConnectionPool:
-    """A pool that is not open yet. The API opens it on start without waiting for the database."""
+    """A pool that is not open yet. The API opens it on start without waiting for the database.
+
+    Its connections give rows as dicts, and autocommit: the API only reads, one statement at a time.
+    """
     return AsyncConnectionPool(
         settings.database_url,
         min_size=1,
         max_size=settings.pool_max,
-        kwargs=_connect_kwargs(settings),
+        kwargs={**_connect_kwargs(settings), "autocommit": True, "row_factory": dict_row},
         timeout=settings.db_timeout,
         # Throw away connections the server closed, for example after a database restart.
         check=AsyncConnectionPool.check_connection,
