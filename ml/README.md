@@ -157,3 +157,156 @@ model's tokenizer on the benchmark's own prompts), plus 1 s a prompt for scoring
 - Writing 8 answers at once gave 144 tokens/s in a throwaway test, about five times faster. The benchmark answers one
   prompt at a time, so tonight does not use it. Batched answers may not match one-at-a-time greedy answers token for
   token, so it would need its own check before any row used it.
+
+## The benchmark harness
+
+[bench/](bench) is the Python package `gkod_bench`. It runs one row (an engine with fixed settings) over the prompts of a
+frozen split, once each, and scores every answer by code. Engine answers are results only: they go to `results/`
+(git-ignored) and never into any training, dev or test data.
+
+```sh
+# on the Mac (with the local model):
+DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python -m pip install -r ml/requirements.txt -r ml/requirements-dev.txt -e ml/bench
+# anywhere else (Gemini, Claude Code and the tests; numpy only):
+python3.12 -m pip install -r ml/requirements-dev.txt -e ml/bench
+```
+
+It also needs Node 22.18 or later, the repo's Node packages and the OpenSCAD web build (`npm ci`, `npm run
+fetch:openscad`), since compiling and the print checks run in the site's own code through `gkod batch`
+([tools/README.md](../tools/README.md)).
+
+```sh
+ml/.venv/bin/python -m gkod_bench run --engine local|gemini|claude-code [--shots 0|3] [--split dev] [--limit N] [--row NAME]
+ml/.venv/bin/python -m gkod_bench summarize --row NAME [--split dev]
+ml/.venv/bin/python -m gkod_bench rescore --row NAME [--split dev]
+ml/.venv/bin/python -m gkod_bench compare ROW_A ROW_B [--split dev]
+ml/.venv/bin/python -m gkod_bench fewshot
+```
+
+- `run` asks the engine once per prompt and scores the answer. `--limit` runs only the next N prompts, so a row can be
+  run in stages. Running the same command again carries on: prompts with a scored answer are skipped. The prompts come
+  in a fixed mixed order (by the sha256 of their id), so a part-done row already covers every tier.
+- `summarize` writes the summary again from the saved records. `rescore` scores the saved answers again with the
+  current scorer (for a new measurer) without asking the engine. `compare` puts two rows side by side on the prompts
+  both have answered. `fewshot` prints the fixed examples.
+- Other options: `--tiers t1,t3`, `--model` (a local model folder, a Gemini model id or a Claude Code model name),
+  `--adapter` (a trained LoRA folder for the local model), `--max-tokens` (1,024), `--temperature` (0) and `--seed`,
+  `--rpm` (Gemini requests a minute, 10) and `--retries` (4), `--effort` (Claude Code), `--workers` (compiles at once
+  while scoring, 4), `--no-slider-ends`.
+
+**The test split stays closed.** Every command refuses `--split test` unless `--final` is given, before any engine
+starts or any file is read; the data loader refuses it too. Only the day 10 run passes `--final`. A split's files are
+checked against [datagen/sets-v1.sha256](../datagen/sets-v1.sha256) before they are used, and every row must belong to
+the split it is read from.
+
+### The same prompt for every row
+
+- **Words.** Every engine gets the site's system prompt and the site's words for the request (`Make this part: ...`)
+  or the edit (code A, then `Change it like this: ...`). They are read at run time from
+  [app/src/engine/prompts.ts](../app/src/engine/prompts.ts) through `gkod batch`, so there is no copy to drift. The
+  system prompt's sha256 is saved with the row, and a row cannot be resumed with a different one.
+- **Answer.** The code is the first code block, by the site's rule ([app/src/engine/extract.ts](../app/src/engine/extract.ts)).
+  [bench/gkod_bench/extract.py](bench/gkod_bench/extract.py) is a line-for-line copy; the shared cases in
+  [bench/tests/fixtures/extract_cases.json](bench/tests/fixtures/extract_cases.json) are checked against the site's own
+  code by `npm test` (tools) and against the copy by pytest.
+- **One answer.** Single-shot rows ask once. An answer, once received, is final. A request that got no answer at all
+  (a rate limit, a busy server, a dropped connection) is recorded as an error, not as a wrong answer, and the next run
+  asks again; a run stops after 3 such prompts in a row.
+- **Few-shot.** `--shots 3` puts 3 fixed training examples before the request, as earlier turns: the site's words for
+  the example's request, then its code as one block (the way training rows write answers). They are picked by a rule
+  written down in [bench/gkod_bench/data.py](bench/gkod_bench/data.py), not by how well they work: for create, the first
+  spacer, plate and bracket in `train/create.jsonl` with exactly one feature (`s101-000008`, `s101-000090`,
+  `s101-000002`); for edits, the first size, add and remove edits in `train/edit.jsonl` whose code A is at most 40 lines
+  (`e102-000000`, `e102-000006`, `e102-000014`). Their ids and the train file's sha256 go into the row's `run.json`.
+  The site's hand-written examples and anything under `prints/` are never used.
+
+### Engines
+
+| Engine | How it answers | Settings saved with the row |
+|---|---|---|
+| `local` | mlx-lm, the model loaded once, its own chat template, greedy decoding (or a fixed temperature and seed), at most 1,024 answer tokens | model folder, weights sha256, adapter and its sha256, decoding, mlx and mlx-lm versions |
+| `gemini` | the Interactions API with the site's body (system instruction, input, `store: false`, thinking level low); few-shot examples go in as earlier steps (`user_input`, `model_output`) | model id, API, date; each answer keeps its date and the reply's model and token counts |
+| `claude-code` | headless `claude -p`, zero-shot, with the GKod MCP server's compile, check and render tools and no other tool: the "with tools" row, reported apart from the single-shot rows | CLI version, model, effort, the tool list, the one added line, date; each answer keeps its models, turns, tool calls, time and cost |
+
+- **Local.** One prompt at a time. The answer's token counts, speed, peak memory and whether it hit the token limit are
+  saved with it.
+- **Gemini.** The key is read from `.env` (`GEMINI_API_KEY`) when a request is sent, and is never printed, logged or
+  saved. Unlike the site there is no fallback to another model: a row is one model. A 429, 5xx or network failure is
+  sent again after a wait; a wrong key or a model the key cannot use stops the run.
+- **Claude Code.** The session gets the site's system prompt (`--system-prompt`) plus one line saying the tools are
+  there and that its last message is read as the answer (`--append-system-prompt`); the request goes in on standard
+  input. Built-in tools are off (`--tools ""`), only the GKod server is loaded (`--strict-mcp-config`), no user or
+  project settings are read (`--setting-sources local`), and only `compile_part`, `check_part` and `render_part` are
+  allowed: `list_examples` and `preview_example` are denied, because they show the site's hand-written examples. Each
+  answer checks the tool list the session reports and the run stops if anything else is there. It runs on the owner's
+  plan, so run it in stages with `--limit` inside the 5-hour limit.
+
+### Scores, all by code, for every prompt
+
+- **Compiles.** The answer's code compiles with the site's pinned OpenSCAD build and rules: warnings are errors, no
+  `minkowski()` or `text()`, 10 second limit, a non-empty mesh. A compile that hits the limit is compiled once more,
+  alone, so a stall of the machine does not count against the code (both tries are saved).
+- **Passes the print checks.** All four checks for the Anycubic Kobra 2 Neo bed (220 x 220 x 250 mm, 45 degree
+  overhangs). False when it does not compile.
+- **Meets the request.** Each fact the request states is marked pass, fail or unmeasured:
+  - an overall size (a fact with an axis) passes when the answer's bounding box is within 0.5 mm on that axis (x and
+    y for a diameter);
+  - stated hole counts (keys ending in `hole_count`, joined by `slot_count` when needed) are checked with the mesh's
+    genus, its number of through holes. They are measured only when the reference part is one closed body whose genus
+    is exactly the stated total, so the genus is known to count those holes and nothing else, and only when the
+    answer is one closed body too;
+  - every other fact (diameters, spacings, wall thickness, flags) is unmeasured until a measurer exists.
+
+  A prompt meets the request when it compiles and every measured fact passes. With no part every measurable fact fails.
+  A prompt with nothing measured is left out of that rate and counted on its own. Summaries give the measured and
+  unmeasured counts, and the reasons.
+- **Shape overlap.** Voxel intersection over union with the reference part (code B for an edit), after moving each
+  bounding box's min corner to the origin. The voxel size is the longer of the two parts' longest sides divided by 200;
+  a part takes 10 to 50 ms. 0 when there is no part.
+- **Edits: the size block.** The answer's named sizes, read by the compiler as the site's sliders read them, against
+  code B: every kept size has the same name, value and caption; every changed size has its new value; every removed
+  size is gone. Added sizes are only counted, since their names are free. A size left in that no longer does anything
+  counts as not removed.
+- **Slider ends** (extra). The answer is compiled at the min and at the max of each of its named sizes (up to 30).
+
+Every scored prompt also compiles the reference again and saves whether its STL sha256 still matches the set's label.
+
+### Files
+
+| File | Holds |
+|---|---|
+| `results/raw/<row>/<split>/<id>.json` | One prompt: tier, family, the prompt (system sha256, the user words, the few-shot ids), the answer text, the code read from it, the engine's notes, the scores, the times and the harness commit. Written whole or not at all. |
+| `results/<row>/<split>/run.json` | The row: engine settings, few-shot record, system prompt sha256, data files and their sha256, scoring settings, the harness commit at the start. |
+| `results/<row>/<split>/summary.json` | Rates with 95% Wilson intervals overall, per tier (`t1`, `t2`, `t3`, `edit`) and per tier 3 family: compiles, print checks, meets the request, measured facts (by measurer), shape overlap (mean with a normal 95% interval, and median), slider ends, edit size blocks, why answers had no code, which checks failed, time per prompt, tokens or cost. It says how many prompts are done, missing or without an answer, and is marked incomplete until every prompt is scored. |
+| `results/compare/<a>__vs__<b>/<split>.json` | Two rows on the prompts both answered: each rate, the difference A - B with Newcombe's interval for paired rates and the exact McNemar test, and for overlap the mean paired difference with the sign test; overall and per tier. |
+
+### Checked so far
+
+- All 400 dev reference parts, compiled again through `gkod batch`, give the STL sha256 the set recorded.
+- Each reference's own code scored as the answer (30 create rows and 10 edits from dev): all compile, pass the checks,
+  meet the request, overlap 1.0, every slider end compiles and every edit size block is right. Scoring takes about
+  0.7 s a prompt with the slider ends.
+- What can be measured on dev: for create, 914 of the 1,833 stated facts (699 overall sizes and 215 hole counts by
+  genus, which covers 189 of the 191 `hole_count` facts), at least one in every prompt. For edits, 38 of 129, and only
+  27 of the 100 edit prompts state anything measurable, so for edits the size block is the score that matters.
+- Real calls, to prove the adapters (smoke checks in a throwaway folder, not scored rows): the local model on 8 dev
+  prompts, zero-shot (5 compiled; 3 ran to the 1,024-token limit); Gemini 3 calls with gemini-3.1-flash-lite on one
+  create prompt, zero-shot and with 3 examples (both compiled, passed the checks and met the request; the first
+  3-example try was refused because this API version takes earlier turns as steps, now fixed); Claude Code 2 sessions
+  (one only read the session's tool list; on one dev prompt the session had exactly the three GKod tools, compiled,
+  drew and checked the part in 4 turns and 38 s, and its answer compiled, passed the checks and met the request, with
+  an overlap of 0.87).
+
+What these numbers do not show: the facts measured are only overall sizes and hole counts. A part can meet the request
+here and still have holes in the wrong place, the wrong size or a missing feature that has no count; the shape overlap
+is the score that catches some of that. Overall sizes are checked on the axis the request states, so a correct part
+drawn turned on its side fails them. Every prompt, test included, comes from our own generator.
+
+`pytest ml/bench` covers the scorer on hand-made meshes (blocks of unit cubes with 0 to 4 through holes, two pieces, a
+hidden hollow, open and flipped faces) and on hand-written code through the real compiler (full marks for the
+reference, a wrong size and a missing hole, no code, broken code, a slider end that breaks the part, an edit, a
+timeout tried again), the extractor cases, the intervals and paired tests, the data loader and its hash and split
+checks, the few-shot rule, a whole row on a small hand-made set, resuming after a stop or after errors, a resumed row
+with other settings, few-shot turns, the comparison, the closed test split in every command, and the Gemini and Claude
+Code adapters against recorded replies (no real calls). With `GKOD_BENCH_LOCAL=1` it also loads the local model and
+checks that greedy answers repeat exactly.

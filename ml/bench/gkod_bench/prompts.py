@@ -15,7 +15,7 @@ from gkod_bench.gkod import Gkod
 @dataclass(frozen=True)
 class Messages:
     system: str
-    # alternating user and assistant turns, ending with the user's request
+    # the turns in order (examples first, if any), ending with the request
     turns: list[dict] = field(default_factory=list)
     shots: tuple[str, ...] = ()
 
