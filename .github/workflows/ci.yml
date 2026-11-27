@@ -82,9 +82,17 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: mcp/requirements-dev.txt
+          cache-dependency-path: |
+            mcp/requirements-dev.txt
+            bridge/requirements-dev.txt
 
       - name: Test the MCP server
         run: |
           python -m pip install -r mcp/requirements-dev.txt -e mcp
           python -m pytest -q mcp
+
+      # The bridge's tests use a fake claude command, so no Claude Code login or plan is needed here.
+      - name: Test the Claude Code bridge
+        run: |
+          python -m pip install -r bridge/requirements-dev.txt -e bridge
+          python -m pytest -q bridge
