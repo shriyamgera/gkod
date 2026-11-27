@@ -63,7 +63,7 @@ export const ALLOWED: Record<BodyKind, { features: FeatureKind[]; faces: Record<
     features: ['holes', 'slots', 'pocket', 'ribs', 'bosses', 'lip', 'notch'],
     faces: { top: ['center', 'pair', 'row', 'corners', 'grid'] },
   },
-  box: { features: ['holes', 'tabs', 'dividers'], faces: { floor: ['center', 'row', 'corners', 'grid'] } },
+  box: { features: ['holes', 'tabs', 'dividers'], faces: { floor: ['center', 'pair', 'row', 'corners', 'grid'] } },
   angle: {
     features: ['holes', 'slots', 'gussets'],
     faces: { base: ['center', 'pair', 'row'], upright: ['center', 'pair', 'row'] },
