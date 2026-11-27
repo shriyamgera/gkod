@@ -5,7 +5,14 @@ export const BRIDGE_URL = 'http://127.0.0.1:8765';
 export const SEEN_KEY = 'gkod.bridgeSeen';
 const HEALTH_TIMEOUT_MS = 2500;
 
-export type BridgeHealth = { claudeFound: boolean; claudeVersion: string | null; loggedIn: boolean | null; busy: boolean };
+// toolsFound: whether the bridge has GKod's MCP tools to test the part with (null: an answer that does not say)
+export type BridgeHealth = {
+  claudeFound: boolean;
+  claudeVersion: string | null;
+  loggedIn: boolean | null;
+  toolsFound: boolean | null;
+  busy: boolean;
+};
 
 export type BridgeState =
   | { status: 'unknown' | 'checking' | 'absent' }
@@ -38,6 +45,7 @@ export async function fetchHealth(
       claudeFound: data.claude_found === true,
       claudeVersion: typeof data.claude_version === 'string' ? data.claude_version : null,
       loggedIn: typeof data.logged_in === 'boolean' ? data.logged_in : null,
+      toolsFound: typeof data.tools_found === 'boolean' ? data.tools_found : null,
       busy: data.busy === true,
     };
   } catch {

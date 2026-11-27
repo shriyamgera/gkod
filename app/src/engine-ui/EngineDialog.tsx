@@ -13,6 +13,7 @@ import {
 } from '../engine';
 import { KeyPanel } from './KeyPanel';
 import { PairingPanel } from './PairingPanel';
+import { bridgeProblem } from './rules';
 import './engine-ui.css';
 
 type Props = { open: boolean; onClose: () => void };
@@ -170,11 +171,7 @@ function BridgeLine({ bridge, engine }: { bridge: BridgeState; engine: EngineId 
   if (bridge.status === 'found') {
     const { health } = bridge;
     if (engine !== 'claude-code') return <p role="status" className="visually-hidden">GKod bridge found on this computer</p>;
-    const problem = !health.claudeFound
-      ? 'The bridge cannot find Claude Code on this Mac.'
-      : health.loggedIn === false
-        ? 'Claude Code is not logged in on this Mac. Run claude in a terminal and log in.'
-        : null;
+    const problem = bridgeProblem(health);
     return (
       <p role="status" className={problem ? 'key-message bridge-line' : 'muted bridge-line'}>
         {problem ?? `Bridge found: Claude Code ${health.claudeVersion ?? ''}${health.busy ? ', busy with another part' : ''}.`}

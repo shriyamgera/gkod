@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bridgeProblem,
   chips,
   isSubmitKey,
   keyHint,
@@ -165,5 +166,20 @@ describe('pairingRememberMessage', () => {
     for (const change of ['new-code', 'box'] as const) {
       for (const remembered of [true, false]) expect(pairingRememberMessage(change, true, remembered)).not.toContain('device');
     }
+  });
+});
+
+describe('bridgeProblem', () => {
+  const ready = { claudeFound: true, claudeVersion: '2.1.276', loggedIn: true, toolsFound: true, busy: false };
+
+  it('is nothing when the bridge can make parts', () => {
+    expect(bridgeProblem(ready)).toBeNull();
+    expect(bridgeProblem({ ...ready, loggedIn: null, toolsFound: null })).toBeNull();
+  });
+
+  it('says what is missing, the most basic first', () => {
+    expect(bridgeProblem({ ...ready, claudeFound: false, toolsFound: false })).toContain('cannot find Claude Code');
+    expect(bridgeProblem({ ...ready, loggedIn: false })).toContain('not logged in');
+    expect(bridgeProblem({ ...ready, toolsFound: false })).toContain('GKod’s tools');
   });
 });

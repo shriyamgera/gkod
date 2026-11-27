@@ -1,3 +1,5 @@
+import type { BridgeHealth } from '../engine';
+
 export const chips = ['Phone stand', 'Wall hook with two screw holes', 'Cable clip'];
 
 export const PHOTO_ONLY_REQUEST = 'The part in this picture';
@@ -83,3 +85,13 @@ export function pairingRememberMessage(change: 'new-code' | 'box', asked: boolea
 
 // What the status line says while Claude Code works, under the step it is on.
 export const CLAUDE_SLOW_NOTE = 'Claude Code tests the part with GKod’s tools before it answers, so this can take a minute or two.';
+
+// What stops the bridge from making a part, in plain words, or null.
+export function bridgeProblem(health: BridgeHealth): string | null {
+  if (!health.claudeFound) return 'The bridge cannot find Claude Code on this Mac.';
+  if (health.loggedIn === false) return 'Claude Code is not logged in on this Mac. Run claude in a terminal and log in.';
+  if (health.toolsFound === false) {
+    return 'The bridge cannot find GKod’s tools on this Mac, so Claude Code could not test the part. Set up mcp/ (see mcp/README.md) and restart the bridge.';
+  }
+  return null;
+}

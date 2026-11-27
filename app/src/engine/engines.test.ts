@@ -127,8 +127,11 @@ describe('looking for the bridge', () => {
       claudeFound: true,
       claudeVersion: '2.1.276',
       loggedIn: true,
+      toolsFound: null,
       busy: false,
     });
+    expect((await fetchHealth(answering({ ...health, tools_found: false }), 'http://bridge.test'))?.toolsFound).toBe(false);
+    expect((await fetchHealth(answering({ ...health, tools_found: true }), 'http://bridge.test'))?.toolsFound).toBe(true);
   });
 
   it('counts no answer, an error or a strange answer as no bridge', async () => {
