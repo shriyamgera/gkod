@@ -8,7 +8,8 @@ export class UsageError extends Error {}
 export const USAGE = `Usage:
   gkod compile <file.scad|-> [-o out.stl] [-D name=value ...] [--json]
   gkod check <file.stl> [--printer ${Object.keys(PRINTERS).join('|')} | --bed 220x220x250] [--json]
-  gkod render <file.stl|file.scad> [-o out.png] [--size 900] [--view ${VIEWS.join('|')}] [--mark-overhangs] [-D name=value ...] [--json]`;
+  gkod render <file.stl|file.scad> [-o out.png] [--size 900] [--view ${VIEWS.join('|')}] [--mark-overhangs] [-D name=value ...] [--json]
+  gkod batch [--workers 4] [--printer ${Object.keys(PRINTERS).join('|')} | --bed 220x220x250]   (jobs as JSON lines on standard input)`;
 
 export type CompileArgs = {
   command: 'compile';
@@ -38,7 +39,15 @@ export type RenderArgs = {
   json: boolean;
 };
 
-export type Args = { command: 'help' } | CompileArgs | CheckArgs | RenderArgs;
+export type BatchArgs = {
+  command: 'batch';
+  // compiles run at the same time
+  workers: number;
+  printer: string;
+  bed: Bed;
+};
+
+export type Args = { command: 'help' } | CompileArgs | CheckArgs | RenderArgs | BatchArgs;
 
 const NAME = /^[A-Za-z_]\w*$/;
 
@@ -152,6 +161,20 @@ export function parseCommand(argv: string[]): Args {
       defines: parseDefines(values.define as string[] | undefined),
       json: values.json === true,
     };
+  }
+  if (command === 'batch') {
+    const { values, positionals } = read(rest, {
+      workers: { type: 'string', default: '4' },
+      printer: { type: 'string' },
+      bed: { type: 'string' },
+    });
+    if (positionals.length) throw new UsageError('batch reads its jobs from standard input, not from files.');
+    const workers = Number(values.workers);
+    if (!Number.isInteger(workers) || workers < 1 || workers > 32) {
+      throw new UsageError(`--workers takes a whole number from 1 to 32, not "${values.workers}".`);
+    }
+    const picked = pickPrinter(values.printer as string | undefined, values.bed as string | undefined);
+    return { command, workers, ...picked };
   }
   throw new UsageError(`Unknown command "${command}".`);
 }

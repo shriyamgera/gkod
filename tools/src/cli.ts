@@ -1,7 +1,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { checkStl } from '@gkod/checks';
 import { parseStl } from '../../app/src/viewer/stl.ts';
-import { type CheckArgs, type CompileArgs, parseCommand, type RenderArgs, USAGE, UsageError } from './args.ts';
+import { type BatchArgs, type CheckArgs, type CompileArgs, parseCommand, type RenderArgs, USAGE, UsageError } from './args.ts';
+import { runBatch } from './batch.ts';
 import { bedText, reportLines } from './check.ts';
 import { compileScad } from './compile.ts';
 import { PRINTERS } from './printers.ts';
@@ -17,6 +19,7 @@ export async function main(argv: string[]): Promise<number> {
     }
     if (args.command === 'check') return checkCommand(args);
     if (args.command === 'render') return await renderCommand(args);
+    if (args.command === 'batch') return await batchCommand(args);
     return await compileCommand(args);
   } catch (error) {
     if (error instanceof UsageError) {
@@ -98,5 +101,14 @@ async function renderCommand(args: RenderArgs): Promise<number> {
   } else {
     console.log(`${args.out}: ${args.view} view, ${size.join(' x ')} mm, ${picture.triangles} triangles${marked.length ? `, ${marked.length} marked` : ''}`);
   }
+  return 0;
+}
+
+// Jobs as JSON lines on standard input, one reply line per job on standard output, until the input ends.
+async function batchCommand(args: BatchArgs): Promise<number> {
+  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  await runBatch(lines, (line) => process.stdout.write(`${line}\n`), { workers: args.workers, bed: args.bed });
+  // a pipe on macOS is written in the background; wait for it before the process exits
+  await new Promise((resolve) => process.stdout.write('', resolve));
   return 0;
 }
