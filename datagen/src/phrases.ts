@@ -375,7 +375,9 @@ export function featurePhrase(say: Say, f: Feature): Phrase | null {
         : np(`${count(s, f.count + 1)} compartments`, many('compartment_count', f.count + 1));
     case 'gussets':
       if (say.tree.family === 'shelf' || say.tree.family === 'tool_holder') {
-        return np(`${count(s, f.count)} ${rng.pick(['gussets underneath', 'support gussets', 'gussets at the ends'])}`, many('gusset_count', f.count));
+        // a shelf hangs with its back below it, so its gussets are underneath; a tool holder's back rises from its shelf
+        const where = say.tree.family === 'shelf' ? ['gussets underneath', 'support gussets', 'gussets at the ends'] : ['support gussets', 'gussets at the ends'];
+        return np(`${count(s, f.count)} ${rng.pick(where)}`, many('gusset_count', f.count));
       }
       return np(f.count === 1 ? `a ${rng.pick(['gusset', 'reinforcing gusset'])}` : `${count(s, 2)} gussets`, many('gusset_count', f.count));
     case 'flange': {
