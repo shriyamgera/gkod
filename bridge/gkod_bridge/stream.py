@@ -23,6 +23,8 @@ MESSAGES = {
     "usage-limit": "Your Claude plan's usage limit is reached. Try again when it resets.",
     "timeout": "Claude Code took longer than 5 minutes, so it was stopped. Try again, or ask for a simpler part.",
     "no-code": "Claude Code did not send any OpenSCAD code. Try again, or say it another way.",
+    "tools-missing": "GKod's tools are not set up on this Mac, so Claude Code could not test the part. Set up mcp/ (see mcp/README.md), or start the bridge with GKOD_MCP_PYTHON set to its Python.",
+    "tools-failed": "GKod's tools did not start on this Mac, so Claude Code could not test the part. Check mcp/ (see mcp/README.md), then restart the bridge.",
     "stopped": "Stopped.",
     "failed": "Claude Code stopped with an error. Try again.",
 }
@@ -72,6 +74,22 @@ def shows_problem(tool: str, text: str, is_error: bool) -> bool:
     return False
 
 
+# The GKod server's status in the init line when its tools can be used. "pending" (still starting) is let through, so
+# a slow start is not taken for a failure; "failed", "needs-auth", "disabled" or no gkod server at all stop the job.
+TOOLS_UP = ("connected", "pending")
+
+
+def tools_status(line: dict[str, Any]) -> str | None:
+    """The gkod server's status in an init line, "missing" if it is not listed, None if the line lists no servers."""
+    servers = line.get("mcp_servers")
+    if not isinstance(servers, list):
+        return None
+    for server in servers:
+        if isinstance(server, dict) and server.get("name") == MCP_SERVER_NAME:
+            return str(server.get("status"))
+    return "missing"
+
+
 class StreamParser:
     """Fed one parsed stream-json line at a time; returns the new progress steps for each."""
 
@@ -85,6 +103,8 @@ class StreamParser:
         self._last: str | None = None
         # set when Claude Code says the plan's limit refused the request: the reset time, or 0 if not given
         self.limit_resets_at: int | None = None
+        # set when the init line says GKod's tools did not start; the job is stopped, not left to answer untested
+        self.tools_failed = False
 
     def _step(self, step: str | None) -> list[str]:
         if not step or step == self._last:
@@ -99,6 +119,10 @@ class StreamParser:
         if kind == "system" and line.get("subtype") == "init":
             if isinstance(line.get("model"), str):
                 self.model = line["model"]
+            status = tools_status(line)
+            if status is not None and status not in TOOLS_UP:
+                self.tools_failed = True
+                return []
             return self._step(WRITING)
         if kind == "assistant":
             message = line.get("message") or {}
@@ -147,6 +171,8 @@ class StreamParser:
         return None
 
     def outcome(self, returncode: int | None, stderr: str) -> Answer | Failure:
+        if self.tools_failed:
+            return Failure("tools-failed", MESSAGES["tools-failed"])
         result = self.result
         text = result.get("result") if result else None
         text = text if isinstance(text, str) else ""

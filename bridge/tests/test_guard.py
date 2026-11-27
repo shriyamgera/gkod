@@ -17,6 +17,7 @@ def test_health_needs_no_pairing(bridge):
     assert body["claude_found"] is True
     assert body["claude_version"] == "2.1.0"
     assert body["logged_in"] is True
+    assert body["tools_found"] is True
     assert body["busy"] is False
     # nothing about the account is passed on
     assert "email" not in response.text and "example.com" not in response.text

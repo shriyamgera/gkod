@@ -185,6 +185,10 @@ class Job:
         if not claude:
             self.fail("claude-missing")
             return
+        # without GKod's tools Claude Code would answer without compiling, checking or looking at the part
+        if not self.settings.mcp_python.is_file():
+            self.fail("tools-missing")
+            return
         sessions = self.runner.sessions
         resume = self.req.session_id
         # Only a session this bridge made (one in its own sessions.json) is continued, never another of the
@@ -257,6 +261,9 @@ class Job:
                 if isinstance(item, dict):
                     for step in parser.feed(item):
                         self.emit("progress", {"step": step})
+                    if parser.tools_failed:
+                        # no point letting it answer untested; the process tree is stopped when the job ends
+                        return parser.outcome(None, "")
             returncode = await proc.wait()
             self.proc = None
             return parser.outcome(returncode, await stderr)

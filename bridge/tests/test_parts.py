@@ -180,3 +180,40 @@ def test_a_tool_result_given_as_plain_text_is_read_too():
     lines = [init(), tool_use("a", "compile_part", {"code": "x"}), failed, tool_use("b", "compile_part", {"code": "y"})]
     _, seen = feed_all(lines)
     assert seen == ["Writing the part", "Compiling", "Fixing"]
+
+
+def test_the_gkod_tools_status_in_the_init_line():
+    for status, failed in (("connected", False), ("pending", False), ("failed", True), ("needs-auth", True), ("disabled", True)):
+        parser, seen = feed_all([init(mcp_status=status)])
+        assert parser.tools_failed is failed, status
+        assert seen == ([] if failed else ["Writing the part"])
+    # no gkod server listed at all
+    line = init()
+    line["mcp_servers"] = [{"name": "other", "status": "connected"}]
+    assert feed_all([line])[0].tools_failed is True
+    # an init line that lists no servers says nothing either way
+    del line["mcp_servers"]
+    assert feed_all([line])[0].tools_failed is False
+
+
+def test_tools_that_did_not_start_win_over_any_answer():
+    lines = [init(mcp_status="failed"), *good_lines()[1:]]
+    parser, _ = feed_all(lines)
+    outcome = parser.outcome(0, "")
+    assert isinstance(outcome, Failure) and outcome.problem == "tools-failed"
+
+
+def test_the_main_checkout_is_found_from_a_linked_worktree(tmp_path):
+    from gkod_bridge.config import main_checkout
+
+    main = tmp_path / "gkod"
+    (main / ".git" / "worktrees" / "gkod-cc").mkdir(parents=True)
+    (main / ".git" / "worktrees" / "gkod-cc" / "commondir").write_text("../..\n")
+    linked = tmp_path / "gkod-cc"
+    linked.mkdir()
+    (linked / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'gkod-cc'}\n")
+    assert main_checkout(linked) == main.resolve()
+    # the main checkout itself, and a folder that is no checkout
+    assert main_checkout(main) is None
+    assert main_checkout(tmp_path) is None
+

@@ -23,7 +23,7 @@ Settings, all optional:
 | Variable | What it does |
 |---|---|
 | `GKOD_CLAUDE` | Path of the `claude` command. Without it the bridge looks on the `PATH`, then in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. |
-| `GKOD_MCP_PYTHON` | The MCP server's Python. Default: `mcp/.venv/bin/python` in this checkout. |
+| `GKOD_MCP_PYTHON` | The MCP server's Python. Default: `mcp/.venv/bin/python` in this checkout, or, in a linked git worktree without one, in the main checkout. |
 | `GKOD_BRIDGE_WORK` | Where job folders go. Default: `gkod-bridge` in the system temp folder. A folder inside the repository is refused. |
 | `GKOD_BRIDGE_PAIRING_FILE` | Where the pairing code is kept. Default: `bridge/.pairing` (git-ignored). |
 
@@ -63,9 +63,11 @@ The answer is a stream of Server-Sent Events:
 
 - `progress` `{"step": ...}`: plain steps from the tool calls: "Writing the part", "Compiling", "Checking", "Looking at the picture", "Fixing" (a compile after a failed compile or check), "Looking at the examples", "Starting a new session".
 - `final` `{"code", "assumptions", "session_id", "resumed", "model", "ms", "turns"}`.
-- `error` `{"problem", "message"}`, with `problem` one of `claude-missing`, `not-logged-in`, `usage-limit`, `timeout`, `no-code`, `stopped`, `failed`, and a plain message.
+- `error` `{"problem", "message"}`, with `problem` one of `claude-missing`, `tools-missing`, `tools-failed`, `not-logged-in`, `usage-limit`, `timeout`, `no-code`, `stopped`, `failed`, and a plain message.
 
-`GET /health` answers `{"ok", "bridge", "claude_found", "claude_version", "logged_in", "busy"}`. Only the logged-in flag is read from `claude auth status`; nothing about the account is passed on.
+A job never runs without GKod's tools, since Claude Code would then answer without compiling, checking or looking at the part. If the MCP server's Python is missing, the job is refused at once (`tools-missing`). If Claude Code's first line says the `gkod` server did not connect (`failed`, `needs-auth`, or not listed), the job is stopped there (`tools-failed`).
+
+`GET /health` answers `{"ok", "bridge", "claude_found", "claude_version", "logged_in", "tools_found", "busy"}`; `tools_found` says whether the MCP server's Python is there. Only the logged-in flag is read from `claude auth status`; nothing about the account is passed on.
 
 ## Privacy and training
 

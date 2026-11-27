@@ -213,7 +213,8 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
-        return {"ok": True, "bridge": __version__, **(await info.get()), "busy": runner.busy}
+        tools_found = settings.mcp_python.is_file()
+        return {"ok": True, "bridge": __version__, **(await info.get()), "tools_found": tools_found, "busy": runner.busy}
 
     @app.post("/run", response_model=None)
     async def run(body: RunBody) -> StreamingResponse | JSONResponse:

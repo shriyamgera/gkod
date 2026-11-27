@@ -268,3 +268,31 @@ def test_a_work_folder_inside_the_repo_is_refused(monkeypatch):
     monkeypatch.setenv("GKOD_BRIDGE_WORK", str(REPO / "bridge" / "work"))
     with pytest.raises(ValueError):
         default_work_root()
+
+
+def test_a_job_is_refused_when_the_gkod_tools_are_not_set_up(bridge, tmp_path):
+    bridge.settings.mcp_python = tmp_path / "no-such-mcp" / "python"
+    with bridge.client() as client:
+        assert client.get("/health").json()["tools_found"] is False
+    events = run(bridge, CREATE)
+    event, data = last(events)
+    assert event == "error" and data["problem"] == "tools-missing"
+    assert "GKod's tools are not set up" in data["message"]
+    assert bridge.fake.calls() == []
+
+
+def test_a_job_stops_at_once_when_the_gkod_tools_did_not_start(bridge):
+    # Claude Code would go on and answer without the tools; the bridge stops it after the init line
+    for status in ("failed", "needs-auth"):
+        bridge.use({"lines": [init(mcp_status=status)], "hang": True})
+        began = time.monotonic()
+        events = run(bridge, CREATE)
+        assert time.monotonic() - began < 8
+        assert steps(events) == []
+        event, data = last(events)
+        assert event == "error" and data["problem"] == "tools-failed", status
+        assert "did not start" in data["message"]
+    pids = [call["pid"] for call in bridge.fake.calls() if "pid" in call]
+    pids += [call["grandchild"] for call in bridge.fake.calls() if "grandchild" in call]
+    assert pids and wait_until(lambda: not any(alive(pid) for pid in pids), 5)
+

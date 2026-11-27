@@ -38,14 +38,14 @@ difference() {
 
 
 # Stream-json lines in the shape Claude Code prints them, written by hand.
-def init(session: str = SESSION, model: str = MODEL) -> dict[str, Any]:
+def init(session: str = SESSION, model: str = MODEL, mcp_status: str = "connected") -> dict[str, Any]:
     return {
         "type": "system",
         "subtype": "init",
         "cwd": "/tmp/job",
         "session_id": session,
         "tools": [f"mcp__gkod__{t}" for t in ("list_examples", "compile_part", "check_part", "render_part", "preview_example")],
-        "mcp_servers": [{"name": "gkod", "status": "connected"}],
+        "mcp_servers": [{"name": "gkod", "status": mcp_status, "source": "dynamic"}],
         "model": model,
         "permissionMode": "dontAsk",
         "apiKeySource": "none",
@@ -178,12 +178,17 @@ def bridge(tmp_path: Path):
     fake = Fake(tmp_path / "fake")
     fake.folder.mkdir()
     port = free_port()
+    # stands in for the MCP server's Python: it only has to exist, since the fake claude never starts it
+    mcp_python = tmp_path / "mcp" / ".venv" / "bin" / "python"
+    mcp_python.parent.mkdir(parents=True)
+    mcp_python.write_text("#!/bin/sh\nexit 1\n")
+    mcp_python.chmod(0o755)
     settings = Settings(
         pairing_code=CODE,
         port=port,
         timeout_s=20,
         claude_path=fake.make({"lines": good_lines()}),
-        mcp_python=Path("/opt/gkod/mcp/.venv/bin/python"),
+        mcp_python=mcp_python,
         work_root=tmp_path / "work",
         attach_timeout_s=5,
         heartbeat_s=0.5,

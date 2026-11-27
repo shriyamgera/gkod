@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,10 +31,35 @@ MCP_SERVER_NAME = "gkod"
 MCP_TOOLS = ("list_examples", "compile_part", "check_part", "render_part", "preview_example")
 
 
+def main_checkout(repo: Path = REPO) -> Path | None:
+    """The main checkout, when this one is a linked git worktree (its .git is a file that points into the main
+    checkout's .git folder). None for the main checkout itself."""
+    try:
+        text = (repo / ".git").read_text()
+    except OSError:
+        return None
+    found = re.match(r"gitdir:\s*(.+)", text.strip())
+    if not found:
+        return None
+    gitdir = (repo / found.group(1).strip()).resolve()
+    try:
+        common = (gitdir / (gitdir / "commondir").read_text().strip()).resolve()
+    except OSError:
+        return None
+    return common.parent if common.name == ".git" else None
+
+
 def default_mcp_python() -> Path:
-    """The GKod MCP server's Python: GKOD_MCP_PYTHON, or the virtualenv in this checkout's mcp/ folder."""
+    """The GKod MCP server's Python: GKOD_MCP_PYTHON, else the virtualenv in this checkout's mcp/ folder, else (in a
+    linked git worktree) the one in the main checkout, where the MCP server is set up."""
     chosen = os.environ.get("GKOD_MCP_PYTHON")
-    return Path(chosen).expanduser() if chosen else REPO / "mcp" / ".venv" / "bin" / "python"
+    if chosen:
+        return Path(chosen).expanduser()
+    here = REPO / "mcp" / ".venv" / "bin" / "python"
+    main = main_checkout()
+    if not here.is_file() and main and (main / "mcp" / ".venv" / "bin" / "python").is_file():
+        return main / "mcp" / ".venv" / "bin" / "python"
+    return here
 
 
 def default_pairing_file() -> Path:
