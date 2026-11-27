@@ -62,8 +62,9 @@ export function compose(tree: Tree, model: Model, rng: Rng): Request {
     const lead = `${article(ordered[0]!)} ${ordered[0]} ${named}`;
     text = [`${ask}${ask ? lead : cap(lead)}`, ...ordered.slice(1), withPart].filter(Boolean).join(', ');
   } else if (form === 2 && things.length) {
-    // "Make a mounting plate with four holes in the corners, 80 mm wide and 50 mm deep"
-    const lead = `${article(noun)} ${named} ${withPart}`;
+    // "Make a mounting plate with four holes in the corners, 80 mm wide and 50 mm deep"; a comma after what the part
+    // is for, so "a clip for a 6 mm cable, with two holes" does not give the holes to the cable
+    const lead = `${article(noun)} ${named}${named === noun ? '' : ','} ${withPart}`;
     text = `${ask}${ask ? lead : cap(lead)}, ${list(ordered)}`;
   } else {
     // "I need a mounting plate, 80 mm wide and 50 mm deep, with ..."
