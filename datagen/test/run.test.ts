@@ -1,10 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
-import { parseOptions, UsageError } from '../src/cli.ts';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { main, parseOptions, UsageError } from '../src/cli.ts';
 import { REPO } from '../src/git.ts';
-import { canonical, type Row, run, treeHash } from '../src/run.ts';
+import { BUILD_MISSING, buildSha256, canonical, type Row, run, treeHash } from '../src/run.ts';
 
 const generator = { name: 'gkod-datagen', version: '0.1.0', commit: 'test', dirty: false };
 const dirs: string[] = [];
@@ -71,6 +71,23 @@ describe('tree hash', () => {
     const same = { features: [], body: { depth: 50, width: 80, kind: 'plate' }, family: 'test' };
     expect(treeHash(same as never)).toBe(treeHash(tree as never));
     expect(treeHash({ ...tree, family: 'other' } as never)).not.toBe(treeHash(tree as never));
+  });
+});
+
+describe('a missing OpenSCAD build', () => {
+  const nowhere = new URL('file:///gkod-no-such-folder/');
+
+  it('stops before anything is written', async () => {
+    expect(() => buildSha256(nowhere)).toThrow(BUILD_MISSING);
+    const out = join(REPO, 'data/parts/never-made-by-a-test');
+    const said = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await main(['--count', '3', '--out', out], nowhere)).toBe(2);
+      expect(said).toHaveBeenCalledWith(BUILD_MISSING);
+    } finally {
+      said.mockRestore();
+    }
+    expect(existsSync(out)).toBe(false);
   });
 });
 

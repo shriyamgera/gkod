@@ -1,7 +1,7 @@
 // One generator run: trees, requests and code from part 0 up until `count` parts are made, compiled and checked in
 // parallel, written in index order so the same seed and commit always give the same parts.jsonl.
 import { createHash } from 'node:crypto';
-import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkStl, type Report } from '@gkod/checks';
 import { BUILD_DIR, compileScad, TIME_LIMIT_MS } from '../../tools/src/compile.ts';
@@ -67,6 +67,15 @@ export function canonical(value: unknown): string {
 export const treeHash = (tree: Tree) => sha256(canonical(tree));
 
 export const DUPLICATE = 'The same part was already made earlier in this run.';
+
+export const BUILD_MISSING = 'The OpenSCAD web build is missing. Run: npm run fetch:openscad';
+
+/** The sha256 of the OpenSCAD build, or an error saying how to get it. */
+export function buildSha256(dir: URL = BUILD_DIR): string {
+  const wasm = new URL('openscad.wasm', dir);
+  if (!existsSync(wasm)) throw new Error(BUILD_MISSING);
+  return sha256(readFileSync(wasm));
+}
 
 /** Everything about part `index` that needs no compiler. */
 export function plan(seed: number, index: number, generator: Source): Planned {
@@ -174,6 +183,8 @@ export type RunOptions = { count: number; seed: number; out: string; workers: nu
 
 /** Writes parts.jsonl, skipped.jsonl, timings.jsonl and manifest.json into `out`. */
 export async function run(opts: RunOptions): Promise<Manifest> {
+  // read first, so a missing build stops the run before any file is written
+  const wasm = buildSha256();
   mkdirSync(opts.out, { recursive: true });
   const files = {
     parts: openSync(join(opts.out, 'parts.jsonl'), 'w'),
@@ -276,7 +287,7 @@ export async function run(opts: RunOptions): Promise<Manifest> {
       hardwarnings: true,
       fn: FN,
     },
-    compiler: { wasm_sha256: sha256(readFileSync(new URL('openscad.wasm', BUILD_DIR))) },
+    compiler: { wasm_sha256: wasm },
     files: {
       'parts.jsonl': { ...sizes.parts, sha256: hashes.parts.digest('hex') },
       'skipped.jsonl': { ...sizes.skipped, sha256: hashes.skipped.digest('hex') },

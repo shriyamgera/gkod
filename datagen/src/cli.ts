@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { REPO, sourceOf } from './git.ts';
-import { run } from './run.ts';
+import { BUILD_DIR } from '../../tools/src/compile.ts';
+import { BUILD_MISSING, run } from './run.ts';
 
 export const USAGE = `Usage: gkod-datagen --count 1000 --seed 1 --out data/parts/<name> [--workers 8]
 
@@ -39,7 +40,7 @@ export function parseOptions(argv: string[], cwd = process.cwd()): Options {
   };
 }
 
-export async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[], build: URL = BUILD_DIR): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
     console.log(USAGE);
     return 0;
@@ -50,6 +51,10 @@ export async function main(argv: string[]): Promise<number> {
   } catch (error) {
     if (!(error instanceof UsageError)) throw error;
     console.error(`${error.message}\n\n${USAGE}`);
+    return 2;
+  }
+  if (!existsSync(new URL('openscad.wasm', build))) {
+    console.error(BUILD_MISSING);
     return 2;
   }
   if (existsSync(join(options.out, 'parts.jsonl'))) {
