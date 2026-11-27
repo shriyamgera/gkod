@@ -32,6 +32,17 @@ describe('families', () => {
     expect(kinds.size).toBeGreaterThan(0);
   });
 
+  it('gives every bracket and wall hook a way to screw it on', () => {
+    const rng = new Rng(8);
+    for (const id of ['bracket', 'hook']) {
+      for (let i = 0; i < 400; i++) {
+        const tree = findFamily(id)!.sample(rng.child(i));
+        if (validate(tree).length) continue;
+        expect(tree.features.some((f) => f.kind === 'holes' || f.kind === 'slots'), JSON.stringify(tree)).toBe(true);
+      }
+    }
+  });
+
   it('picks every family over a run', () => {
     const run = new Rng(1);
     const seen = new Set(Array.from({ length: 200 }, (_, i) => sampleTree(run.child(i)).family));

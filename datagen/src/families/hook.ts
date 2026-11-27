@@ -10,7 +10,6 @@ export const hook = {
   reach: [18, 55],
   tipMore: [4, 20],
   plate: [60, 120],
-  holes: 0.9,
   patterns: ['pair', 'pair', 'center'] as const,
   countersink: 0.6,
 } as const;
@@ -23,10 +22,11 @@ export function sampleHook(rng: Rng): Tree {
   const tip = rng.size(Math.ceil(thickness) + f.tipMore[0], Math.ceil(thickness) + f.tipMore[1]);
   const plate = rng.size(f.plate[0], f.plate[1]);
   const features: Feature[] = [];
-  if (rng.chance(f.holes)) {
-    const start = Math.max(tip, thickness + (reach - 2 * thickness) / 3) + 1;
-    const holes = screwHoles(rng, 'plate', f.patterns, plate - start, width, thickness, f.countersink, 5);
-    if (holes) features.push(holes);
-  }
+  // a wall hook is screwed on: when the picked holes do not fit, one small plain hole goes in the middle
+  const start = Math.max(tip, thickness + (reach - 2 * thickness) / 3) + 1;
+  const holes =
+    screwHoles(rng, 'plate', f.patterns, plate - start, width, thickness, f.countersink, 5) ??
+    screwHoles(rng, 'plate', ['center'], plate - start, width, thickness, 0, 4);
+  if (holes) features.push(holes);
   return { family: f.id, body: { kind: 'hook', width, plate, reach, tip, thickness }, features };
 }

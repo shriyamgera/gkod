@@ -43,6 +43,14 @@ export function sampleBracket(rng: Rng): Tree {
     if (holes) features.push(holes);
     centred ||= holes?.kind === 'holes' && holes.place.pattern !== 'pair';
   }
+  // a bracket is screwed on: when no holes or slots fit, one small hole goes in the middle of a leg
+  if (!features.length) {
+    const hole =
+      screwHoles(rng, 'upright', ['center'], width, height - thickness, thickness, 0, 4) ??
+      screwHoles(rng, 'base', ['center'], width, base - thickness, thickness, 0, 4);
+    if (hole) features.push(hole);
+    centred = hole !== undefined;
+  }
   if (rng.chance(f.gussets)) {
     const most = Math.min(base, height) - thickness - 2;
     // the gussets stay below the screw holes, so a screw head never sits against one
