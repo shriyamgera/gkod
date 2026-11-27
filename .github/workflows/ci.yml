@@ -96,3 +96,69 @@ jobs:
         run: |
           python -m pip install -r bridge/requirements-dev.txt -e bridge
           python -m pytest -q bridge
+
+  # The backend: its tests against a real PostgreSQL with pgvector, then the same stack in Docker Compose.
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg17-trixie
+        env:
+          POSTGRES_USER: gkod
+          POSTGRES_PASSWORD: gkod-ci
+          POSTGRES_DB: gkod
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U gkod -d gkod"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://gkod:gkod-ci@localhost:5432/gkod
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: api/requirements-dev.txt
+
+      - name: Install the API and its test tools
+        run: python -m pip install -r api/requirements-dev.txt -e api
+
+      - name: Apply the migrations
+        run: python -m gkod_api.migrate
+
+      # The database tests make and drop their own databases on this server.
+      - name: Test the loader, the migrations and the API
+        run: python -m pytest -q api
+
+      # The service container above holds port 5432, so the compose database is published on 5433.
+      - name: Build the API image and start the stack with Docker Compose
+        env:
+          GKOD_DB_PORT: '5433'
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait --wait-timeout 180
+
+      - name: Check /health, load the fixture run and read it back
+        run: |
+          curl -fsS http://127.0.0.1:8000/health
+          echo
+          DATABASE_URL=postgresql://gkod:gkod-local-dev@127.0.0.1:5433/gkod \
+            python -m gkod_api.load api/tests/fixtures/parts/fixture-run/parts.jsonl
+          curl -fsS http://127.0.0.1:8000/stats \
+            | python -c "import json, sys; s = json.load(sys.stdin); assert s['total'] == 8, s; print('stats ok')"
+          curl -fsS "http://127.0.0.1:8000/parts?family=plate&checks_ok=false" \
+            | python -c "import json, sys; p = json.load(sys.stdin); assert p['total'] == 1, p; print('parts ok')"
+
+      - name: Show the stack's logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

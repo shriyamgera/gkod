@@ -9,7 +9,8 @@
   "workspaces": [
     "app",
     "checks",
-    "tools"
+    "tools",
+    "datagen"
   ],
   "scripts": {
     "dev": "npm run dev --workspace app",
@@ -21,7 +22,9 @@
     "licenses": "node scripts/third-party-licenses.mjs",
     "check:gcode": "node scripts/check-gcode.mjs",
     "slice:printers": "node scripts/slice-printers.mjs",
-    "e2e": "playwright test -c e2e"
+    "e2e": "playwright test -c e2e",
+    "api:up": "test -f .env || cp .env.example .env; docker compose up -d --build --wait",
+    "api:down": "docker compose down"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1"

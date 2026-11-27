@@ -1,0 +1,58 @@
+# The backend for local development: the parts library (PostgreSQL 17 with pgvector) and the API in front
+# of it. Values come from .env (copy .env.example). Ports are published on 127.0.0.1 only. The model server
+# runs on the Mac itself, not in here.
+name: gkod
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg17-trixie
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?copy .env.example to .env first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.example to .env first}
+      POSTGRES_DB: ${POSTGRES_DB:?copy .env.example to .env first}
+    ports:
+      - "127.0.0.1:${GKOD_DB_PORT:-5432}:5432"
+    volumes:
+      - gkod-db:/var/lib/postgresql/data
+    # Over TCP, so the check fails while the image's first-run setup server (socket only) is up.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    image: gkod-api:dev
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    # Migrations first; the API only starts if they succeed.
+    command:
+      - sh
+      - -c
+      - python -m gkod_api.migrate && exec uvicorn gkod_api.app:app --host 0.0.0.0 --port 8000 --no-server-header
+    ports:
+      - "127.0.0.1:${GKOD_API_PORT:-8000}:8000"
+    # /health answers 503 until the database is reachable, has pgvector and is fully migrated.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  gkod-db:

@@ -62,6 +62,18 @@ Deploying needs one manual step first: in the repository settings, set Pages > B
 
 The `mcp/` folder holds a small Python server that lets an MCP client compile parts, run the print checks and look at each part as a picture, with the same compiler and checks as the site. How to set it up and register it is in [mcp/README.md](mcp/README.md). The `gkod` command it calls also works on its own; see [tools/](tools/README.md).
 
+## Backend
+
+The `api/` folder holds the backend: a FastAPI service in front of the parts library, a PostgreSQL 17 database with pgvector that holds the parts the generator makes, with their code, requests and print-check results. It runs locally with Docker Compose, on 127.0.0.1 only:
+
+```sh
+npm run api:up                      # copies .env.example to .env if needed, then docker compose up
+curl http://127.0.0.1:8000/health
+npm run api:down
+```
+
+Today it loads the generator's `parts.jsonl` files (refusing any row that does not name the generator, version and commit that made it) and answers `/health`, `/parts`, `/parts/{id}` and `/stats`. Embeddings and search come on day 8, and the local model behind the API on day 9. How to load parts, the endpoints and the tests are in [api/README.md](api/README.md).
+
 ## Claude Code engine (on your own Mac)
 
 GKod can also hand a request to **Claude Code** on your own Mac, so you type a prompt on the site exactly as with Gemini and a Claude Code session there writes the part. The bridge in [bridge/](bridge/README.md) runs `claude` headless with only GKod's MCP tools: it compiles the part, runs the print checks, looks at the picture and fixes what is wrong (at most 4 rounds), then sends the code back. The site then compiles it, checks it and makes a version, exactly as for Gemini, so the answer is never trusted blindly. A typed change to a part Claude Code made continues the same Claude Code session.
@@ -100,7 +112,7 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 
 ## The fine-tuned model
 
-- **No model-written training examples.** A seeded generator builds every training part: it picks the features and sizes, writes the code, compiles it, and keeps only parts that pass the print checks. The request text for each part is put together by the same program.
+- **No model-written training examples.** A seeded generator builds every training part: it picks the features and sizes, writes the code, compiles it and runs the print checks on it. The request text for each part is put together by the same program, from short word lists. Every row records the generator commit and seed. How it works is in [datagen/](datagen/README.md).
 - **Training runs on a MacBook** (M4, 16 GB) with LoRA.
 - **Results will be measured, not claimed.** The same held-out prompts go to the untrained model, the fine-tuned model and Gemini, scored by code: does it compile, does it pass the print checks, are the sizes right. The numbers will be published here, including the ones that are not flattering.
 
