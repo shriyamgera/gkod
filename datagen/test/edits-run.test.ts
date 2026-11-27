@@ -143,6 +143,25 @@ describe('edits command', () => {
     expect(() => parseEditOptions(['--from', 'p', '--out', 'data/x', '--avoid'], REPO)).toThrow('--avoid needs a file.');
   });
 
+  it('makes a run outside the repo and says how it went', async () => {
+    const out = join(fresh(), 'edits');
+    const told = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const noted = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const progress = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(await main(['--from', parts, '--count', '3', '--seed', '9', '--out', out, '--workers', '2'])).toBe(0);
+      expect(told.mock.calls[0]![0]).toMatch(/^3 pairs and \d+ skipped in [\d.]+ s/);
+      expect(told.mock.calls[0]![0]).toContain('only the edited sizes differ 100.0%');
+      expect(lines(join(out, 'pairs.jsonl'))).toHaveLength(3);
+      // a second run into the same folder is refused
+      expect(await main(['--from', parts, '--count', '3', '--out', out])).toBe(2);
+    } finally {
+      told.mockRestore();
+      noted.mockRestore();
+      progress.mockRestore();
+    }
+  }, 60000);
+
   it('stops before anything is written when the OpenSCAD build or the source is missing', async () => {
     const said = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
