@@ -51,10 +51,11 @@ function fits(op: EditOp, diff: SizeDiff): boolean {
   switch (op.kind) {
     case 'scale':
       return !diff.added.length && !diff.removed.length && diff.kept.every((k) => k.name.endsWith('_count'));
+    // a feature may have no sizes of its own (a spacer's slit is as wide as its hole)
     case 'add':
-      return !diff.changed.length && !diff.removed.length && diff.added.length > 0;
+      return !diff.changed.length && !diff.removed.length;
     case 'remove':
-      return !diff.changed.length && !diff.added.length && diff.removed.length > 0;
+      return !diff.changed.length && !diff.added.length;
   }
   if (op.name === null) {
     if (op.feature === 'gussets') return !diff.changed.length && !diff.added.length && !diff.removed.length;
