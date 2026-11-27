@@ -284,10 +284,12 @@ class Run:
         self.state["logs"].append(self.log_path.name)
 
         self.log_file = self.log_path.open("a", encoding="utf-8")
-        caffeinate = subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
+        # closing the terminal window sends SIGHUP to the whole job; it must not end the night. It is ignored before
+        # caffeinate starts, and caffeinate gets its own session, so the hang-up reaches neither of them.
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
+        caffeinate = subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())], start_new_session=True)
         signal.signal(signal.SIGINT, self.on_signal)
         signal.signal(signal.SIGTERM, self.on_signal)
-        signal.signal(signal.SIGHUP, signal.SIG_IGN)  # closing the terminal window does not end the night
         self.save_state(status="running", pid=os.getpid(), command=args.command, cwd=os.getcwd())
 
         self.say(f"run '{args.name}'{' (resuming: it was ' + str(previous.get('status')) + ')' if resuming else ''}")

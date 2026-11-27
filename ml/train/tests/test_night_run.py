@@ -4,6 +4,7 @@ test has to fake the disk or the power."""
 import importlib.util
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -211,6 +212,54 @@ def test_closing_the_terminal_does_not_stop_the_run(tmp_path):
     log = logs(tmp_path, "hangup")
     assert "line 1999" in log and "the command exited with code 0" in log
     assert state(tmp_path, "hangup")["status"] == "done"
+
+
+ROW = """
+import os, subprocess, sys, time
+def awake():
+    # the parent is night-run, and caffeinate must still be watching it
+    return subprocess.run(["pgrep", "-f", f"caffeinate -dimsu -w {os.getppid()}"], capture_output=True).returncode == 0
+print(f"row {sys.argv[1]} started, awake: {awake()}", flush=True)
+time.sleep(float(sys.argv[2]))
+print(f"row {sys.argv[1]} done, awake: {awake()}", flush=True)
+"""
+
+
+def test_closing_the_window_does_not_stop_the_night(tmp_path):
+    """Closing the window sends SIGHUP to the whole foreground job: the wrapper, night-run and caffeinate. The first
+    row must finish with the Mac still held awake, and the wrapper must go on to the second row."""
+    real = (SCRIPT.parent / "night-baseline.sh").read_text()
+    head, loop = real.split("for shots in", 1)
+    assert "trap '' HUP" in head
+    # the real wrapper, with a short dummy row in place of the benchmark and the logs kept in the test folder
+    bench = '"$PY" -m gkod_bench run --engine local --split dev --shots "$shots"'
+    assert bench in loop and "PY=ml/.venv/bin/python\n" in head and '"$PY" ml/scripts/night-run.py' in loop
+    row = script(tmp_path, "row.py", ROW)
+    q = shlex.quote
+    copy = (
+        real.replace("PY=ml/.venv/bin/python\n", f"PY={q(PY)}\n")
+        .replace('"$PY" ml/scripts/night-run.py', f'"$PY" {q(str(SCRIPT))} --logs {q(str(tmp_path / "logs"))} {" ".join(FAST)}')
+        .replace(bench, f'"$PY" {q(row)} "$shots" 3')
+    )
+    wrapper = tmp_path / "ml" / "scripts" / "night-baseline.sh"
+    wrapper.parent.mkdir(parents=True)
+    wrapper.write_text(copy)
+    # its own process group, like a job in a terminal
+    run = subprocess.Popen(["/bin/sh", str(wrapper)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        deadline = time.monotonic() + 30
+        while not (tmp_path / "logs").exists() or "row 0 started" not in logs(tmp_path, "baseline-dev-0shot"):
+            assert time.monotonic() < deadline and run.poll() is None
+            time.sleep(0.05)
+        os.killpg(run.pid, signal.SIGHUP)
+        assert run.wait(timeout=60) == 0
+    finally:
+        if run.poll() is None:
+            os.killpg(run.pid, signal.SIGKILL)
+    first, second = logs(tmp_path, "baseline-dev-0shot"), logs(tmp_path, "baseline-dev-3shot")
+    assert "row 0 started, awake: True" in first and "row 0 done, awake: True" in first
+    assert "row 3 started, awake: True" in second and "row 3 done, awake: True" in second
+    assert state(tmp_path, "baseline-dev-0shot")["status"] == "done" and state(tmp_path, "baseline-dev-3shot")["status"] == "done"
 
 
 TRAINER = """

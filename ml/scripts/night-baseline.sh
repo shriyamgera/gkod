@@ -16,6 +16,10 @@ EXPAT=/opt/homebrew/opt/expat/lib
 export DYLD_LIBRARY_PATH="$EXPAT"
 PY=ml/.venv/bin/python
 
+# Closing the terminal window sends SIGHUP to this script and everything it started. Ignore it here, so the loop goes
+# on to the next row; night-run and caffeinate inherit the ignore.
+trap '' HUP
+
 for shots in 0 3; do
   "$PY" ml/scripts/night-run.py --name "baseline-dev-${shots}shot" -- \
     "$PY" -m gkod_bench run --engine local --split dev --shots "$shots"

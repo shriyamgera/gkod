@@ -101,16 +101,21 @@ DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/scripts/ni
   with a new optimizer, so day 8's trainer takes the start step itself.
 - **Power.** It refuses to start on battery unless `--allow-battery` is given.
 - **Stopping.** Ctrl-C (or SIGTERM to the script) stops the command the same way and ends the run. Closing the
-  terminal window does not: the script ignores the hang-up, stops writing to the terminal and keeps the log. Keep the
-  lid open; macOS sleeps on a closed lid whatever caffeinate asks.
+  terminal window does not. The window's hang-up (SIGHUP) goes to the whole job: the script ignores it, caffeinate runs
+  in its own session so it never gets it, and the command runs in its own session too; the script then stops writing
+  to the terminal and keeps the log. A wrapper that runs several rows must ignore the hang-up itself, as
+  [night-baseline.sh](scripts/night-baseline.sh) does with `trap '' HUP`, or it dies and the next row never starts.
+  Keep the lid open; macOS sleeps on a closed lid whatever caffeinate asks.
 
 Exit codes: 0 finished, 1 still failing after the restarts, 2 could not start, 3 stopped for low disk, 130 stopped by
 the owner.
 
 `pytest ml/train` runs it on short dummy commands: a command that checks caffeinate is holding the Mac awake, a crash
 and a restart, giving up, a missing command, too little disk before the start, the disk filling up during a run, a
-command that ignores SIGTERM, battery, Ctrl-C, a closed terminal, a fake trainer that crashes and resumes from its newest
-checkpoint while the last two and the best are kept, and a run started again after the script died.
+command that ignores SIGTERM, battery, Ctrl-C, a closed terminal, the window's hang-up sent to the whole job of the
+real night-baseline.sh with dummy rows (the first row finishes still held awake and the second row runs), a fake
+trainer that crashes and resumes from its newest checkpoint while the last two and the best are kept, and a run started
+again after the script died.
 
 ## Tonight: baseline rows on the dev set
 
