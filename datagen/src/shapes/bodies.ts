@@ -47,7 +47,7 @@ function outline(body: Extract<Body, { corner: unknown }>): Module {
 // The hook seen from the side: one outline for the back, the arm and the tip, with the outer front corner cut off, and a
 // rounded inside corner where the arm meets the back.
 function hookProfile(): Node[] {
-  const [t, x, b, tip, f] = [r('thickness'), r('arm_length'), r('bevel'), r('tip_height'), r('fillet')];
+  const [t, x, b, tip, f] = [r('thickness'), r('reach'), r('bevel'), r('tip_height'), r('fillet')];
   const inner = sub(x, t);
   return [
     polygon([[0, 0], [sub(x, b), 0], [x, b], [x, tip], [inner, tip], [inner, t], [t, t], [t, r('back_height')], [0, r('back_height')]]),

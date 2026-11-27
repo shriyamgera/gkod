@@ -104,7 +104,7 @@ export function bodyPhrases(say: Say): Phrase[] {
     case 'hook': {
       const out = [
         ph(`${mm(s, b.width)} wide`, sized(say, 'width', b.width, 'z')),
-        rng.chance(0.5) ? ph(`reaching out ${mm(s, b.reach)}`, sized(say, 'reach', b.reach)) : np(a(`${mm(s, b.reach)} reach`), sized(say, 'reach', b.reach)),
+        rng.chance(0.5) ? ph(`reaching out ${mm(s, b.reach)}`, sized(say, 'reach', b.reach, 'x')) : np(a(`${mm(s, b.reach)} reach`), sized(say, 'reach', b.reach, 'x')),
       ];
       if (rng.chance(0.7)) out.push(np(a(`${mm(s, b.plate)} tall back plate`), sized(say, 'back_height', b.plate, 'y')));
       if (rng.chance(0.4)) out.push(np(a(`${mm(s, b.tip)} tall tip`), sized(say, 'tip_height', b.tip)));

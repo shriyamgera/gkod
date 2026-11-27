@@ -184,22 +184,23 @@ export function bodyPiece(body: Body): BodyPiece {
         sizes: [
           size(at('width'), body.width, 'width', 'Width, side to side on the wall (mm)', 1, 8, 100),
           size(at('plate'), body.plate, 'back_height', 'Back height, against the wall (mm)', 1, 30, P),
-          size(at('reach'), body.reach, 'reach', 'How far the hook reaches out (mm)', 1, 8, 100),
+          size(at('reach'), body.reach, 'reach', 'Depth from the wall to the front of the tip (mm)', 1, 8, 100),
           size(at('tip'), body.tip, 'tip_height', 'Tip height, from the bottom (mm)', 1, 4, 60),
           size(at('thickness'), body.thickness, 'thickness', 'Thickness of the back, arm and tip (mm)', 0.5, 3, 15),
         ],
         derived: [
-          { name: 'arm_length', value: add(reach, mul(2, t)) },
-          { name: 'fillet', value: div(reach, 3) },
+          // the room between the back and the tip
+          { name: 'gap', value: sub(reach, mul(2, t)) },
+          { name: 'fillet', value: div(ref('gap'), 3) },
           { name: 'bevel', value: half(t) },
         ],
         rules: [
           ge(tip, add(t, 2), 'The tip is not taller than the arm.'),
           ge(back, add(start, 12), 'The back is too short to hold a screw above the hook.'),
-          ge(reach, t, 'The hook reaches out less than its thickness.'),
+          ge(ref('gap'), t, 'The room between the back and the tip is less than the thickness.'),
         ],
         shapes: none,
-        extent: { x: ref('arm_length'), y: back, z: w },
+        extent: { x: reach, y: back, z: w },
         faces: {
           plate: {
             u0: start, u1: back, v0: 0, v1: w, uMid: half(add(start, back)), vMid: half(w), uLen: sub(back, start), thick: t,
