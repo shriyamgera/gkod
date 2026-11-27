@@ -43,7 +43,7 @@ export function structure(tree: Tree): string[] {
   return reasons;
 }
 
-const isCircle = (s: Shape): s is Shape & { u: number; v: number; r: number } => 'r' in s;
+const isCircle = (s: Shape): s is Extract<Shape, { r: number }> => 'r' in s;
 
 function bounds(s: Shape) {
   return isCircle(s) ? { u0: s.u - s.r, v0: s.v - s.r, u1: s.u + s.r, v1: s.v + s.r } : s;
