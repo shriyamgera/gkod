@@ -111,7 +111,9 @@ describe('compose', () => {
     for (const t of texts) {
       expect(t.title.length).toBeLessThanOrEqual(40);
       expect(t.title).toMatch(/^[A-Z]/);
-      expect(t.request).not.toMatch(/\b(a [aeio8]|an [bcdfgjkmnpqrstvwxz2-79])/i);
+      expect(t.request).not.toMatch(/\b(a [aeio8]|an (?!M\d)[bcdfgjkmnpqrstvwxz2-79])/i);
+      // a screw is named as M3, M4 and so on, never by a hole size
+      expect(t.request).not.toMatch(/[\d.]+ ?mm screw(?! holes?\b)/);
       expect(t.request).not.toMatch(/\b\d+ \d/);
       // what the part is for follows its name, never a list, and what follows it belongs to the part
       expect(t.request).not.toMatch(/(,| and) (for|that fits) /);

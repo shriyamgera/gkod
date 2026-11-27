@@ -6,7 +6,7 @@ export const spacer = {
   id: 'spacer',
   diameter: [6, 30],
   height: [3, 50],
-  bores: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 8, 10],
+  bores: [2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 8, 9, 10],
   hex: 0.3,
   flange: 0.3,
   flangeHoles: [0, 2, 3, 4],

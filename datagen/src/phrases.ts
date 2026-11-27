@@ -34,6 +34,9 @@ const lp = (text: string, ...facts: Fact[]): Phrase => ({ text, facts, lead: tru
 /** "a 4 mm bore" or "an 8 mm bore". */
 const a = (text: string) => `${article(text)} ${text}`;
 
+/** Clearance holes and the metric screw each one is for. */
+const SCREW_FOR: Record<number, number> = { 3.5: 3, 4.5: 4, 5.5: 5, 6.5: 6, 9: 8 };
+
 // ---- the body: its outer sizes
 
 function outer(say: Say, w: number, d: number, h: number | null, words: [string, string, string]): Phrase[] {
@@ -97,8 +100,9 @@ export function bodyPhrases(say: Say): Phrase[] {
       return [
         across,
         ph(`${mm(s, b.height)} ${rng.pick(['tall', 'long', 'high'])}`, sized(say, 'height', b.height, 'z')),
-        rng.chance(0.4)
-          ? lp(`for ${a(`${mm(s, b.bore)} screw`)}`, sized(say, 'bore_d', b.bore))
+        // a screw is named only by its metric size, with the clearance hole it needs
+        SCREW_FOR[b.bore] !== undefined && rng.chance(0.4)
+          ? np(`${a(`${mm(s, b.bore)} hole`)} for an M${SCREW_FOR[b.bore]} screw`, sized(say, 'bore_d', b.bore))
           : np(rng.pick([a(`${mm(s, b.bore)} hole through it`), a(`${mm(s, b.bore)} bore`)]), sized(say, 'bore_d', b.bore)),
       ];
     }
