@@ -2,11 +2,12 @@
 
 A row is refused, with one fixed plain reason, when it cannot be traced to the generator that made it:
 no generator name, version or commit, no seed, no index, no request or no code. It is also refused when it
-is not a JSON object, a field is far too long, or its text cannot be stored. Everything else is read
-defensively: a missing or oddly shaped optional field is stored as empty, never guessed.
+is not a JSON object, a field is far too long, or its text or numbers cannot be stored. Everything else is
+read defensively: a missing or oddly shaped optional field is stored as empty, never guessed.
 """
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -56,13 +57,28 @@ class PartRow:
     extra: dict = field(default_factory=dict)
 
 
+TOO_LARGE = "a number is too large to store"
+
+
+class NumberTooLarge(ValueError):
+    """A number such as 1e400 that is valid JSON but too large for a float."""
+
+
 def _no_constants(name: str) -> Any:
     raise ValueError(f"{name} is not allowed")
 
 
+def _finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise NumberTooLarge(text)
+    return value
+
+
 def strict_loads(text: str) -> Any:
-    """json.loads, but NaN and Infinity (not JSON, and refused by jsonb) are errors."""
-    return json.loads(text, parse_constant=_no_constants)
+    """json.loads, but NaN and Infinity (not JSON, and refused by jsonb) are errors, and so is a number like
+    1e400, which Python would read as infinity. Raises NumberTooLarge for that, ValueError for the rest."""
+    return json.loads(text, parse_constant=_no_constants, parse_float=_finite_float)
 
 
 def parse_line(line: bytes | str) -> PartRow:
@@ -73,6 +89,8 @@ def parse_line(line: bytes | str) -> PartRow:
     try:
         text = line.decode("utf-8") if isinstance(line, bytes) else line
         obj = strict_loads(text)
+    except NumberTooLarge:
+        raise Refused(TOO_LARGE) from None
     except (UnicodeDecodeError, ValueError, RecursionError):
         raise Refused("not valid JSON") from None
     return parse_row(obj)
@@ -197,7 +215,7 @@ def _checks_ok(labels: dict) -> bool | None:
 
 
 def bad_text(value: Any) -> str | None:
-    """Why PostgreSQL could not store this JSON value's text, or None. Keys are checked too."""
+    """Why PostgreSQL could not store this JSON value's text or numbers, or None. Keys are checked too."""
     stack = [value]
     while stack:
         item = stack.pop()
@@ -206,6 +224,10 @@ def bad_text(value: Any) -> str | None:
             stack.extend(item.values())
         elif isinstance(item, list):
             stack.extend(item)
+        elif isinstance(item, float):
+            # jsonb has no infinity or NaN.
+            if not math.isfinite(item):
+                return TOO_LARGE
         elif isinstance(item, str):
             # text and jsonb cannot hold the NUL character.
             if "\x00" in item:

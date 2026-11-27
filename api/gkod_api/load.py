@@ -3,8 +3,8 @@
     python -m gkod_api.load data/parts/<run>/parts.jsonl --run <name>
 
 Rows go in in batches. A row without generator provenance (generator name, version and commit, seed,
-index, request and code) is refused and counted with a plain reason; the other rows still load, and the
-command then exits with 3. Loading the same file again adds nothing. If a manifest.json sits beside the
+index, request and code) is refused and counted with a plain reason; so is a row the database will not
+store. The other rows still load, and the command then exits with 3. Loading the same file again adds nothing. If a manifest.json sits beside the
 file, its sha256 is recorded with the run, and the file must match the sha256 the manifest gives for it.
 """
 
@@ -21,13 +21,16 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from .db import connect, where
-from .rows import MAX_LINE_BYTES, PartRow, Refused, bad_text, parse_line, strict_loads
+from .rows import MAX_LINE_BYTES, NumberTooLarge, PartRow, Refused, bad_text, parse_line, strict_loads
 from .settings import SettingsError, get_settings
 
 RUN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 MAX_MANIFEST_BYTES = 10_000_000
 DEFAULT_BATCH = 500
 SOME_REFUSED = 3
+NOT_STORED = "the database would not store this row"
+# What the database raises for one bad row, as opposed to a problem with the connection or the tables.
+ROW_ERRORS = (psycopg.DataError, psycopg.errors.CheckViolation)
 
 INSERT_PART = """
 INSERT INTO parts (
@@ -114,6 +117,8 @@ def read_manifest(parts_path: Path) -> Manifest | None:
     data = path.read_bytes()
     try:
         obj = strict_loads(data.decode("utf-8"))
+    except NumberTooLarge:
+        raise LoadError("manifest.json beside the file has a number too large to store.") from None
     except (UnicodeDecodeError, ValueError, RecursionError):
         raise LoadError("manifest.json beside the file is not valid JSON.") from None
     if not isinstance(obj, dict):
@@ -146,6 +151,12 @@ def manifest_generator(manifest: Manifest | None) -> dict[str, str]:
 
 def iter_rows(path: Path, result: ReadResult, generator: dict[str, str] | None = None) -> Iterator[PartRow]:
     """The rows that pass, one at a time. Refused rows are counted in `result`. Blank lines are skipped."""
+    for _, row in _numbered_rows(path, result, generator):
+        yield row
+
+
+def _numbered_rows(path: Path, result: ReadResult, generator: dict[str, str] | None) -> Iterator[tuple[int, PartRow]]:
+    """iter_rows, with the line number of each row."""
     seen: set[int] = set()
     with path.open("rb") as f:
         line_no = 0
@@ -175,7 +186,7 @@ def iter_rows(path: Path, result: ReadResult, generator: dict[str, str] | None =
                 result.refuse(e.reason, line_no)
                 continue
             seen.add(row.part_index)
-            yield row
+            yield line_no, row
 
 
 def _source_name(path: Path) -> str:
@@ -238,6 +249,22 @@ def _insert(conn: psycopg.Connection, batch: list[tuple]) -> int:
         return cur.rowcount
 
 
+def _insert_batch(conn: psycopg.Connection, batch: list[tuple[int, tuple]], result: ReadResult) -> int:
+    """Inserts a batch in one transaction. If the database refuses a value in it, the batch is inserted again
+    one row at a time, and only the rows it refuses are left out (counted in `result`)."""
+    try:
+        return _insert(conn, [params for _, params in batch])
+    except ROW_ERRORS:
+        pass
+    added = 0
+    for line_no, params in batch:
+        try:
+            added += _insert(conn, [params])
+        except ROW_ERRORS:
+            result.refuse(NOT_STORED, line_no)
+    return added
+
+
 def load_file(conn: psycopg.Connection, path: Path, run: str, batch_size: int = DEFAULT_BATCH) -> LoadReport:
     """Load one generator file as one run. Each batch is its own transaction, so a load that stops halfway
     can simply be run again: rows already in are skipped by the (run_id, part_index) key."""
@@ -251,14 +278,14 @@ def load_file(conn: psycopg.Connection, path: Path, run: str, batch_size: int = 
 
     result = ReadResult()
     added = 0
-    batch: list[tuple] = []
-    for row in iter_rows(path, result, manifest_generator(manifest)):
-        batch.append(_params(run, row))
+    batch: list[tuple[int, tuple]] = []
+    for line_no, row in _numbered_rows(path, result, manifest_generator(manifest)):
+        batch.append((line_no, _params(run, row)))
         if len(batch) >= batch_size:
-            added += _insert(conn, batch)
+            added += _insert_batch(conn, batch, result)
             batch = []
     if batch:
-        added += _insert(conn, batch)
+        added += _insert_batch(conn, batch, result)
 
     with conn.transaction():
         conn.execute(
@@ -297,6 +324,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except psycopg.errors.UndefinedTable:
         print("load: the parts tables are missing. Run python -m gkod_api.migrate first.", file=sys.stderr)
+        return 1
+    except psycopg.Error as e:
+        first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+        print(f"load: the database stopped the load: {first}. The batches before it are in; run the command "
+              "again to finish.", file=sys.stderr)
         return 1
     print(report.summary())
     return SOME_REFUSED if report.read.refused else 0

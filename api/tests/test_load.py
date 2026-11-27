@@ -9,7 +9,8 @@ import psycopg
 import pytest
 
 from gkod_api import load as load_cmd
-from gkod_api.load import LoadError, ReadResult, check_file, iter_rows, load_file
+from gkod_api import rows as rows_mod
+from gkod_api.load import NOT_STORED, LoadError, ReadResult, check_file, iter_rows, load_file
 from gkod_api.rows import MAX_LINE_BYTES
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -31,6 +32,7 @@ REFUSED_REASONS = {
     "index already used earlier in the file": [13],
     "no generator version": [16],
     "no generator name": [17],
+    "a number is too large to store": [18],
 }
 
 
@@ -54,7 +56,7 @@ def test_each_refused_row_is_counted_with_its_reason_and_line():
     result = ReadResult()
     kept = list(iter_rows(REFUSED_FILE, result))
     assert [r.part_index for r in kept] == [0, 1]
-    assert result.rows == 16  # 17 lines, one blank
+    assert result.rows == 17  # 18 lines, one blank
     assert result.refused_lines == REFUSED_REASONS
     assert result.accepted == 2
 
@@ -121,7 +123,7 @@ def test_a_missing_file_is_a_plain_error(tmp_path):
 def test_the_command_exits_3_when_rows_were_refused(capsys):
     assert load_cmd.main([str(REFUSED_FILE), "--dry-run", "--run", "bad"]) == 3
     out = capsys.readouterr().out
-    assert "Refused 14 rows:" in out
+    assert "Refused 15 rows:" in out
     assert "no generator commit (line 3)" in out
 
 
@@ -206,6 +208,39 @@ def test_the_labels_and_fields_land_in_their_columns(migrated_url):
     assert rows[6][6] == "2913377"
     assert rows[3][7] == "object" and rows[0][7] == "array"
     assert rows[5][8] == "Parser error in line 13: syntax error"
+
+
+def test_a_row_the_database_will_not_store_is_refused_and_the_rest_of_its_batch_still_loads(
+    migrated_url, tmp_path, monkeypatch
+):
+    path = tmp_path / "odd" / "parts.jsonl"
+    path.parent.mkdir()
+    lines = RUN_FILE.read_text().splitlines()[:3]
+    lines[1] = lines[1].replace('"tree":{', '"tree":{"x":1e400,', 1)
+    path.write_text("\n".join(lines) + "\n")
+    # Let the too-large number past the row rules, as a value they do not foresee would be.
+    monkeypatch.setattr(rows_mod, "strict_loads", json.loads)
+    monkeypatch.setattr(rows_mod, "bad_text", lambda value: None)
+    with psycopg.connect(migrated_url) as conn:
+        report = load_file(conn, path, "odd")
+        indexes = [r[0] for r in conn.execute("SELECT part_index FROM parts ORDER BY part_index")]
+        refused = conn.execute("SELECT rows_read, rows_refused, refused FROM runs").fetchone()
+    assert report.added == 2
+    assert report.read.refused_lines == {NOT_STORED: [2]}
+    assert indexes == [0, 2]
+    assert refused == (3, 1, {NOT_STORED: 1})
+
+
+def test_a_database_error_during_the_load_is_a_plain_message(migrated_url, use_db, monkeypatch, capsys):
+    def no_permission(*args, **kwargs):
+        raise psycopg.errors.InsufficientPrivilege("permission denied for table parts")
+
+    monkeypatch.setattr(load_cmd, "load_file", no_permission)
+    use_db(migrated_url)
+    assert load_cmd.main([str(RUN_FILE)]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("load: the database stopped the load: permission denied for table parts.")
+    assert "Traceback" not in err
 
 
 def test_one_run_name_cannot_hold_two_files(migrated_url, run_copy):

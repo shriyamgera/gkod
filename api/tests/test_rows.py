@@ -105,6 +105,8 @@ def test_code_is_kept_exactly_but_other_text_is_trimmed():
         ({"request": "a\x00plate"}, "text contains a NUL character"),
         ({"labels": {"note\x00": 1}}, "text contains a NUL character"),
         ({"facts": [{"key": "\ud800"}]}, "text is not valid Unicode"),
+        ({"labels": {"volume": float("inf")}}, "a number is too large to store"),
+        ({"note": [float("nan")]}, "a number is too large to store"),
     ],
 )
 def test_rows_without_provenance_or_with_unstorable_text_are_refused(changes, reason):
@@ -164,6 +166,8 @@ def test_compile_and_check_results_are_read_from_either_label_shape(labels, comp
         (b"\xff\xfe{}", "not valid JSON"),
         (b'{"seed": NaN}', "not valid JSON"),
         (b'{"seed": Infinity}', "not valid JSON"),
+        (b'{"tree": {"x": 1e400}}', "a number is too large to store"),
+        (b'{"facts": [-1e400]}', "a number is too large to store"),
         (b"[" * 100_000 + b"]" * 100_000, "not valid JSON"),
         (b'"a string"', "not a JSON object"),
         (b"[1, 2]", "not a JSON object"),
@@ -174,6 +178,11 @@ def test_lines_that_are_not_a_json_object_are_refused(line, reason):
     with pytest.raises(Refused) as caught:
         parse_line(line)
     assert caught.value.reason == reason
+
+
+def test_small_and_ordinary_numbers_are_kept():
+    part = parse_line(json.dumps(row(tree={"x": 1e300, "y": 2.5, "z": 1e-400})))
+    assert part.tree == {"x": 1e300, "y": 2.5, "z": 0.0}
 
 
 def test_a_line_is_parsed_from_bytes_or_text():
