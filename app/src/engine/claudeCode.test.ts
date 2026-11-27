@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CLAUDE_MESSAGES, checkCode, createClaudeCodeEngine, readEvents, requestBody } from './claudeCode';
+import { CLAUDE_MESSAGES, checkCode, createClaudeCodeEngine, MAX_WORDS, readEvents, requestBody } from './claudeCode';
 import type { EngineRequest } from './types';
 
 const PART = '// Spacer length (mm)\nlength = 20; // [5:1:60]\ncylinder(h = length, d = 10, $fn = 64);\n';
@@ -177,3 +177,36 @@ describe('checkCode', () => {
     expect(checkCode('cube(1);\r\n', 'm')).toMatchObject({ ok: true, code: 'cube(1);\n' });
   });
 });
+
+describe('length limits', () => {
+  it('turns down a request or change over the bridge’s limit before sending, in plain words', async () => {
+    const { fetch, calls } = fakeFetch(() => streamed(good));
+    const long = 'w'.repeat(MAX_WORDS + 1);
+    const made = await engine(fetch).run({ kind: 'create', prompt: long });
+    expect(made).toEqual({ ok: false, problem: 'other', message: 'Keep the request under 4000 characters for Claude Code.' });
+    const changed = await engine(fetch).run({ kind: 'edit', instruction: long, code: PART });
+    expect(changed.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('counts characters as the bridge does, so the longest request still goes', async () => {
+    const { fetch, calls } = fakeFetch(() => streamed(good));
+    // an emoji is two UTF-16 units but one character
+    const answer = await engine(fetch).run({ kind: 'create', prompt: '😀'.repeat(MAX_WORDS) });
+    expect(answer.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('cuts a long error or request in a repair to what the bridge takes', () => {
+    const body = requestBody(
+      { kind: 'repair', code: PART, error: 'e'.repeat(9000), request: `change the part: ${'w'.repeat(MAX_WORDS)}` },
+      'sonnet',
+      undefined,
+    ) as { error: string; request: string };
+    expect(body.error).toHaveLength(8000);
+    expect(body.request).toHaveLength(MAX_WORDS + 17);
+    const longer = requestBody({ kind: 'repair', code: PART, error: 'x', request: 'r'.repeat(5000) }, undefined, undefined) as { request: string };
+    expect(longer.request).toHaveLength(MAX_WORDS + 100);
+  });
+});
+

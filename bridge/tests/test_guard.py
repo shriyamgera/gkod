@@ -149,3 +149,17 @@ def test_a_small_chunked_body_still_runs(bridge):
             assert response.status_code == 200
             assert "event: final" in response.read().decode()
     assert len(bridge.fake.calls()) == 1
+
+
+def test_length_limits_fit_what_the_site_sends(bridge):
+    longest = "w" * 4000
+    with bridge.client(**{"X-GKod-Pairing": CODE}) as client:
+        over = client.post("/run", json={"kind": "create", "prompt": longest + "w"})
+        assert over.status_code == 400
+        assert over.json()["message"] == "The prompt is too long for Claude Code: at most 4000 characters."
+    # the repair after a failed compile of the longest change sends "change the part: " and the change
+    repair = {"kind": "repair", "code": "cube(1);", "error": "Line 1: syntax error", "request": f"change the part: {longest}"}
+    with bridge.client(**{"X-GKod-Pairing": CODE}) as client, client.stream("POST", "/run", json=repair) as response:
+        assert response.status_code == 200
+        assert "event: final" in response.read().decode()
+

@@ -127,16 +127,21 @@ def _replay(body: bytes, receive: Receive) -> Receive:
     return replay
 
 
+# The longest request or change the site sends (it checks this itself before sending, with the same number)
+MAX_WORDS = 4000
+
+
 class RunBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["create", "edit", "repair"]
-    prompt: str | None = Field(None, max_length=4000)
-    instruction: str | None = Field(None, max_length=4000)
+    prompt: str | None = Field(None, max_length=MAX_WORDS)
+    instruction: str | None = Field(None, max_length=MAX_WORDS)
     code: str | None = Field(None, max_length=60_000)
     error: str | None = Field(None, max_length=8000)
-    # repair: what the code was written for
-    request: str | None = Field(None, max_length=4000)
+    # repair: what the code was written for. For a change the site sends "change the part: " and the change, so
+    # this has room for a change of the longest length plus those words.
+    request: str | None = Field(None, max_length=MAX_WORDS + 100)
     # base64 JPEG or PNG, or a data: URL of one
     image: str | None = Field(None, max_length=MAX_BODY_BYTES)
     session_id: str | None = Field(None, pattern=SESSION_ID)
@@ -209,6 +214,9 @@ def create_app(settings: Settings) -> FastAPI:
     async def invalid(_: Request, exc: RequestValidationError) -> JSONResponse:
         first = exc.errors()[0] if exc.errors() else {}
         where = ".".join(str(part) for part in first.get("loc", []) if part != "body")
+        limit = (first.get("ctx") or {}).get("max_length")
+        if first.get("type") == "string_too_long" and where and limit:
+            return _plain(400, "too-long", f"The {where} is too long for Claude Code: at most {limit} characters.")
         return _plain(400, "bad-request", f"The request is not right{f' ({where})' if where else ''}.")
 
     @app.get("/health")

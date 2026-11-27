@@ -8,6 +8,23 @@ import type { Engine, EngineAnswer, EngineProblem, EngineRequest, ModelChoice, R
 // The bridge stops a job after 300 seconds; this is only a safety net in case its answer never ends.
 export const CLIENT_TIMEOUT_MS = 330_000;
 
+// The bridge's limits (bridge/gkod_bridge/app.py): a request or change of at most MAX_WORDS characters, and room
+// for the words a repair adds to it. The site checks the first itself, so nothing is turned down by the bridge.
+export const MAX_WORDS = 4000;
+const MAX_REPAIR_REQUEST = MAX_WORDS + 100;
+const MAX_ERROR = 8000;
+
+// Characters as the bridge counts them: one per code point, so an emoji counts once.
+const characters = (text: string) => Array.from(text).length;
+const clip = (text: string, max: number) => (characters(text) > max ? Array.from(text).slice(0, max).join('') : text);
+
+// The typed words of a request or a change, which must fit the bridge's limit.
+export function wordsTooLong(req: EngineRequest): boolean {
+  if (req.kind === 'create') return characters(req.prompt) > MAX_WORDS;
+  if (req.kind === 'edit') return characters(req.instruction) > MAX_WORDS;
+  return false;
+}
+
 export const CLAUDE_MODELS: ModelChoice[] = [
   { id: 'sonnet', label: 'Sonnet', note: 'Faster' },
   { id: 'opus', label: 'Opus', note: 'Better, slower' },
@@ -23,6 +40,7 @@ export const CLAUDE_MESSAGES = {
   noCode: 'Claude Code did not send any OpenSCAD code. Try again, or say it another way.',
   tooLong: 'Claude Code sent more code than a part needs, so it was not used. Try again.',
   timeout: 'Claude Code took too long to answer. Try again.',
+  tooManyWords: `Keep the request under ${MAX_WORDS} characters for Claude Code.`,
   other: 'Something went wrong while asking Claude Code. Try again.',
 } as const;
 
@@ -37,7 +55,8 @@ export function requestBody(req: EngineRequest, model: string | undefined, sessi
     case 'edit':
       return { kind: 'edit', instruction: req.instruction, code: req.code, ...common };
     case 'repair':
-      return { kind: 'repair', code: req.code, error: req.error, request: req.request, ...common };
+      // the error and the request are only context for the fix, so a long one is cut rather than turned down
+      return { kind: 'repair', code: req.code, error: clip(req.error, MAX_ERROR), request: clip(req.request, MAX_REPAIR_REQUEST), ...common };
   }
 }
 
@@ -126,6 +145,7 @@ export function createClaudeCodeEngine({
     const { signal, onProgress } = opts;
     const pairing = getCode()?.trim();
     if (!pairing) return { ok: false, problem: 'no-pairing', message: CLAUDE_MESSAGES.noPairing };
+    if (wordsTooLong(req)) return { ok: false, problem: 'other', message: CLAUDE_MESSAGES.tooManyWords };
     const model = opts.model ?? getModel() ?? DEFAULT_CLAUDE_MODEL;
     const headers = { 'content-type': 'application/json', 'x-gkod-pairing': pairing };
     if (signal?.aborted) return { ok: false, problem: 'cancelled', message: CLAUDE_MESSAGES.cancelled };
