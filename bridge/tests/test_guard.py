@@ -95,7 +95,7 @@ def test_bad_requests_get_plain_messages(bridge):
         ({"kind": "edit", "instruction": "wider"}, 400),
         ({"kind": "repair", "code": "cube(1);"}, 400),
         ({"kind": "explode"}, 400),
-        ({**CREATE, "model": "gpt-9; rm -rf"}, 400),
+        ({**CREATE, "model": "model-9; rm -rf"}, 400),
         ({**CREATE, "session_id": "../../etc"}, 400),
         ({**CREATE, "extra": 1}, 400),
         ({**CREATE, "image": "not base64!"}, 400),
