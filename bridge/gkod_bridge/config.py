@@ -67,3 +67,5 @@ class Settings:
     heartbeat_s: float = 15
     # seconds between SIGTERM and SIGKILL when a job is stopped
     kill_grace_s: float = 3
+    # one line per finished job in the terminal
+    log: bool = False

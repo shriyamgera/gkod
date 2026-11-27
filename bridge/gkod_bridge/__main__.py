@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import sys
 
 import uvicorn
 
@@ -15,10 +16,12 @@ def main() -> None:
     parser.add_argument("--new-code", action="store_true", help="make a new pairing code (pages paired with the old one must pair again)")
     parser.add_argument("--port", type=int, default=PORT, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    # each line shows at once, also when the output goes to a file
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
     pairing_file = default_pairing_file()
     code, made = load_or_create(pairing_file, renew=args.new_code)
-    settings = Settings(pairing_code=code, port=args.port)
+    settings = Settings(pairing_code=code, port=args.port, log=True)
 
     info = asyncio.run(ClaudeInfo(settings.claude_path).get())
     if not info["claude_found"]:

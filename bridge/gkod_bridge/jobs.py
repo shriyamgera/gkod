@@ -138,7 +138,20 @@ class Job:
         self.task: asyncio.Task[None] | None = None
 
     def emit(self, event: str, data: dict[str, Any]) -> None:
+        if event != "progress":
+            self.log(event, data)
         self.queue.put_nowait({"event": event, "data": data})
+
+    def log(self, event: str, data: dict[str, Any]) -> None:
+        """One line in the bridge's terminal per finished job. The request and the code are not shown."""
+        if not self.settings.log:
+            return
+        took = f"{time.monotonic() - self.began:.1f} s"
+        if event == "final":
+            extra = f"{data.get('model')}, {data.get('turns')} turns{', same session' if data.get('resumed') else ''}"
+            print(f"{time.strftime('%H:%M:%S')}  {self.req.kind}: done in {took} ({extra})", flush=True)
+        else:
+            print(f"{time.strftime('%H:%M:%S')}  {self.req.kind}: {data.get('problem')} after {took}", flush=True)
 
     def fail(self, problem: str, message: str | None = None) -> None:
         self.emit("error", {"problem": problem, "message": message or MESSAGES[problem]})
