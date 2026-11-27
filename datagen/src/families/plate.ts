@@ -74,7 +74,8 @@ export function samplePlate(rng: Rng): Tree {
     features.push({ kind: 'ribs', count: rng.int(1, 3), thickness: t, height: rng.size(3, Math.min(15, 6 * t), 0.5) });
   }
   if (rng.chance(f.lip)) {
-    features.push({ kind: 'lip', height: rng.size(2, 10, 0.5), wall: rng.size(1.6, 3, 0.2) });
+    // a raised edge, low enough that the plate does not turn into a tray
+    features.push({ kind: 'lip', height: rng.size(2, 6, 0.5), wall: rng.size(1.6, 3, 0.2) });
   } else if (rng.chance(f.notch)) {
     const notchWidth = fit(rng, 8, width / 2 - cornerSize - 4);
     if (notchWidth !== undefined) features.push({ kind: 'notch', width: notchWidth, depth: rng.size(3, Math.max(3, Math.floor(depth / 4))) });
