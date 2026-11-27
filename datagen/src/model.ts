@@ -47,9 +47,9 @@ export type Face = {
   corner?: { kind: 'round' | 'chamfer'; size: Expr };
 };
 
-/** A shape on a face, in numbers: a circle or a box. cut: material is taken away there. */
+/** A shape on a face, in numbers: a circle or a box. cut: material is taken away there. head: a screw head's radius. */
 export type Shape = { face: string; cut: boolean; what: string; edge?: boolean } & (
-  | { u: number; v: number; r: number }
+  | { u: number; v: number; r: number; head?: number }
   | { u0: number; v0: number; u1: number; v1: number }
 );
 

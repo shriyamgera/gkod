@@ -53,7 +53,9 @@ describe('validate', () => {
   it('keeps ribs and standoffs clear of holes', () => {
     const ribs: Feature = { kind: 'ribs', count: 1, thickness: 3, height: 6 };
     expect(validate(plate([corners(4, 8), ribs]))).toEqual([]);
-    expect(validate(plate([corners(4, 8), { ...ribs, count: 3 }]))).toEqual([]);
+    expect(validate(plate([corners(4, 8), { ...ribs, count: 2 }]))).toEqual([]);
+    // the ribs clear the holes but not the screw heads
+    expect(validate(plate([corners(4, 8), { ...ribs, count: 3 }]))).toEqual(['A screw head in a hole would hit a rib.']);
     expect(validate(plate([corners(4, 8), { ...ribs, count: 4 }]))).toEqual(['A hole and a rib are too close together.']);
     const bosses: Feature = { kind: 'bosses', d: 8, height: 6, hole: 3, place: { pattern: 'corners', inset: 8 } };
     expect(validate(plate([corners(4, 8), bosses]))).toEqual(['A hole and a standoff are too close together.']);

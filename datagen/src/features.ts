@@ -109,8 +109,10 @@ export function featurePiece(f: Feature, ctx: Ctx): Piece {
         derived: placed.derived,
         rules,
         shapes: (env) => {
-          const r = f.countersink ? env[`${p}hole_d`]! : env[`${p}hole_d`]! / 2;
-          return centers(where, env).map(([u, v]) => ({ face: f.face, cut: true, what: 'hole', u, v, r }));
+          const d = env[`${p}hole_d`]!;
+          const r = f.countersink ? d : d / 2;
+          // a screw head is about twice the hole across
+          return centers(where, env).map(([u, v]) => ({ face: f.face, cut: true, what: 'hole', u, v, r, head: d }));
         },
         extent: {},
       };

@@ -45,7 +45,10 @@ export function sampleBracket(rng: Rng): Tree {
   }
   if (rng.chance(f.gussets)) {
     const most = Math.min(base, height) - thickness - 2;
-    const size = fit(rng, Math.max(6, most * 0.4), most * 0.8);
+    // the gussets stay below the screw holes, so a screw head never sits against one
+    let below = most;
+    for (const h of features) if (h.kind === 'holes') below = Math.min(below, ((h.face === 'base' ? base : height) - thickness) / 2 - h.d - 1.5);
+    const size = fit(rng, Math.max(6, Math.min(most * 0.4, below)), Math.min(most * 0.8, below));
     if (size !== undefined) features.push({ kind: 'gussets', count: centred ? 2 : rng.int(1, 2), size, thickness: rng.size(2, thickness, 0.5) });
   }
   return { family: f.id, body: { kind: 'angle', width, base, height, thickness }, features };

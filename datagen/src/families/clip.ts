@@ -22,7 +22,8 @@ export function sampleClip(rng: Rng): Tree {
   let pad = rng.size(Math.ceil(ring) + 2, Math.ceil(ring) + 16);
   if (length >= 10 && rng.chance(f.holes)) {
     const d = rng.pick([3, 3.5, 4]);
-    const spacing = Math.ceil(ring + d + 2 * 1.6 + 2) + rng.int(0, 6);
+    // room for the screw heads beside the ring
+    const spacing = Math.ceil(ring + 2 * d + 3) + rng.int(0, 6);
     pad = Math.max(pad, Math.ceil(spacing + d + 2 * 1.6 + 2));
     features.push({ kind: 'holes', face: 'pad', d, countersink: false, place: { pattern: 'pair', spacing } });
   }

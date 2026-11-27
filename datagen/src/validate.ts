@@ -127,6 +127,12 @@ export function check(model: Model, env: Env): string[] {
       const need = a.cut && b.cut ? W : BESIDE;
       if (gap(a, b) < need - EPS) {
         reasons.push(a.what === b.what ? `Two ${a.what}s are too close together.` : `A ${a.what} and a ${b.what} are too close together.`);
+        continue;
+      }
+      // a screw in a hole needs room for its head beside anything that stands on the face
+      const [cut, solid] = a.cut ? [a, b] : [b, a];
+      if (!solid.cut && isCircle(cut) && cut.head !== undefined && gap({ ...cut, r: Math.max(cut.r, cut.head) }, solid) < BESIDE - EPS) {
+        reasons.push(`A screw head in a ${cut.what} would hit a ${solid.what}.`);
       }
     }
   }
