@@ -62,7 +62,7 @@ Every answer is JSON. Every error is `{"error": "<plain words>"}`. The full sche
 | `GET /parts/{id}` | One part: everything in the list, plus its seed, code, tree, facts, labels, `extra`, whether it has an embedding, and when it was loaded. 404 if there is no such part. |
 | `GET /stats` | Counts: `total`, `embedded`, `by_family`, `by_split`, `by_label` (true, false and unknown for `compile_ok` and `checks_ok`), and each run with its parts, refused rows and hashes. |
 
-Limits: a query string over 2 KB is refused (414), a request body over 64 KB is refused (413), and a bad filter gets a plain 422. All SQL is parameterised. Each statement may run for 10 seconds. `/health` answers within 2 seconds even when the database is down or has stopped answering (paused, or the network path to it gone). Every other request gives up after the wait for a connection plus the statement time limit (15 seconds with the defaults) and answers 503.
+Limits: a query string over 2 KB is refused (414), a request body over 64 KB is refused (413), and a bad filter gets a plain 422 (`run` must be a run name as the loader allows it, and `family` may not hold control characters). All SQL is parameterised. Each statement may run for 10 seconds. `/health` answers within 2 seconds even when the database is down or has stopped answering (paused, or the network path to it gone). Every other request gives up after the wait for a connection plus the statement time limit (15 seconds with the defaults) and answers 503.
 
 ## Run from your own shell
 

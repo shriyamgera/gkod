@@ -22,6 +22,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import __version__
 from .db import make_pool
+from .load import RUN_NAME
 from .migrate import latest_version
 from .models import Generator, Health, LabelCounts, Part, PartList, PartSummary, Problem, RunStats, Stats
 from .settings import Settings, get_settings
@@ -37,6 +38,14 @@ MAX_LIMIT = 200
 HEALTH_TIMEOUT_S = 2.0
 # How long shutting down waits for database work that was given up on to finish cancelling.
 STRAY_WAIT_S = 5.0
+
+# A family filter may hold any text but control characters (the database cannot take a NUL in text).
+FAMILY_PATTERN = r"^[^\x00-\x1f\x7f]*$"
+# What a filter that does not match its pattern is told.
+PATTERN_HINTS = {
+    "family": "control characters are not allowed",
+    "run": "a run name is up to 64 letters, digits, '.', '_' and '-', starting with a letter or digit",
+}
 
 SUMMARY_COLUMNS = (
     "id, run_id, part_index, family, title, request, compile_ok, checks_ok, split,"
@@ -238,12 +247,14 @@ def _add_routes(app: FastAPI) -> None:
     @app.get("/parts", response_model=PartList, responses=ERRORS)
     async def list_parts(
         request: Request,
-        family: Annotated[str | None, Query(max_length=64, description="Only this family, e.g. plate.")] = None,
+        family: Annotated[str | None, Query(max_length=64, pattern=FAMILY_PATTERN,
+                                            description="Only this family, e.g. plate.")] = None,
         split: Annotated[Literal["train", "valid", "test", "none"] | None,
                          Query(description="Only this split; none means not split yet.")] = None,
         compile_ok: Annotated[bool | None, Query(description="Only parts that did (true) or did not compile.")] = None,
         checks_ok: Annotated[bool | None, Query(description="Only parts that passed (true) or failed the checks.")] = None,
-        run: Annotated[str | None, Query(max_length=64, description="Only parts from this run.")] = None,
+        run: Annotated[str | None, Query(max_length=64, pattern=RUN_NAME.pattern,
+                                         description="Only parts from this run.")] = None,
         limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = 50,
         offset: Annotated[int, Query(ge=0, le=10_000_000)] = 0,
     ) -> PartList:
@@ -337,6 +348,8 @@ def _add_error_handlers(app: FastAPI) -> None:
         where = str(first["loc"][-1]) if first.get("loc") else "request"
         where = "id" if where == "part_id" else where
         msg = first.get("msg") or "Is not valid"
+        if first.get("type") == "string_pattern_mismatch":
+            msg = PATTERN_HINTS.get(where, "Is not in the expected form")
         return problem(422, f"{where}: {msg[0].lower()}{msg[1:]}.")
 
     @app.exception_handler(PoolTimeout)

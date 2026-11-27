@@ -162,6 +162,12 @@ def test_a_long_address_is_refused():
         ("/parts?compile_ok=maybe", 422, "compile_ok: input should be a valid boolean, unable to interpret input."),
         ("/parts/abc", 422, "id: input should be a valid integer, unable to parse string as an integer."),
         ("/parts/0", 422, "id: input should be greater than or equal to 1."),
+        ("/parts?family=%00", 422, "family: control characters are not allowed."),
+        ("/parts?family=plate%0A", 422, "family: control characters are not allowed."),
+        ("/parts?run=%00", 422, "run: a run name is up to 64 letters, digits, '.', '_' and '-', starting with a "
+                                "letter or digit."),
+        ("/parts?run=fixture-run'--", 422, "run: a run name is up to 64 letters, digits, '.', '_' and '-', starting "
+                                           "with a letter or digit."),
         ("/nowhere", 404, "There is nothing at this address. Try /health, /parts, /parts/{id} or /stats."),
     ],
 )
@@ -279,6 +285,8 @@ def test_limit_and_offset_page_through_the_parts(api):
         ({"split": "none"}, list(range(8))),
         ({"split": "train"}, []),
         ({"family": "plate' OR '1'='1"}, []),
+        ({"family": "wall hook é"}, []),
+        ({"family": ""}, []),
     ],
 )
 def test_filters(api, params, indexes):
