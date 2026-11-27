@@ -154,6 +154,28 @@ describe('looking for the bridge', () => {
     expect(status.mayLookOnItsOwn()).toBe(false);
   });
 
+  it('offers to look only to the owner: on this computer, once found before, or when the address has ?bridge', async () => {
+    const storage = new FakeStorage();
+    const visitor = createBridgeStatus({ fetch: answering(), getStorage: () => storage, isLocalPage: () => false, ownerAsked: () => false });
+    expect(visitor.mayOffer()).toBe(false);
+    const owner = createBridgeStatus({ fetch: answering(), getStorage: () => storage, isLocalPage: () => false, ownerAsked: () => true });
+    expect(owner.mayOffer()).toBe(true);
+    // asking does not make the public page look on its own; a press of the button does
+    expect(owner.mayLookOnItsOwn()).toBe(false);
+    await owner.check();
+    expect(visitor.mayOffer()).toBe(true);
+    const local = createBridgeStatus({ getStorage: () => new FakeStorage(), isLocalPage: () => true, ownerAsked: () => false });
+    expect(local.mayOffer()).toBe(true);
+    const broken = createBridgeStatus({
+      getStorage: () => new FakeStorage(),
+      isLocalPage: () => false,
+      ownerAsked: () => {
+        throw new Error('no location');
+      },
+    });
+    expect(broken.mayOffer()).toBe(false);
+  });
+
   it('looks on its own on this computer’s own pages, and says when nothing answers', async () => {
     const status = createBridgeStatus({ fetch: silent, getStorage: () => new FakeStorage(), isLocalPage: () => true });
     expect(status.mayLookOnItsOwn()).toBe(true);

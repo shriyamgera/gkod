@@ -60,16 +60,29 @@ type Deps = {
   getStorage?: () => StorageLike | null;
   // a page served from this computer may look for the bridge at once; the public site only once asked
   isLocalPage?: () => boolean;
+  // the owner opened the public site with ?bridge, to be offered the bridge
+  ownerAsked?: () => boolean;
   base?: string;
 };
 
 const localPage = () =>
   typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
+export const ASK_PARAM = 'bridge';
+
+const askedInAddress = () =>
+  typeof window !== 'undefined' && attempt(() => new URLSearchParams(window.location.search).has(ASK_PARAM), false);
+
 // Whether the bridge answers on this computer. The public site does not look for it on its own: in Chrome a public
 // page that calls this computer's address first asks the visitor for permission, so it only looks when the visitor
 // asks, or once the bridge has been found in this browser before.
-export function createBridgeStatus({ fetch: send, getStorage = () => null, isLocalPage = localPage, base = BRIDGE_URL }: Deps = {}) {
+export function createBridgeStatus({
+  fetch: send,
+  getStorage = () => null,
+  isLocalPage = localPage,
+  ownerAsked = askedInAddress,
+  base = BRIDGE_URL,
+}: Deps = {}) {
   const listeners = new Set<() => void>();
   let state: BridgeState = { status: 'unknown' };
   let running: Promise<BridgeState> | null = null;
@@ -93,10 +106,15 @@ export function createBridgeStatus({ fetch: send, getStorage = () => null, isLoc
     return running;
   }
 
+  const mayLookOnItsOwn = () => isLocalPage() || attempt(() => getStorage()?.getItem(SEEN_KEY) === '1', false);
+
   return {
     snapshot: () => state,
     check,
-    mayLookOnItsOwn: () => isLocalPage() || attempt(() => getStorage()?.getItem(SEEN_KEY) === '1', false),
+    mayLookOnItsOwn,
+    // Whether the Engine dialog offers to look for the bridge at all. Visitors of the public site never see it:
+    // only this computer's own pages, a browser that found the bridge before, or the owner opening the site with ?bridge.
+    mayOffer: () => mayLookOnItsOwn() || attempt(ownerAsked, false),
     // after the pairing code is forgotten, the public site no longer looks for the bridge on its own
     forgetSeen: () => attempt(() => getStorage()?.removeItem(SEEN_KEY), undefined),
     subscribe(fn: () => void) {

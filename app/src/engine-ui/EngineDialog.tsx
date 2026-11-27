@@ -182,8 +182,10 @@ function BridgeLine({ bridge, engine }: { bridge: BridgeState; engine: EngineId 
 }
 
 // On the public site, a quiet button at the end to look for the bridge; the page never looks on its own there.
+// Visitors never see it: only the owner, who opens the site with ?bridge (see the README), or once found before.
 function BridgeLook({ bridge }: { bridge: BridgeState }) {
   if (bridge.status === 'found') return null;
+  if (!bridgeStatus.mayOffer()) return null;
   if (bridgeStatus.mayLookOnItsOwn() && bridge.status !== 'absent') return null;
   const checking = bridge.status === 'checking';
   return (
