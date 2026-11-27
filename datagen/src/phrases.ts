@@ -229,7 +229,8 @@ export function featurePhrase(say: Say, f: Feature): Phrase | null {
       return np(text, ...facts);
     }
     case 'lip':
-      return np(rng.pick([a(`${mm(s, f.height)} rim around the edge`), `a raised edge ${mm(s, f.height)} high`]), sized(say, 'lip_height', f.height));
+      // "a 2 mm rim" would read as its width, so the height is said as a height
+      return np(rng.pick([`a rim ${mm(s, f.height)} high around the edge`, `a raised edge ${mm(s, f.height)} high`]), sized(say, 'lip_height', f.height));
     case 'notch':
       return rng.chance(0.5)
         ? np(a(`${mm(s, f.width)} wide notch in the front edge`), sized(say, 'notch_width', f.width))

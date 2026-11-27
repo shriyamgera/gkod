@@ -120,6 +120,7 @@ describe('compose', () => {
       expect(t.request).not.toMatch(/\b(for|fits) (an? )?[\d.]+ ?mm [\w-]+ with\b/);
       // an open box's depth is never called deep, which would read as its height
       if (/\b(tray|box)\b/.test(t.request)) expect(t.request).not.toMatch(/\bdeep\b/);
+      expect(t.request).not.toMatch(/[\d.]+ ?mm rim\b/);
       // the shaft hole and its flat are said once
       expect(t.request.match(/shaft/g)?.length ?? 0).toBeLessThanOrEqual(1);
     }
