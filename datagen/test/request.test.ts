@@ -112,6 +112,10 @@ describe('compose', () => {
       expect(t.title).toMatch(/^[A-Z]/);
       expect(t.request).not.toMatch(/\b(a [aeio8]|an [bcdfgjkmnpqrstvwxz2-79])/i);
       expect(t.request).not.toMatch(/\b\d+ \d/);
+      // what the part is for follows its name, never a list
+      expect(t.request).not.toMatch(/(,| and) (for|that fits) /);
+      // the shaft hole and its flat are said once
+      expect(t.request.match(/shaft/g)?.length ?? 0).toBeLessThanOrEqual(1);
     }
   });
 

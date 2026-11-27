@@ -9,8 +9,11 @@ import { article, count, HOLE_NOUNS, mm, pair, PLACES, plural, type Style, tripl
 /** One thing a request states, to be checked on the made part later. */
 export type Fact = { key: string; value: number; unit: 'mm' | 'count' | 'flag'; axis?: Axis | 'xy' };
 
-/** noun: a thing the part has ("2 mm walls"), said after "with"; otherwise a size said in the list ("80 mm wide"). */
-export type Phrase = { text: string; facts: Fact[]; noun?: boolean };
+/**
+ * noun: a thing the part has ("2 mm walls"), said after "with". lead: what the part is for ("for a 6 mm cable"), said
+ * right after the part's name. Otherwise a size said in the list ("80 mm wide").
+ */
+export type Phrase = { text: string; facts: Fact[]; noun?: boolean; lead?: boolean };
 
 export type Say = { rng: Rng; s: Style; tree: Tree; model: Model; env: Env };
 
@@ -27,6 +30,7 @@ function sized(say: Say, key: string, value: number, axis?: Axis | 'xy'): Fact {
 
 const ph = (text: string, ...facts: Fact[]): Phrase => ({ text, facts });
 const np = (text: string, ...facts: Fact[]): Phrase => ({ text, facts, noun: true });
+const lp = (text: string, ...facts: Fact[]): Phrase => ({ text, facts, lead: true });
 /** "a 4 mm bore" or "an 8 mm bore". */
 const a = (text: string) => `${article(text)} ${text}`;
 
@@ -93,7 +97,7 @@ export function bodyPhrases(say: Say): Phrase[] {
         across,
         ph(`${mm(s, b.height)} ${rng.pick(['tall', 'long', 'high'])}`, sized(say, 'height', b.height, 'z')),
         rng.chance(0.4)
-          ? ph(`for ${a(`${mm(s, b.bore)} screw`)}`, sized(say, 'bore_d', b.bore))
+          ? lp(`for ${a(`${mm(s, b.bore)} screw`)}`, sized(say, 'bore_d', b.bore))
           : np(rng.pick([a(`${mm(s, b.bore)} hole through it`), a(`${mm(s, b.bore)} bore`)]), sized(say, 'bore_d', b.bore)),
       ];
     }
@@ -112,17 +116,21 @@ export function bodyPhrases(say: Say): Phrase[] {
         ph(rng.pick([`${mm(s, b.diameter)} across`, `${mm(s, b.diameter)} in diameter`]), sized(say, 'diameter', b.diameter, 'xy')),
         ph(`${mm(s, b.height)} ${rng.pick(['tall', 'high'])}`, sized(say, 'height', b.height, 'z')),
       ];
-      const shaft = sized(say, 'shaft_d', b.shaft);
-      if (rng.chance(0.4)) out.push(np(a(`${mm(s, b.shaft)} shaft hole ${mm(s, b.shaftDepth)} deep`), shaft, sized(say, 'shaft_depth', b.shaftDepth)));
-      else out.push(rng.chance(0.5) ? ph(`for ${a(`${mm(s, b.shaft)} shaft`)}`, shaft) : np(a(`${mm(s, b.shaft)} shaft hole`), shaft));
+      // a flat in the shaft hole is said with the hole itself
+      const flat = tree.features.some((f) => f.kind === 'flat');
+      const shaft = [sized(say, 'shaft_d', b.shaft), ...(flat ? [flag('shaft_flat')] : [])];
+      const hole = flat ? 'D-shaped shaft hole' : 'shaft hole';
+      if (rng.chance(0.4)) out.push(np(a(`${mm(s, b.shaft)} ${hole} ${mm(s, b.shaftDepth)} deep`), ...shaft, sized(say, 'shaft_depth', b.shaftDepth)));
+      else if (rng.chance(0.5)) out.push(lp(`for ${a(`${mm(s, b.shaft)} ${flat ? 'D-shaft' : 'shaft'}`)}`, ...shaft));
+      else out.push(np(flat && rng.chance(0.5) ? a(`${mm(s, b.shaft)} shaft hole with a flat`) : a(`${mm(s, b.shaft)} ${hole}`), ...shaft));
       return out;
     }
     case 'clip': {
       const out = [
-        ph(
+        lp(
           b.cable >= 12
-            ? rng.pick([`for ${a(`${mm(s, b.cable)} pipe`)}`, `fits ${a(`${mm(s, b.cable)} tube`)}`])
-            : rng.pick([`for ${a(`${mm(s, b.cable)} cable`)}`, `fits ${a(`${mm(s, b.cable)} cable`)}`, `for ${mm(s, b.cable)} wire`]),
+            ? rng.pick([`for ${a(`${mm(s, b.cable)} pipe`)}`, `that fits ${a(`${mm(s, b.cable)} tube`)}`])
+            : rng.pick([`for ${a(`${mm(s, b.cable)} cable`)}`, `that fits ${a(`${mm(s, b.cable)} cable`)}`, `for ${mm(s, b.cable)} wire`]),
           sized(say, 'cable_d', b.cable),
         ),
         ph(`${mm(s, b.length)} long`, sized(say, 'length', b.length, 'z')),
@@ -167,7 +175,8 @@ function holes(say: Say, f: Extract<Feature, { kind: 'holes' }>): Phrase {
   return np(text, ...facts);
 }
 
-export function featurePhrase(say: Say, f: Feature): Phrase {
+/** The phrase for a feature, or null when the body's own phrase already says it. */
+export function featurePhrase(say: Say, f: Feature): Phrase | null {
   const { rng, s } = say;
   switch (f.kind) {
     case 'holes':
@@ -191,20 +200,20 @@ export function featurePhrase(say: Say, f: Feature): Phrase {
         sized(say, 'pocket_depth', f.depth),
       );
     case 'ribs': {
-      const text = `${count(s, f.count)} ${rng.pick(['stiffening ', 'reinforcing ', ''])}${plural('rib', f.count)} on top`;
-      if (rng.chance(0.5)) return np(`${text}, ${mm(s, f.height)} tall`, many('rib_count', f.count), sized(say, 'rib_height', f.height));
-      return np(text, many('rib_count', f.count));
+      const ribs = `${count(s, f.count)} ${rng.pick(['stiffening ', 'reinforcing ', ''])}${plural('rib', f.count)}`;
+      if (rng.chance(0.5)) return np(`${ribs} ${mm(s, f.height)} tall on top`, many('rib_count', f.count), sized(say, 'rib_height', f.height));
+      return np(`${ribs} on top`, many('rib_count', f.count));
     }
     case 'bosses': {
       const facts = [many('boss_count', 4), sized(say, 'boss_height', f.height)];
-      // "4 9 mm tall standoffs" reads badly, so a count in digits comes after the noun's size
-      let text = s.words ? `${count(s, 4)} ${mm(s, f.height)} tall standoffs` : `4 standoffs, ${mm(s, f.height)} tall`;
+      // "4 9 mm tall standoffs" reads badly, so a count in digits comes before the noun and its size after it
+      let text = s.words ? `${count(s, 4)} ${mm(s, f.height)} tall standoffs` : `4 standoffs ${mm(s, f.height)} tall`;
       if (rng.chance(0.6)) {
-        text += `${s.words ? '' : ','} with ${mm(s, f.hole)} holes`;
+        text += ` with ${mm(s, f.hole)} holes`;
         facts.push(sized(say, 'boss_hole_d', f.hole));
       }
       if (f.place.pattern === 'grid' && rng.chance(0.7)) {
-        text += `, ${pair(s, f.place.x, f.place.y)} apart`;
+        text += ` on a ${pair(s, f.place.x, f.place.y)} pattern`;
         facts.push(sized(say, 'boss_spacing_x', f.place.x), sized(say, 'boss_spacing_y', f.place.y));
       }
       return np(text, ...facts);
@@ -216,14 +225,14 @@ export function featurePhrase(say: Say, f: Feature): Phrase {
         ? np(a(`${mm(s, f.width)} wide notch in the front edge`), sized(say, 'notch_width', f.width))
         : np('a notch in the front edge', flag('notch'));
     case 'tabs': {
-      const text = rng.pick(['two mounting tabs', 'two tabs, one on each side', 'two screw tabs']);
+      const text = rng.pick(['two mounting tabs', 'two side tabs', 'two screw tabs']);
       if (rng.chance(0.5)) return np(`${text} with ${mm(s, f.hole)} holes`, many('tab_count', 2), sized(say, 'tab_hole_d', f.hole));
       return np(text, many('tab_count', 2));
     }
     case 'dividers':
       return rng.chance(0.5)
         ? np(`${count(s, f.count)} ${plural('divider', f.count)}`, many('divider_count', f.count))
-        : ph(`split into ${count(s, f.count + 1)} compartments`, many('compartment_count', f.count + 1));
+        : np(`${count(s, f.count + 1)} compartments`, many('compartment_count', f.count + 1));
     case 'gussets':
       return np(f.count === 1 ? `a ${rng.pick(['gusset', 'reinforcing gusset'])}` : `${count(s, 2)} gussets`, many('gusset_count', f.count));
     case 'flange': {
@@ -240,6 +249,6 @@ export function featurePhrase(say: Say, f: Feature): Phrase {
     case 'grips':
       return rng.chance(0.5) ? np(`${count(s, f.count)} grip notches around the edge`, many('grip_count', f.count)) : np('a notched grip', flag('grip'));
     case 'flat':
-      return np(rng.pick(['a D-shaped shaft hole', 'a flat in the shaft hole']), flag('shaft_flat'));
+      return null;
   }
 }
