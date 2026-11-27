@@ -216,7 +216,8 @@ def _slider_ends(gkod: Gkod, code: str, params: list[dict]) -> dict:
         "skipped_sizes": max(0, len(params) - MAX_SLIDERS),
         "ends": len(ends),
         "compiled": len(ends) - len(failed),
-        "all_ok": not failed,
+        # an answer with no named sizes has no sliders at all, which is a miss, not a pass
+        "all_ok": bool(sizes) and not failed,
         "failed": failed,
     }
 
@@ -320,6 +321,6 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
                 "same_as_a": same_code,
                 "same_mesh_as_a": same_mesh,
             }
-        scores["slider_ends"] = _slider_ends(gkod, code, params) if ok and slider_ends and params else None
+        scores["slider_ends"] = _slider_ends(gkod, code, params or []) if ok and slider_ends else None
     scores["score_s"] = round(time.perf_counter() - started, 3)
     return scores

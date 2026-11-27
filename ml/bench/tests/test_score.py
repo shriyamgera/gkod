@@ -298,6 +298,14 @@ def test_a_hidden_hollow_does_not_hide_missing_holes(gkod):
 
 
 @needs_compiler
+def test_an_answer_with_no_named_sizes_fails_the_slider_ends(gkod):
+    s = score_answer(gkod, CREATE_ROW, "create", "```openscad\ncube([60, 30, 4]);\n```")
+    assert s["compiles"] and s["compile"]["params"] == 0
+    assert s["slider_ends"]["sizes"] == 0 and s["slider_ends"]["all_ok"] is False
+    assert score_answer(gkod, CREATE_ROW, "create", "```openscad\ncube([60, 30, 4]);\n```", slider_ends=False)["slider_ends"] is None
+
+
+@needs_compiler
 def test_a_slider_end_that_breaks_the_part(gkod):
     # at its smallest the plate is narrower than the hole spacing needs, so the holes leave the part (it still
     # compiles); at the largest hole size, a wall made from the hole size goes to zero and the compile fails

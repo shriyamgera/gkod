@@ -49,6 +49,8 @@ def _group(records: list[dict]) -> dict:
     drawn = [x.get("iou_as_drawn", x["iou"]) for x in s]
     out["iou_as_drawn"] = {**mean_ci(drawn), "median": median(drawn), "note": "the answer as drawn, not turned to fit; 0 for a prompt with no part"}
     ends = [x["slider_ends"] for x in compiled if x.get("slider_ends")]
+    # named sizes are the point of the site's code: the share of compiled answers that have any
+    out["has_named_sizes"] = rate(sum(bool(x["compile"]["params"]) for x in compiled), len(compiled))
     out["slider_ends"] = {
         "all_ends_compile": rate(sum(e["all_ok"] for e in ends), len(ends)),
         "ends": sum(e["ends"] for e in ends),

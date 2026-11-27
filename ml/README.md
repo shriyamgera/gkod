@@ -292,7 +292,9 @@ the split it is read from.
   sizes are free, so one is matched by its own name first and then by value. A size left in that no longer does
   anything counts as not removed. An answer that is code A, or whose part is code A's part (same STL), fails the size
   block, so sending code A back never passes an add, or a count edit that changes no named size (two gussets for one).
-- **Slider ends** (extra). The answer is compiled at the min and at the max of each of its named sizes (up to 30).
+- **Slider ends** (extra). The answer is compiled at the min and at the max of each of its named sizes (up to 30). An
+  answer with no named sizes has no sliders, so it fails this; summaries also give `has_named_sizes`, the share of
+  compiled answers with any named size.
 
 Every scored prompt also compiles the reference again and saves whether its STL sha256 still matches the set's label.
 
