@@ -1,5 +1,5 @@
-// One generator run: trees, requests and code for part 0 to count - 1, compiled and checked in parallel, written in
-// index order so the same seed and commit always give the same parts.jsonl.
+// One generator run: trees, requests and code from part 0 up until `count` parts are made, compiled and checked in
+// parallel, written in index order so the same seed and commit always give the same parts.jsonl.
 import { createHash } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
@@ -209,13 +209,19 @@ export async function run(opts: RunOptions): Promise<Manifest> {
       record(finished.get(next)!);
       finished.delete(next);
       next++;
-      opts.progress?.(next);
+      opts.progress?.(sizes.parts.rows);
     }
   };
+  // Skipped trees do not count, so the run goes on until `count` parts are made. Each index is planned before the
+  // next one is handed out, so where a run stops never depends on the number of workers.
+  let planned = 0;
   const worker = async () => {
-    while (given < opts.count) {
+    while (planned < opts.count) {
       const index = given++;
-      finished.set(index, await label(plan(opts.seed, index, opts.generator)));
+      const part = plan(opts.seed, index, opts.generator);
+      if (part.row) planned++;
+      else if (index + 1 - planned > Math.max(100, opts.count)) throw new Error('More parts were skipped than made. Check the families.');
+      finished.set(index, await label(part));
       flush();
     }
   };

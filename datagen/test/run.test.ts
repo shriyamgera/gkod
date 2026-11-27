@@ -27,7 +27,9 @@ describe('run', () => {
     expect(second).toEqual(first);
 
     const rows = readFileSync(join(a, 'parts.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line) as Row);
-    expect(rows.length + first.skipped).toBe(20);
+    // skipped trees do not count: the run goes on until it has 20 parts
+    expect(rows.length).toBe(20);
+    expect(rows.at(-1)!.index).toBe(19 + first.skipped);
     expect(rows.map((row) => row.index)).toEqual([...rows.map((row) => row.index)].sort((x, y) => x - y));
     expect(first.rows).toBe(rows.length);
     expect(first.rates.compile).toBeGreaterThanOrEqual(0.95);

@@ -6,7 +6,8 @@ import { run } from './run.ts';
 
 export const USAGE = `Usage: gkod-datagen --count 1000 --seed 1 --out data/parts/<name> [--workers 8]
 
-Makes program-built training parts: a feature tree, a request and OpenSCAD code for each, compiled and checked.
+Makes --count program-built training parts: a feature tree, a request and OpenSCAD code for each, compiled and
+checked. A tree that breaks a rule is skipped and logged, and the next index is tried.
 Writes parts.jsonl, skipped.jsonl, timings.jsonl and manifest.json into the output folder, which must be inside data/.`;
 
 export class UsageError extends Error {}
