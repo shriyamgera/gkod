@@ -9,6 +9,9 @@ import { sampleKnob } from './knob.ts';
 import { samplePlate } from './plate.ts';
 import { sampleSpacer } from './spacer.ts';
 import { sampleTray } from './tray.ts';
+import { sampleWasher } from './washer.ts';
+import { sampleShelf } from './shelf.ts';
+import { sampleToolHolder } from './tool_holder.ts';
 
 export type Family = { id: string; sample: (rng: Rng) => Tree };
 
@@ -22,6 +25,9 @@ export const FAMILIES: readonly Family[] = [
   { id: 'hook', sample: sampleHook },
   { id: 'knob', sample: sampleKnob },
   { id: 'clip', sample: sampleClip },
+  { id: 'washer', sample: sampleWasher },
+  { id: 'shelf', sample: sampleShelf },
+  { id: 'tool_holder', sample: sampleToolHolder },
 ];
 
 export function findFamily(id: string): Family | undefined {

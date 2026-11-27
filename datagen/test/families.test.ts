@@ -4,9 +4,12 @@ import { Rng } from '../src/rng.ts';
 import { validate } from '../src/validate.ts';
 
 describe('families', () => {
-  it('has eight families with unique ids', () => {
+  it('lists the families with unique ids, the first eight in their old order', () => {
     const ids = FAMILIES.map((family) => family.id);
-    expect(ids).toEqual(['plate', 'bracket', 'channel', 'tray', 'spacer', 'hook', 'knob', 'clip']);
+    expect(ids).toEqual([
+      'plate', 'bracket', 'channel', 'tray', 'spacer', 'hook', 'knob', 'clip',
+      'washer', 'shelf', 'tool_holder',
+    ]);
     expect(findFamily('hook')?.id).toBe('hook');
     expect(findFamily('nope')).toBeUndefined();
   });
