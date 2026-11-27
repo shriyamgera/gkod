@@ -33,3 +33,7 @@ def test_a_real_part(bridge):
     assert "Compiling" in steps
     assert "cylinder" in final["code"]
     assert final["session_id"]
+    # the tools' code, STL files and pictures are in this job's own folder, not in the repository
+    folder = bridge.app.state.runner.sessions.folder(final["session_id"])
+    assert folder is not None and folder.parent == bridge.settings.work_root
+    assert list((folder / "out").glob("*.stl")) and list((folder / "out").glob("*.scad"))

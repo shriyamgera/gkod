@@ -80,9 +80,9 @@ bridge/.venv/bin/python -m pip install -r bridge/requirements-dev.txt
 bridge/.venv/bin/python -m pytest bridge
 ```
 
-The tests start the bridge on a free port with a fake `claude` ([tests/fake_claude.py](tests/fake_claude.py)) that prints hand-written stream-json lines, records how it was started and calls no model. They cover pairing, CORS and the preflight, the Host check, bad requests, progress steps, the code and Assumptions line, sessions, pictures, 409 when busy, stop, the time limit (killing a process that ignores SIGTERM, and its child), the page going away, and each error message.
+The tests start the bridge on a free port with a fake `claude` ([tests/fake_claude.py](tests/fake_claude.py)) that prints hand-written stream-json lines, records how it was started and calls no model. They cover pairing, CORS and the preflight, the Host check, bad requests and length limits, the body cap (also for a chunked body), progress steps, the code and Assumptions line, sessions (and that only the bridge's own are continued), each job's own `GKOD_OUT`, pictures, 409 when busy, stop, the time limit (killing a process that ignores SIGTERM, and its child), the page going away, missing or failed GKod tools, and each error message.
 
-One test uses the real `claude` and the owner's plan, so it only runs when asked:
+One test uses the real `claude`, the real GKod tools and the owner's plan, so it only runs when asked. It also checks that the tools' files end up in the job's own folder:
 
 ```sh
 GKOD_REAL_CLAUDE=1 bridge/.venv/bin/python -m pytest bridge/tests/test_real.py
