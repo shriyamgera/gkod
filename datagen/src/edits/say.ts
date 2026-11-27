@@ -72,6 +72,8 @@ type Thing = { the: string | null; dims: Dim[]; plural?: boolean };
 const OPENERS = ['', '', '', '', 'please ', 'now ', 'can you '] as const;
 const REMOVE = ['remove', 'remove', 'take out', 'get rid of', 'drop'] as const;
 const ORDINALS = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth'];
+/** A scale factor said in words, for the factors that have them. */
+const TIMES: Partial<Record<number, string>> = { 2: 'twice', 1.5: '1.5 times', 0.75: 'three quarters of' };
 
 /** Bracket sizes on one face carry its name: base_hole_d is the hole diameter in the base. */
 function split(name: string, tree: Tree): { stem: string; where: string } {
@@ -306,7 +308,8 @@ function recount(op: SizeOp, ctx: SayCtx): Said {
 function reshape(op: ShapeOp, ctx: SayCtx): Said {
   const { rng, s } = ctx;
   if (op.feature === 'gussets') {
-    const forms = op.to === 2 ? ['add a second gusset', `use ${count(s, 2)} gussets instead of one`] : [`use one gusset in the middle instead of ${count(s, 2)}`];
+    const { one } = counted('gusset_count', ctx.a.tree, rng);
+    const forms = op.to === 2 ? [`add a ${ORDINALS[2]} ${one}`, `use ${count(s, 2)} ${one}s instead of one`] : [`use one ${one} in the middle instead of ${count(s, 2)}`];
     return { text: rng.pick(forms), facts: [{ key: 'gusset_count', value: op.to, unit: 'count' }] };
   }
   const { p } = prefixOf(ctx.a.tree.body, op.face!);
@@ -330,9 +333,8 @@ function scale(op: ScaleOp, ctx: SayCtx): Said {
     k > 1
       ? [`make ${what} ${pct}% bigger`, `scale ${what} up by ${pct}%`, `scale ${what} to ${Math.round(k * 100)}%`]
       : [`make ${what} ${pct}% smaller`, `scale ${what} down by ${pct}%`, `scale ${what} to ${Math.round(k * 100)}%`];
-  if (k === 2) forms.push(`make ${what} twice as big`, 'double the size');
-  if (k === 1.5) forms.push(`make ${what} 1.5 times the size`);
-  if (k === 0.75) forms.push('make it three quarters of the size');
+  if (k === 2) forms.push(`make ${what} ${TIMES[k]} as big`);
+  if (TIMES[k]) forms.push(`make ${what} ${TIMES[k]} the size`);
   return { text: rng.pick(forms), facts: [{ key: 'scale', value: k, unit: 'ratio' }, ...axisFacts(ctx.b)] };
 }
 
@@ -399,7 +401,7 @@ function remove(op: RemoveOp, ctx: SayCtx): Said {
   const { rng } = ctx;
   const { the, fact } = removed(op, ctx.a.tree, rng);
   const forms = [`${rng.pick(REMOVE)} ${the}`, `${rng.pick(REMOVE)} ${the}`, `make it without ${the}`];
-  if (op.feature.kind === 'flat') forms.push('make the shaft hole round');
+  if (op.feature.kind === 'flat') forms.push(`make ${thingOf('shaft_d', ctx.a.tree, rng)!.the} round`);
   return { text: rng.pick(forms), facts: [fact] };
 }
 

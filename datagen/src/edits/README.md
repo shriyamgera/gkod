@@ -17,7 +17,7 @@ An edit pair is a part, one change to it, and the changed part: code A, an instr
 | `hole_d` | a hole diameter (holes, tab, flange or standoff holes, a spacer's hole, a knob's shaft hole) | "use 5 mm holes instead", "make the screw holes 1 mm bigger" |
 | `move` | where holes, slots or standoffs sit: their spacing or distance from the edge | "move the holes 3mm closer together", "put the holes 8 mm in from the edges" |
 | `count` | a count: holes in a row, ribs, dividers, flange holes, grip notches; one centre hole and a pair; one gusset and two | "add a third hole", "use two holes 30 mm apart instead of one", "split it into three compartments" |
-| `scale` | every size but the counts, by 120%, 125%, 150%, 200%, 80% or 75% | "make it 50% bigger", "double the size" |
+| `scale` | every size but the counts, by 120%, 125%, 150%, 200%, 80% or 75% | "make it 50% bigger", "make it twice the size" |
 | `add` | a new feature, with sizes picked the way its family picks them | "add a rim 3 mm high around the edge", "give it two mounting tabs with 4 mm holes" |
 | `remove` | one feature; a bracket or hook keeps its last holes or slots | "remove the slot", "make it without the gussets" |
 

@@ -148,7 +148,11 @@ describe('edit pairs', () => {
           const said = [String(fact.value), NUMBER_WORDS[fact.value]!, ...(fact.value === 1 ? ['a', 'one'] : [])];
           expect(said.some((word) => new RegExp(`\\b${word}\\b`, 'i').test(text)), `${fact.key} in "${text}"`).toBe(true);
         }
-        if (fact.unit === 'ratio') expect(text).toMatch(/%|twice|double|1\.5 times|three quarters/i);
+        if (fact.unit === 'ratio') {
+          expect(text).toMatch(/%|twice|1\.5 times|three quarters/i);
+          // every scale is said of what it scales, from the word list; none is a fixed sentence
+          expect(text, pair.id).toMatch(/\b(it|the whole part|everything)\b/i);
+        }
       }
     }
   });
