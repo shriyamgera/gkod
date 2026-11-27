@@ -8,6 +8,7 @@ divided by `resolution` (200 by default: 1 mm voxels for a 200 mm part, a fracti
 
 from __future__ import annotations
 
+import itertools
 import math
 
 import numpy as np
@@ -111,3 +112,59 @@ def iou(tri_a: np.ndarray, tri_b: np.ndarray, resolution: int = RESOLUTION) -> d
         "voxels_a": int(np.count_nonzero(fa)),
         "voxels_b": int(np.count_nonzero(fb)),
     }
+
+
+def turns() -> list[np.ndarray]:
+    """The 24 ways to set a part down on a face of its box: every signed permutation matrix that turns without
+    mirroring (determinant 1). The first is the part as drawn."""
+    out = []
+    for perm in itertools.permutations(range(3)):
+        for signs in itertools.product((1, -1), repeat=3):
+            m = np.zeros((3, 3))
+            for row, (col, sign) in enumerate(zip(perm, signs)):
+                m[row, col] = sign
+            if round(float(np.linalg.det(m))) == 1:
+                out.append(m)
+    return out
+
+
+TURNS = turns()
+
+
+def _turn_name(m: np.ndarray) -> list[str]:
+    """Each new axis as an axis of the part as drawn, with its sign: ["+z", "+x", "+y"] puts the old z along x."""
+    return [("-" if m[row].sum() < 0 else "+") + "xyz"[int(np.flatnonzero(m[row])[0])] for row in range(3)]
+
+
+def best_turn_iou(tri_a: np.ndarray, tri_b: np.ndarray, resolution: int = RESOLUTION) -> dict:
+    """Voxel IoU of A against B with A turned onto each of the 24 faces of its box, min corners lined up. `iou` is
+    the best turn, so a right part drawn lying another way is not marked down; `iou_as_drawn` is A as drawn, the
+    number `iou()` gives. Every turn keeps A's longest side, so the voxel size is the same for all of them, and B is
+    filled once, on its own box (B has no voxels past it)."""
+    a = np.asarray(tri_a, dtype=np.float64).reshape(-1, 3, 3)
+    b = np.asarray(tri_b, dtype=np.float64).reshape(-1, 3, 3)
+    empty = {"iou": None, "iou_as_drawn": None, "turn": None, "pitch": None}
+    if not len(a) or not len(b):
+        return empty
+    a = a - a.reshape(-1, 3).min(axis=0)
+    b = b - b.reshape(-1, 3).min(axis=0)
+    b_extent = b.reshape(-1, 3).max(axis=0)
+    longest = float(max(a.max(), b_extent.max()))
+    if longest <= 0:
+        return empty
+    pitch = longest / resolution
+    b_shape = tuple(int(max(1, math.ceil(e / pitch))) for e in b_extent)
+    fb = fill(b, pitch, b_shape)
+    b_voxels = int(np.count_nonzero(fb))
+    results = []
+    for m in TURNS:
+        turned = a.reshape(-1, 3) @ m.T
+        turned = (turned - turned.min(axis=0)).reshape(-1, 3, 3)
+        extent = np.maximum(turned.reshape(-1, 3).max(axis=0), b_extent)
+        shape = tuple(max(int(math.ceil(e / pitch)), s) for e, s in zip(extent, b_shape))
+        fa = fill(turned, pitch, shape)
+        inter = int(np.count_nonzero(fa[: b_shape[0], : b_shape[1], : b_shape[2]] & fb))
+        union = int(np.count_nonzero(fa)) + b_voxels - inter
+        results.append(inter / union if union else 0.0)
+    best = max(range(len(results)), key=lambda i: (results[i], -i))
+    return {"iou": results[best], "iou_as_drawn": results[0], "turn": _turn_name(TURNS[best]), "pitch": pitch}

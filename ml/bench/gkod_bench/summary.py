@@ -18,12 +18,19 @@ def _group(records: list[dict]) -> dict:
     out["checks_pass"] = rate(sum(x["checks_pass"] for x in s), n)
     judged = [x["meets_request"] for x in s if x["meets_request"] is not None]
     out["meets_request"] = {**rate(sum(judged), len(judged)), "prompts_with_nothing_measured": n - len(judged)}
+    strict = [x["meets_request_strict"] for x in s if x.get("meets_request_strict") is not None]
+    out["meets_request_strict_axes"] = {
+        **rate(sum(strict), len(strict)),
+        "note": "overall sizes on the axes the reference part is drawn with, which no prompt states; the score is meets_request",
+    }
     facts = [f for x in s for f in x["facts"]]
     measured = [f for f in facts if f["status"] != "unmeasured"]
     by_how = {}
     for how in ("size", "holes"):
         fs = [f for f in measured if f["how"] == how]
         by_how[how] = rate(sum(f["status"] == "pass" for f in fs), len(fs))
+    sized = [f for f in measured if f["how"] == "size" and "strict" in f]
+    by_how["size_strict_axes"] = rate(sum(f["strict"]["status"] == "pass" for f in sized), len(sized))
     out["facts"] = {
         "stated": len(facts),
         "measured": len(measured),
@@ -36,6 +43,8 @@ def _group(records: list[dict]) -> dict:
     ious = [x["iou"] for x in s]
     out["iou"] = {**mean_ci(ious), "median": median(ious), "note": "0 for a prompt with no part"}
     out["iou_compiled"] = {**mean_ci([x["iou"] for x in compiled]), "median": median([x["iou"] for x in compiled])}
+    drawn = [x.get("iou_as_drawn", x["iou"]) for x in s]
+    out["iou_as_drawn"] = {**mean_ci(drawn), "median": median(drawn), "note": "the answer as drawn, not turned to fit; 0 for a prompt with no part"}
     ends = [x["slider_ends"] for x in compiled if x.get("slider_ends")]
     out["slider_ends"] = {
         "all_ends_compile": rate(sum(e["all_ok"] for e in ends), len(ends)),

@@ -254,8 +254,12 @@ the split it is read from.
 - **Passes the print checks.** All four checks for the Anycubic Kobra 2 Neo bed (220 x 220 x 250 mm, 45 degree
   overhangs). False when it does not compile.
 - **Meets the request.** Each fact the request states is marked pass, fail or unmeasured:
-  - an overall size (a fact with an axis) passes when the answer's bounding box is within 0.5 mm on that axis (x and
-    y for a diameter);
+  - an overall size (a fact with an axis) passes when the answer's bounding box is within 0.5 mm on the side matched
+    to that axis (two sides for a diameter). No prompt says which side is x, and some parts are drawn lying on their
+    side (hooks, clips, saddles, handles), so the prompt's overall sizes are matched to the box's three sides in the one
+    order that fits the most of them (then the smallest total error, then the order as drawn): a right part standing
+    up passes. `meets_request_strict` keeps the stricter result, every size on the axis the reference is drawn with,
+    as a second column that is labelled as such and is not the score;
   - stated hole counts (keys ending in `hole_count`, joined by `slot_count` when needed) are checked with the mesh's
     genus, its number of through holes. They are measured only when the reference part is one closed body whose genus
     is exactly the stated total, so the genus is known to count those holes and nothing else, and only when the
@@ -266,8 +270,10 @@ the split it is read from.
   A prompt with nothing measured is left out of that rate and counted on its own. Summaries give the measured and
   unmeasured counts, and the reasons.
 - **Shape overlap.** Voxel intersection over union with the reference part (code B for an edit), after moving each
-  bounding box's min corner to the origin. The voxel size is the longer of the two parts' longest sides divided by 200;
-  a part takes 10 to 50 ms. 0 when there is no part.
+  bounding box's min corner to the origin, best of the 24 ways the answer can be set down on a face of its box (turns
+  only, no mirror images), so a right part drawn lying another way scores 1. `iou_as_drawn` is the answer as drawn,
+  not turned. The voxel size is the longer of the two parts' longest sides divided by 200; the 24 turns take 10 to 100
+  ms a part. 0 when there is no part.
 - **Edits: the size block.** The answer's named sizes, read by the compiler as the site's sliders read them, against
   code B: every kept size has the same name, value and caption; every changed size has its new value; every removed
   size is gone. Added sizes are only counted, since their names are free. A size left in that no longer does anything
@@ -282,7 +288,7 @@ Every scored prompt also compiles the reference again and saves whether its STL 
 |---|---|
 | `results/raw/<row>/<split>/<id>.json` | One prompt: tier, family, the prompt (system sha256, the user words, the few-shot ids), the answer text, the code read from it, the engine's notes, the scores, the times and the harness commit. Written whole or not at all. |
 | `results/<row>/<split>/run.json` | The row: engine settings, few-shot record, system prompt sha256, data files and their sha256, scoring settings, the harness commit at the start. |
-| `results/<row>/<split>/summary.json` | Rates with 95% Wilson intervals overall, per tier (`t1`, `t2`, `t3`, `edit`) and per tier 3 family: compiles, print checks, meets the request, measured facts (by measurer), shape overlap (mean with a normal 95% interval, and median), slider ends, edit size blocks, why answers had no code, which checks failed, time per prompt, tokens or cost. It says how many prompts are done, missing or without an answer, and is marked incomplete until every prompt is scored. |
+| `results/<row>/<split>/summary.json` | Rates with 95% Wilson intervals overall, per tier (`t1`, `t2`, `t3`, `edit`) and per tier 3 family: compiles, print checks, meets the request (and the strict-axes column), measured facts (by measurer), shape overlap (best turn and as drawn, each a mean with a normal 95% interval, and median), slider ends, edit size blocks, why answers had no code, which checks failed, time per prompt, tokens or cost. It says how many prompts are done, missing or without an answer, and is marked incomplete until every prompt is scored. |
 | `results/compare/<a>__vs__<b>/<split>.json` | Two rows on the prompts both answered: each rate, the difference A - B with Newcombe's interval for paired rates and the exact McNemar test, and for overlap the mean paired difference with the sign test; overall and per tier. |
 
 ### Checked so far
@@ -304,14 +310,16 @@ Every scored prompt also compiles the reference again and saves whether its STL 
 
 What these numbers do not show: the facts measured are only overall sizes and hole counts. A part can meet the request
 here and still have holes in the wrong place, the wrong size or a missing feature that has no count; the shape overlap
-is the score that catches some of that. Overall sizes are checked on the axis the request states, so a correct part
-drawn turned on its side fails them. Every prompt, test included, comes from our own generator.
+is the score that catches some of that. Overall sizes and the overlap are checked whichever way the answer lies, so
+they say nothing about whether it lies the way that prints best; the print checks cover that, and the strict columns
+show how often an answer also lies as the reference is drawn. Every prompt, test included, comes from our own
+generator.
 
 `pytest ml/bench` covers the scorer on hand-made meshes (blocks of unit cubes with 0 to 4 through holes, two pieces, a
-hidden hollow, open and flipped faces) and on hand-written code through the real compiler (full marks for the
-reference, a wrong size and a missing hole, no code, broken code, a slider end that breaks the part, an edit, a
-timeout tried again), the extractor cases, the intervals and paired tests, the data loader and its hash and split
-checks, the few-shot rule, a whole row on a small hand-made set, resuming after a stop or after errors, a resumed row
-with other settings, few-shot turns, the comparison, the closed test split in every command, and the Gemini and Claude
-Code adapters against recorded replies (no real calls). With `GKOD_BENCH_LOCAL=1` it also loads the local model and
-checks that greedy answers repeat exactly.
+hidden hollow, open and flipped faces) and on hand-written code through the real compiler (full marks for the reference,
+a wrong size and a missing hole, the right part stood up (it meets the request and overlaps 1, and fails only the strict
+columns), no code, broken code, a slider end that breaks the part, an edit, a timeout tried again), the extractor cases,
+the intervals and paired tests, the data loader and its hash and split checks, the few-shot rule, a whole row on a small
+hand-made set, resuming after a stop or after errors, a resumed row with other settings, few-shot turns, the comparison,
+the closed test split in every command, and the Gemini and Claude Code adapters against recorded replies (no real
+calls). With `GKOD_BENCH_LOCAL=1` it also loads the local model and checks that greedy answers repeat exactly.

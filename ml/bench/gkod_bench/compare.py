@@ -16,6 +16,8 @@ BOOLEAN = {
     "checks_pass": lambda s: s["checks_pass"],
     # a prompt with nothing measured counts as not met here, the same on both sides
     "meets_request": lambda s: s["meets_request"] is True,
+    # the stricter column: overall sizes on the axes the reference part is drawn with
+    "meets_request_strict_axes": lambda s: s.get("meets_request_strict") is True,
 }
 
 
@@ -24,6 +26,7 @@ def _block(pairs: list[tuple[dict, dict]]) -> dict:
     for name, get in BOOLEAN.items():
         out[name] = paired_rates([get(a) for a, _ in pairs], [get(b) for _, b in pairs])
     out["iou"] = paired_means([a["iou"] for a, _ in pairs], [b["iou"] for _, b in pairs])
+    out["iou_as_drawn"] = paired_means([a.get("iou_as_drawn", a["iou"]) for a, _ in pairs], [b.get("iou_as_drawn", b["iou"]) for _, b in pairs])
     edits = [(a, b) for a, b in pairs if "edit" in a and "edit" in b]
     if edits:
         out["edit_sizes_ok"] = paired_rates([a["edit"]["sizes_ok"] for a, _ in edits], [b["edit"]["sizes_ok"] for _, b in edits])

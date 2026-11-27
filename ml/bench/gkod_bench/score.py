@@ -4,7 +4,9 @@ part still compiles at both ends of every slider.
 
 What counts as measured:
 - A fact with an axis (the part's real overall size along x, y, z, or x and y for a diameter) is checked on the
-  answer's bounding box, within 0.5 mm on the stated axis.
+  answer's bounding box, within 0.5 mm, whichever way the answer lies: the prompt's overall sizes are matched to the
+  box's three sides in the one order that fits the most of them, since no prompt says which side is x. The axes the
+  reference part is drawn with (a hook or clip lies on its side) are kept as a second, stricter result.
 - Stated hole counts (keys ending in hole_count, and slot_count with them when needed) are checked with the mesh's
   genus: the number of through holes of one closed body. They are measured only when the reference part is one
   closed body whose genus is exactly the stated total, so the genus is known to count those holes and nothing else,
@@ -14,6 +16,7 @@ What counts as measured:
 
 from __future__ import annotations
 
+import itertools
 import math
 import tempfile
 import time
@@ -24,7 +27,7 @@ from gkod_bench.extract import extract_code
 from gkod_bench.gkod import TIMEOUT_MESSAGE, Gkod
 from gkod_bench.mesh import MeshInfo, measure
 from gkod_bench.stl import read_stl
-from gkod_bench.voxel import iou as voxel_iou
+from gkod_bench.voxel import best_turn_iou
 
 SIZE_TOLERANCE_MM = 0.5
 # edit values are written with a few decimals; scaled sizes are exact to 1e-6 in code B
@@ -32,6 +35,8 @@ VALUE_TOLERANCE = 1e-3
 MAX_SLIDERS = 30
 REFERENCE_TRIES = 3
 AXES = {"x": (0,), "y": (1,), "z": (2,), "xy": (0, 1)}
+# the answer's axes for the request's x, y and z, the order as drawn first
+ORDERS = list(itertools.permutations(range(3)))
 
 
 def _counts(facts: list[dict], suffix: str) -> list[dict]:
@@ -67,8 +72,29 @@ def plan_facts(facts: list[dict], reference: MeshInfo | None) -> list[dict]:
     return planned
 
 
+def _size_ok(got: list[float], value: float) -> bool:
+    return all(abs(g - value) <= SIZE_TOLERANCE_MM for g in got)
+
+
+def orient(planned: list[dict], size: tuple[float, float, float]) -> tuple[int, int, int]:
+    """The answer's axes for the request's x, y and z: the one order of the box's sides that fits the most stated
+    overall sizes, then the smallest total error, then the order as drawn. One order serves every size of the prompt,
+    so a part cannot be wide on one axis for one fact and on another for the next."""
+    sized = [p for p in planned if p["how"] == "size"]
+    best_key, best = None, ORDERS[0]
+    for order in ORDERS:
+        got = [[size[order[i]] for i in AXES[p["axis"]]] for p in sized]
+        key = (-sum(_size_ok(g, p["value"]) for g, p in zip(got, sized)), round(sum(abs(x - p["value"]) for g, p in zip(got, sized) for x in g), 6))
+        if best_key is None or key < best_key:
+            best_key, best = key, order
+    return best
+
+
 def check_facts(planned: list[dict], answer: MeshInfo | None) -> list[dict]:
-    """pass, fail or unmeasured for each fact. With no mesh every measurable fact fails: there is no part."""
+    """pass, fail or unmeasured for each fact. With no mesh every measurable fact fails: there is no part. An overall
+    size is checked on the side of the answer's box that `orient` matched to its axis; `strict` keeps the result on
+    the stated axis itself."""
+    order = orient(planned, answer.size) if answer is not None else ORDERS[0]
     out = []
     for p in planned:
         r = {k: p[k] for k in ("key", "value", "unit") if k in p}
@@ -80,10 +106,16 @@ def check_facts(planned: list[dict], answer: MeshInfo | None) -> list[dict]:
             r.update(status="unmeasured", reason=p["reason"])
         elif answer is None:
             r.update(status="fail", reason="no mesh")
+            if how == "size":
+                r["strict"] = {"status": "fail"}
         elif how == "size":
-            got = [answer.size[i] for i in AXES[p["axis"]]]
+            axes = [order[i] for i in AXES[p["axis"]]]
+            got = [answer.size[i] for i in axes]
             r["got"] = [round(g, 3) for g in got]
-            r["status"] = "pass" if all(abs(g - p["value"]) <= SIZE_TOLERANCE_MM for g in got) else "fail"
+            r["answer_axis"] = "".join("xyz"[i] for i in axes)
+            r["status"] = "pass" if _size_ok(got, p["value"]) else "fail"
+            strict = [answer.size[i] for i in AXES[p["axis"]]]
+            r["strict"] = {"got": [round(g, 3) for g in strict], "status": "pass" if _size_ok(strict, p["value"]) else "fail"}
         elif how == "holes":
             if answer.genus is None:
                 r.update(status="unmeasured", reason="the answer is not one closed body, so its genus does not count holes")
@@ -104,6 +136,13 @@ def meets_request(compiled: bool, facts: list[dict]) -> bool | None:
     if any(f["status"] == "fail" for f in measured):
         return False
     return True if measured else None
+
+
+def meets_request_strict(compiled: bool, facts: list[dict]) -> bool | None:
+    """meets_request with every overall size on the axis its fact names, as the reference part is drawn: width on x,
+    depth on y, height on z, and a hook, clip, saddle or handle lying on its side. No prompt says this, so it is the
+    second, stricter column, not the score."""
+    return meets_request(compiled, [{**f, "status": f["strict"]["status"]} if "strict" in f else f for f in facts])
 
 
 def _close(a: Any, b: Any) -> bool:
@@ -215,19 +254,25 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
         scores["mesh"] = info.as_dict() if info else None
 
         stated = row["facts"]["stated"] if task == "edit" else row["facts"]
-        facts = check_facts(plan_facts(stated, ref_info), info)
+        planned = plan_facts(stated, ref_info)
+        facts = check_facts(planned, info)
         scores["facts"] = facts
         scores["facts_measured"] = sum(f["status"] != "unmeasured" for f in facts)
         scores["facts_passed"] = sum(f["status"] == "pass" for f in facts)
         scores["facts_unmeasured"] = sum(f["status"] == "unmeasured" for f in facts)
         scores["meets_request"] = meets_request(ok, facts)
+        scores["meets_request_strict"] = meets_request_strict(ok, facts)
+        # the answer's axes that the request's x, y and z sizes were read on ("xyz" when it lies as drawn)
+        scores["size_orientation"] = "".join("xyz"[i] for i in orient(planned, info.size)) if info else None
 
         if ok:
-            overlap = voxel_iou(read_stl(ans_stl), ref_tri)
+            overlap = best_turn_iou(read_stl(ans_stl), ref_tri)
             scores["iou"] = overlap["iou"] if overlap["iou"] is not None else 0.0
+            scores["iou_as_drawn"] = overlap["iou_as_drawn"] if overlap["iou_as_drawn"] is not None else 0.0
             scores["iou_detail"] = overlap
         else:
             scores["iou"] = 0.0
+            scores["iou_as_drawn"] = 0.0
             scores["iou_detail"] = None
 
         params = compiled.get("params") if ok else None

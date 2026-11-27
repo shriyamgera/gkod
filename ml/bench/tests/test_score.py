@@ -5,7 +5,7 @@ from shapes import box, plate_with_holes
 from gkod_bench.gkod import Gkod
 from gkod_bench.mesh import measure
 from gkod_bench.paths import REPO
-from gkod_bench.score import check_facts, meets_request, plan_facts, score_answer, size_block
+from gkod_bench.score import check_facts, meets_request, meets_request_strict, orient, plan_facts, score_answer, size_block
 
 needs_compiler = pytest.mark.skipif(
     not (REPO / "app" / "public" / "openscad" / "openscad.wasm").exists(),
@@ -35,6 +35,33 @@ def test_overall_sizes_within_half_a_millimetre():
     assert got["depth"]["status"] == "fail" and got["depth"]["got"] == [20.6]
     assert got["height"]["status"] == "pass"
     assert got["wall"]["status"] == "unmeasured"
+
+
+def test_overall_sizes_fit_whichever_way_the_part_lies():
+    # a hook drawn on its side: width on z, reach on x, back plate on y; the answer stands it up
+    facts = [fact("width", 27, axis="z"), fact("reach", 42, axis="x"), fact("back_height", 107, axis="y")]
+    planned = plan_facts(facts, measure(box(42, 107, 27)))
+    assert orient(planned, (42.0, 27.0, 107.0)) == (0, 2, 1)
+    results = check_facts(planned, measure(box(42, 27, 107)))
+    got = by_key(results)
+    assert all(r["status"] == "pass" for r in results)
+    assert got["width"]["answer_axis"] == "y" and got["back_height"]["answer_axis"] == "z" and got["reach"]["answer_axis"] == "x"
+    # the strict column keeps the axes the reference part is drawn with
+    assert got["width"]["strict"] == {"got": [107.0], "status": "fail"} and got["reach"]["strict"]["status"] == "pass"
+    assert meets_request(True, results) is True and meets_request_strict(True, results) is False
+    # lying as drawn, both agree
+    as_drawn = check_facts(planned, measure(box(42, 107, 27)))
+    assert meets_request(True, as_drawn) is True and meets_request_strict(True, as_drawn) is True
+
+
+def test_one_order_of_the_sides_serves_every_size_of_a_prompt():
+    # each size alone fits some side, but no one order fits all three: the box has one 10 mm side, not two
+    planned = plan_facts([fact("width", 10, axis="x"), fact("depth", 10, axis="y"), fact("height", 5, axis="z")], measure(box(10, 10, 5)))
+    assert sorted(r["status"] for r in check_facts(planned, measure(box(10, 5, 5)))) == ["fail", "pass", "pass"]
+    # a diameter turned onto its side is read on the two sides of one order
+    planned = plan_facts([fact("diameter", 30, axis="xy"), fact("height", 10, axis="z")], measure(box(30, 30, 10)))
+    results = check_facts(planned, measure(box(30, 10, 30)))
+    assert [r["status"] for r in results] == ["pass", "pass"] and by_key(results)["diameter"]["answer_axis"] == "xz"
 
 
 def test_a_diameter_is_checked_on_x_and_y():
@@ -175,8 +202,8 @@ def test_the_reference_itself_scores_full_marks(gkod):
     assert s["checks"] == {"closed": True, "fits-bed": True, "flat-base": True, "overhang": True}
     assert s["mesh"]["genus"] == 2 and s["reference"]["mesh"]["genus"] == 2
     assert s["facts_measured"] == 4 and s["facts_passed"] == 4 and s["facts_unmeasured"] == 1
-    assert s["meets_request"] is True
-    assert s["iou"] == pytest.approx(1.0)
+    assert s["meets_request"] is True and s["meets_request_strict"] is True and s["size_orientation"] == "xyz"
+    assert s["iou"] == pytest.approx(1.0) and s["iou_as_drawn"] == pytest.approx(1.0)
     assert s["slider_ends"] == {"sizes": 4, "skipped_sizes": 0, "ends": 8, "compiled": 8, "all_ok": True, "failed": []}
 
 
@@ -190,6 +217,17 @@ def test_a_wrong_answer_loses_the_right_scores(gkod):
     assert got["hole_count"]["status"] == "fail" and got["hole_count"]["got_genus"] == 1
     assert s["meets_request"] is False
     assert 0.6 < s["iou"] < 0.95
+
+
+@needs_compiler
+def test_a_right_part_standing_up_is_not_marked_down(gkod):
+    # the plate stood on its long edge: every stated size is there, on other axes
+    upright = PLATE.replace("difference() {", "rotate([90, 0, 0]) difference() {")
+    s = score_answer(gkod, CREATE_ROW, "create", f"```openscad\n{upright}```", slider_ends=False)
+    assert s["compiles"] and s["mesh"]["size"] == pytest.approx([60, 4, 30])
+    assert s["meets_request"] is True and s["meets_request_strict"] is False and s["size_orientation"] == "xzy"
+    assert s["iou"] == pytest.approx(1.0) and s["iou_as_drawn"] < 0.5
+    assert s["iou_detail"]["turn"] == ["+x", "+z", "-y"]
 
 
 @needs_compiler
