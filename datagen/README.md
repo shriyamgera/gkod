@@ -173,17 +173,19 @@ Three test families share a body with a training family (washer: the spacer's ro
 
 **Held-out feature pairs.** A feature is its kind, with its face for holes, slots and pockets (`holes@top`, `slots@base`); corner shapes and countersinks are not features. No training part, and neither side of any training edit, has both features of a pair, but each feature is in training parts on its own:
 
-| Pair | Where it shows up | Split | Training parts with each feature |
-|---|---|---|---|
-| holes@top + lip | plate: holes and a rim | dev | 214 / 12 |
-| dividers + tabs | tray | dev | 124 / 38 |
-| gussets + slots@base | bracket | dev | 704 / 16 |
-| holes@floor + lips | channel: floor holes and inward lips | dev | 341 / 55 |
-| holes@top + notch | plate | test | 214 / 365 |
-| holes@top + ribs | plate | test | 214 / 17 |
-| holes@floor + tabs | tray | test | 341 / 38 |
-| holes@upright + slots@base | bracket | test | 1,149 / 16 |
-| flat + grips | knob: a D-shaped shaft and grip notches | test | 27 / 228 |
+| Pair | Where it shows up | Split | Training parts of that family with each feature | All training parts with each feature |
+|---|---|---|---|---|
+| holes@top + lip | plate: holes and a rim | dev | 214 / 12 | 214 / 12 |
+| dividers + tabs | tray | dev | 124 / 38 | 124 / 38 |
+| gussets + slots@base | bracket | dev | 68 / 16 | 704 / 16 |
+| holes@floor + lips | channel: floor holes and inward lips | dev | 161 / 55 | 341 / 55 |
+| holes@top + notch | plate | test | 214 / 16 | 214 / 365 |
+| holes@top + ribs | plate | test | 214 / 17 | 214 / 17 |
+| holes@floor + tabs | tray | test | 38 / 38 | 341 / 38 |
+| holes@upright + slots@base | bracket | test | 271 / 16 | 1,149 / 16 |
+| flat + grips | knob: a D-shaped shaft and grip notches | test | 27 / 228 | 27 / 228 |
+
+The last column counts a feature on every training family, which makes some features look common when the family the pair is about rarely has them: 349 of the 365 notches are a divider's top-edge notch, which is a different cut said in other words; 636 of the 704 gussets are on shelves and tool holders; 878 of the 1,149 upright hole sets are on shelves and tool holders; floor holes are on 161 channels, 142 cups and only 38 trays. The manifest's `held_out[].train_parts_with` gives that last column.
 
 **Tiers.** Dev and test have the same structure, 100 rows in each tier and 100 edit pairs:
 
@@ -224,7 +226,7 @@ Three test families share a body with a training family (washer: the spacer's ro
 | Edit | 3,000 | 3.29 M | 2.02 M | 0.84 M |
 | Total | 9,000 | 7.73 M | 3.94 M | 2.54 M |
 
-What these numbers do not show: every row, test included, comes from this generator, so the wording and the code style are the same in every split; tier 3 families are new, the way they are written is not. Tier 2 covers only the five training families that take two or more kinds of feature (plate, bracket, tray, channel, knob). Some held-out features are rare on their own in training (a rim on 12 training parts, base slots on 16, ribs on 17, a shaft flat on 27), so a tier 2 miss may come from a feature seen rarely, not only from a new pair. Tier 1 keeps out trees within 0.5 mm of a training part, not ones 1 mm away. The levels come from code size, not from measured difficulty.
+What these numbers do not show: every row, test included, comes from this generator, so the wording and the code style are the same in every split; tier 3 families are new, the way they are written is not. Tier 2 covers only the five training families that take two or more kinds of feature (plate, bracket, tray, channel, knob). Some held-out features are rare on their own in training within the family the pair is about (a rim on 12 training plates, a notch on 16 plates, base slots on 16 brackets, ribs on 17 plates, a shaft flat on 27 knobs, floor holes on 38 trays), so a tier 2 miss may come from a feature seen rarely, not only from a new pair. Tier 1 keeps out trees within 0.5 mm of a training part, not ones 1 mm away. The levels come from code size, not from measured difficulty.
 
 `npm test` covers the design (every family in one split, the level mix, the pairs), near-copies, each split rule, the shares, picking the same parts twice, edit pairs inside a split, a small set made twice with different worker counts and byte-identical, the token count against the site's prompt, the check passing a good set and failing a changed, extra or missing file, a tree in two splits and a training part with a held-out pair, the closed test split and the command's options.
 
