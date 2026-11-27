@@ -16,6 +16,9 @@ import { sampleSlotPlate } from './slot_plate.ts';
 import { sampleDivider } from './divider.ts';
 import { sampleCoaster } from './coaster.ts';
 import { sampleEnclosure } from './enclosure.ts';
+import { sampleFoot } from './foot.ts';
+import { sampleGrommet } from './grommet.ts';
+import { sampleCup } from './cup.ts';
 
 export type Family = { id: string; sample: (rng: Rng) => Tree };
 
@@ -36,6 +39,9 @@ export const FAMILIES: readonly Family[] = [
   { id: 'divider', sample: sampleDivider },
   { id: 'coaster', sample: sampleCoaster },
   { id: 'enclosure', sample: sampleEnclosure },
+  { id: 'foot', sample: sampleFoot },
+  { id: 'grommet', sample: sampleGrommet },
+  { id: 'cup', sample: sampleCup },
 ];
 
 export function findFamily(id: string): Family | undefined {
