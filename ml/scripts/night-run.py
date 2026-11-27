@@ -117,6 +117,7 @@ class Run:
         self.log_path = args.logs / f"{self.started:%Y%m%d-%H%M%S}-{args.name}.log"
         self.state_path = args.logs / f"{args.name}.state.json"
         self.log_lock = threading.RLock()
+        self.console = True
         self.log_file = None
         self.child: subprocess.Popen | None = None
         self.stop_reason: str | None = None
@@ -132,8 +133,18 @@ class Run:
             if self.log_file:
                 self.log_file.write(line)
                 self.log_file.flush()
-            sys.stdout.write(line)
+        self.echo(line)
+
+    def echo(self, text: str) -> None:
+        """Copy to the terminal while there is one. A closed terminal must not stop the run: the log has it all."""
+        if not self.console:
+            return
+        try:
+            sys.stdout.write(text)
             sys.stdout.flush()
+        except (OSError, ValueError):
+            self.console = False
+            sys.stdout = open(os.devnull, "w")  # so Python's own flush at exit does not fail either
 
     def save_state(self, **changes) -> None:
         self.state.update(changes)
@@ -179,8 +190,7 @@ class Run:
                     if self.log_file:
                         self.log_file.write(clean + "\n")
                         self.log_file.flush()
-            sys.stdout.write(text)
-            sys.stdout.flush()
+            self.echo(text)
         stream.close()
 
     def stop_child(self, reason: str) -> None:
@@ -277,6 +287,7 @@ class Run:
         caffeinate = subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
         signal.signal(signal.SIGINT, self.on_signal)
         signal.signal(signal.SIGTERM, self.on_signal)
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)  # closing the terminal window does not end the night
         self.save_state(status="running", pid=os.getpid(), command=args.command, cwd=os.getcwd())
 
         self.say(f"run '{args.name}'{' (resuming: it was ' + str(previous.get('status')) + ')' if resuming else ''}")

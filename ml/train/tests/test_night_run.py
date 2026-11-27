@@ -46,7 +46,7 @@ def script(tmp_path: Path, name: str, body: str) -> str:
 
 @pytest.fixture
 def keep_signals():
-    saved = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM)}
+    saved = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
     yield
     for s, handler in saved.items():
         signal.signal(s, handler)
@@ -186,6 +186,31 @@ def test_ctrl_c_stops_the_command_and_the_run(tmp_path):
     s = state(tmp_path, "owner")
     assert s["status"] == "stopped-owner" and child["pid"] == run.pid
     assert "got SIGINT: stopping" in logs(tmp_path, "owner")
+
+
+def test_closing_the_terminal_does_not_stop_the_run(tmp_path):
+    chatty = script(
+        tmp_path,
+        "chatty.py",
+        """
+        import time
+        time.sleep(1)
+        for i in range(2000):
+            print(f"line {i}", flush=True)
+        """,
+    )
+    cmd = [PY, str(SCRIPT), "--logs", str(tmp_path / "logs"), *FAST, "--name", "hangup", "--", PY, chatty]
+    run = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=tmp_path)
+    deadline = time.monotonic() + 20
+    while not (tmp_path / "logs").exists() or "started the command" not in logs(tmp_path, "hangup"):
+        assert time.monotonic() < deadline
+        time.sleep(0.05)
+    run.stdout.close()  # the terminal is gone: writing to it now fails
+    run.send_signal(signal.SIGHUP)
+    assert run.wait(timeout=30) == 0
+    log = logs(tmp_path, "hangup")
+    assert "line 1999" in log and "the command exited with code 0" in log
+    assert state(tmp_path, "hangup")["status"] == "done"
 
 
 TRAINER = """

@@ -98,12 +98,14 @@ DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/scripts/ni
   from the newest checkpoint. Plain `mlx_lm.lora --resume-adapter-file` loads the weights but counts steps from 1 again
   with a new optimizer, so day 8's trainer takes the start step itself.
 - **Power.** It refuses to start on battery unless `--allow-battery` is given.
-- **Stopping.** Ctrl-C (or SIGTERM to the script) stops the command the same way and ends the run.
+- **Stopping.** Ctrl-C (or SIGTERM to the script) stops the command the same way and ends the run. Closing the
+  terminal window does not: the script ignores the hang-up, stops writing to the terminal and keeps the log. Keep the
+  lid open; macOS sleeps on a closed lid whatever caffeinate asks.
 
 Exit codes: 0 finished, 1 still failing after the restarts, 2 could not start, 3 stopped for low disk, 130 stopped by
 the owner.
 
 `pytest ml/train` runs it on short dummy commands: a command that checks caffeinate is holding the Mac awake, a crash
 and a restart, giving up, a missing command, too little disk before the start, the disk filling up during a run, a
-command that ignores SIGTERM, battery, Ctrl-C, a fake trainer that crashes and resumes from its newest checkpoint while
-the last two and the best are kept, and a run started again after the script died.
+command that ignores SIGTERM, battery, Ctrl-C, a closed terminal, a fake trainer that crashes and resumes from its newest
+checkpoint while the last two and the best are kept, and a run started again after the script died.
