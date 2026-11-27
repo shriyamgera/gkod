@@ -12,7 +12,9 @@ ml/.venv/bin/python ml/scripts/fetch-model.py
 ```
 
 Every pin is in [requirements.txt](requirements.txt) (mlx 0.32.4, mlx-lm 0.32.2, huggingface_hub 2.4.0,
-transformers 5.23.0 and what they pull in).
+transformers 5.23.0 and what they pull in). The tests also need [requirements-dev.txt](requirements-dev.txt)
+(pytest 9.2.0): `ml/.venv/bin/python -m pip install -r ml/requirements-dev.txt`, then `ml/.venv/bin/python -m pytest
+ml/train`.
 
 On this Mac, Homebrew's Python 3.12 cannot load its XML module against the system's expat, and Python then also fails
 to read the macOS version, which huggingface_hub needs. `DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib"` in front of
