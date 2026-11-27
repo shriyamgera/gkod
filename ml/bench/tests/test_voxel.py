@@ -1,0 +1,44 @@
+import time
+
+import numpy as np
+import pytest
+from shapes import blocks, box, hollow_cube, plate_with_holes, ring
+
+from gkod_bench.voxel import iou
+
+
+def test_iou_same_shape_moved_is_one():
+    r = iou(box(10, 10, 10), box(10, 10, 10, offset=(30, -4, 7)))
+    assert r["iou"] == pytest.approx(1.0)
+
+
+def test_iou_half_box():
+    r = iou(box(10, 10, 10), box(10, 10, 5))
+    assert r["iou"] == pytest.approx(0.5, abs=0.01)
+    assert r["pitch"] == pytest.approx(10 / 200)
+
+
+def test_iou_ring_against_full_block():
+    # the ring is 8 of the 9 cells
+    r = iou(blocks([(x, y, 0) for x in range(3) for y in range(3)]), ring())
+    assert r["iou"] == pytest.approx(8 / 9, abs=0.01)
+
+
+def test_iou_disjoint_sizes_and_empty():
+    r = iou(box(10, 10, 10), box(20, 20, 20))
+    assert r["iou"] == pytest.approx(1 / 8, abs=0.01)
+    assert iou(np.zeros((0, 3, 3)), box(1, 1, 1))["iou"] is None
+
+
+def test_iou_hollow_body_counts_only_the_material():
+    r = iou(blocks([(x, y, z) for x in range(3) for y in range(3) for z in range(3)]), hollow_cube())
+    assert r["iou"] == pytest.approx(26 / 27, abs=0.01)
+
+
+def test_iou_is_fast_on_a_detailed_part():
+    # a plate with 40 holes: about 1,000 triangles, as many as a busy generated part
+    tri = plate_with_holes(40) * np.array([2.0, 2.0, 3.0])
+    started = time.perf_counter()
+    r = iou(tri, tri)
+    assert time.perf_counter() - started < 1.0
+    assert r["iou"] == pytest.approx(1.0)
