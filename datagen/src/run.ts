@@ -39,6 +39,8 @@ export type Row = {
   part_seed: number;
   family: string;
   tree: Tree;
+  /** sha256 of the tree as JSON with sorted keys: the same part has the same hash in every run */
+  tree_sha256: string;
   title: string;
   request: string;
   facts: Fact[];
@@ -51,6 +53,20 @@ type Done = { index: number; row?: Row; skip?: Planned['skip']; ms?: { compile: 
 
 const round = (value: number, places: number) => Number(value.toFixed(places));
 const sha256 = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
+
+/** JSON with every object's keys sorted, so equal values always give equal text. */
+export function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export const treeHash = (tree: Tree) => sha256(canonical(tree));
+
+export const DUPLICATE = 'The same part was already made earlier in this run.';
 
 /** Everything about part `index` that needs no compiler. */
 export function plan(seed: number, index: number, generator: Source): Planned {
@@ -73,6 +89,7 @@ export function plan(seed: number, index: number, generator: Source): Planned {
       part_seed: part.seed,
       family: tree.family,
       tree,
+      tree_sha256: treeHash(tree),
       title: request.title,
       request: request.request,
       facts: request.facts,
@@ -146,6 +163,8 @@ export type Manifest = {
   skip_reasons: Record<string, number>;
   families: Record<string, FamilyCounts>;
   rates: { compile: number; checks: number; params: number; facts: number };
+  /** every row's tree is different; sha256 of the sorted tree hashes, one per line, names the set of parts */
+  trees: { unique: number; sha256: string };
   settings: { printer: string; bed: { x: number; y: number; z: number }; overhang_deg: number; time_limit_ms: number; hardwarnings: true; fn: number };
   compiler: { wasm_sha256: string };
   files: Record<string, { rows: number; bytes: number; sha256: string }>;
@@ -215,11 +234,17 @@ export async function run(opts: RunOptions): Promise<Manifest> {
   // Skipped trees do not count, so the run goes on until `count` parts are made. Each index is planned before the
   // next one is handed out, so where a run stops never depends on the number of workers.
   let planned = 0;
+  const seen = new Set<string>();
   const worker = async () => {
     while (planned < opts.count) {
       const index = given++;
-      const part = plan(opts.seed, index, opts.generator);
-      if (part.row) planned++;
+      let part = plan(opts.seed, index, opts.generator);
+      // a part made earlier in the run is skipped, so every row is a different part
+      if (part.row && seen.has(part.row.tree_sha256)) part = { index, skip: { family: part.row.family, reasons: [DUPLICATE] } };
+      if (part.row) {
+        seen.add(part.row.tree_sha256);
+        planned++;
+      }
       else if (index + 1 - planned > Math.max(100, opts.count)) throw new Error('More parts were skipped than made. Check the families.');
       finished.set(index, await label(part));
       flush();
@@ -242,6 +267,7 @@ export async function run(opts: RunOptions): Promise<Manifest> {
     skip_reasons: Object.fromEntries(Object.keys(reasons).sort().map((reason) => [reason, reasons[reason]!])),
     families,
     rates: { compile: rate(totals.compiled), checks: rate(totals.passed), params: rate(totals.params), facts: rate(totals.facts) },
+    trees: { unique: seen.size, sha256: sha256([...seen].sort().map((hash) => `${hash}\n`).join('')) },
     settings: {
       printer: PRINTER,
       bed: PRINTERS[PRINTER]!.bed,

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { parseOptions, UsageError } from '../src/cli.ts';
 import { REPO } from '../src/git.ts';
-import { type Row, run } from '../src/run.ts';
+import { canonical, type Row, run, treeHash } from '../src/run.ts';
 
 const generator = { name: 'gkod-datagen', version: '0.1.0', commit: 'test', dirty: false };
 const dirs: string[] = [];
@@ -46,6 +46,10 @@ describe('run', () => {
       expect(row.code.startsWith(`// ${row.title}\n`)).toBe(true);
       expect(row.labels.checks?.results.map((check) => check.id)).toEqual(['closed', 'fits-bed', 'flat-base', 'overhang']);
     }
+    // every row is a different part, named by its tree's hash
+    expect(new Set(rows.map((row) => row.tree_sha256)).size).toBe(rows.length);
+    for (const row of rows) expect(row.tree_sha256).toBe(treeHash(row.tree));
+    expect(first.trees.unique).toBe(rows.length);
     const timings = readFileSync(join(a, 'timings.jsonl'), 'utf8').trim().split('\n');
     expect(timings).toHaveLength(rows.length);
   }, 120000);
@@ -58,6 +62,16 @@ describe('run', () => {
     const shared = lines(small);
     expect(lines(big).slice(0, shared.length)).toEqual(shared);
   }, 120000);
+});
+
+describe('tree hash', () => {
+  it('does not depend on the order of keys', () => {
+    expect(canonical({ b: 1, a: [2, { d: 3, c: 'x' }] })).toBe('{"a":[2,{"c":"x","d":3}],"b":1}');
+    const tree = { family: 'test', body: { kind: 'plate', width: 80, depth: 50 }, features: [] };
+    const same = { features: [], body: { depth: 50, width: 80, kind: 'plate' }, family: 'test' };
+    expect(treeHash(same as never)).toBe(treeHash(tree as never));
+    expect(treeHash({ ...tree, family: 'other' } as never)).not.toBe(treeHash(tree as never));
+  });
 });
 
 describe('options', () => {
