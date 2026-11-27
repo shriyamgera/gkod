@@ -26,11 +26,15 @@ export function placeAll(spots: Spots, face: Face, tool: (at: Expr[]) => Node): 
   return loops.length ? each(loops, node) : node;
 }
 
-/** A hole through the face's material, with a countersink on the face side when asked. */
+/**
+ * A hole through the face's material, with a countersink on the face side when asked: a 90 degree cone, as wide as two
+ * holes where it meets the face, that runs on 0.5 mm past the face so the cut is clean.
+ */
 export function holeTool(face: Face, d: Expr, countersink: boolean, depth: Expr = face.thick): (at: Expr[]) => Node {
   const turn = TURN[face.normal];
   const shaft = cylinder({ d, h: add(depth, 2) });
   if (!countersink) return (at) => translate(shift(at, face.normal, -1), rotate(turn, shaft));
-  const parts = [translate([0, 0, -1], shaft), translate([0, 0, sub(depth, half(d))], cylinder({ d1: d, d2: mul(2, d), h: add(half(d), 0.01) }))];
+  const cone = cylinder({ d1: d, d2: add(mul(2, d), 1), h: add(half(d), 0.5) });
+  const parts = [translate([0, 0, -1], shaft), translate([0, 0, sub(depth, half(d))], cone)];
   return (at) => (face.normal === 'z' ? translate(at, ...parts) : translate(at, { name: 'rotate', args: [turn], kids: parts }));
 }
