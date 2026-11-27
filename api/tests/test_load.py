@@ -65,8 +65,56 @@ def test_a_dry_run_checks_the_whole_run_and_its_manifest():
     report = check_file(RUN_FILE, "fixture-run")
     assert (report.read.rows, report.read.accepted, report.added) == (8, 8, None)
     assert report.matches_manifest
+    assert report.manifest_checks == ("sha256", "row count")
     assert report.source == "fixture-run/parts.jsonl"
-    assert "lists this file's sha256, and it matches" in report.summary()
+    assert "lists this file's sha256 and row count, and they match" in report.summary()
+
+
+def test_a_file_without_a_manifest_is_not_loaded_unless_asked(run_copy):
+    (run_copy.parent / "manifest.json").unlink()
+    with pytest.raises(LoadError, match="There is no manifest.json beside parts.jsonl.*--no-manifest"):
+        check_file(run_copy, "copy-run")
+    report = check_file(run_copy, "copy-run", require_manifest=False)
+    assert (report.read.accepted, report.manifest, report.matches_manifest) == (8, None, False)
+    assert "not checked as complete" in report.summary()
+
+
+def manifest_entry(run_copy, **changes):
+    """Changes this file's entry in the copy's manifest. A value of ... removes the field."""
+    path = run_copy.parent / "manifest.json"
+    manifest = json.loads(path.read_text())
+    entry = manifest["files"]["parts.jsonl"]
+    for key, value in changes.items():
+        if value is ...:
+            entry.pop(key)
+        else:
+            entry[key] = value
+    path.write_text(json.dumps(manifest))
+
+
+def cut_short(run_copy, keep: int) -> None:
+    lines = run_copy.read_text().splitlines(keepends=True)
+    run_copy.write_text("".join(lines[:keep]))
+
+
+def test_a_file_cut_short_is_not_loaded(run_copy):
+    cut_short(run_copy, 5)
+    manifest_entry(run_copy, sha256=...)
+    with pytest.raises(LoadError, match="has 5 rows, but manifest.json says the generator wrote 8"):
+        check_file(run_copy, "copy-run")
+
+
+def test_the_row_count_is_checked_even_when_the_sha256_matches(run_copy):
+    manifest_entry(run_copy, rows=9)
+    with pytest.raises(LoadError, match="has 8 rows, but manifest.json says the generator wrote 9"):
+        check_file(run_copy, "copy-run")
+
+
+def test_a_manifest_that_gives_only_the_row_count_is_checked_by_it(run_copy):
+    manifest_entry(run_copy, sha256=...)
+    report = check_file(run_copy, "copy-run")
+    assert report.manifest_checks == ("row count",) and not report.matches_manifest
+    assert "lists this file's row count, and it matches" in report.summary()
 
 
 def test_a_file_that_does_not_match_its_manifest_is_not_loaded(run_copy):
@@ -121,10 +169,18 @@ def test_a_missing_file_is_a_plain_error(tmp_path):
 
 
 def test_the_command_exits_3_when_rows_were_refused(capsys):
-    assert load_cmd.main([str(REFUSED_FILE), "--dry-run", "--run", "bad"]) == 3
+    assert load_cmd.main([str(REFUSED_FILE), "--dry-run", "--no-manifest", "--run", "bad"]) == 3
     out = capsys.readouterr().out
     assert "Refused 15 rows:" in out
     assert "no generator commit (line 3)" in out
+
+
+def test_the_command_refuses_a_file_without_a_manifest_unless_asked(run_copy, capsys):
+    (run_copy.parent / "manifest.json").unlink()
+    assert load_cmd.main([str(run_copy), "--dry-run"]) == 1
+    assert "load: There is no manifest.json beside parts.jsonl." in capsys.readouterr().err
+    assert load_cmd.main([str(run_copy), "--dry-run", "--no-manifest"]) == 0
+    assert 'Checked only: 8 rows would be loaded as run "copy-run".' in capsys.readouterr().out
 
 
 def test_the_run_name_defaults_to_the_folder_name(capsys):
@@ -184,7 +240,7 @@ def test_the_run_records_the_file_and_manifest_hashes(migrated_url):
 
 def test_refused_rows_are_not_loaded_and_their_reasons_are_kept(migrated_url):
     with psycopg.connect(migrated_url) as conn:
-        report = load_file(conn, REFUSED_FILE, "refused")
+        report = load_file(conn, REFUSED_FILE, "refused", require_manifest=False)
         refused = conn.execute("SELECT refused FROM runs WHERE run_id = 'refused'").fetchone()[0]
         indexes = [r[0] for r in conn.execute("SELECT part_index FROM parts ORDER BY part_index")]
     assert report.added == 2
@@ -222,7 +278,7 @@ def test_a_row_the_database_will_not_store_is_refused_and_the_rest_of_its_batch_
     monkeypatch.setattr(rows_mod, "strict_loads", json.loads)
     monkeypatch.setattr(rows_mod, "bad_text", lambda value: None)
     with psycopg.connect(migrated_url) as conn:
-        report = load_file(conn, path, "odd")
+        report = load_file(conn, path, "odd", require_manifest=False)
         indexes = [r[0] for r in conn.execute("SELECT part_index FROM parts ORDER BY part_index")]
         refused = conn.execute("SELECT rows_read, rows_refused, refused FROM runs").fetchone()
     assert report.added == 2
@@ -250,7 +306,17 @@ def test_one_run_name_cannot_hold_two_files(migrated_url, run_copy):
     with psycopg.connect(migrated_url) as conn:
         load_file(conn, RUN_FILE, "fixture-run")
         with pytest.raises(LoadError, match="was loaded from a different file"):
-            load_file(conn, run_copy, "fixture-run")
+            load_file(conn, run_copy, "fixture-run", require_manifest=False)
+
+
+def test_a_file_cut_short_adds_nothing_to_the_database(migrated_url, run_copy):
+    cut_short(run_copy, 5)
+    manifest_entry(run_copy, sha256=...)
+    with psycopg.connect(migrated_url) as conn:
+        with pytest.raises(LoadError, match="has 5 rows"):
+            load_file(conn, run_copy, "copy-run")
+    assert count(migrated_url) == 0
+    assert count(migrated_url, "SELECT count(*) FROM runs") == 0
 
 
 def test_one_file_cannot_be_loaded_as_two_runs(migrated_url):

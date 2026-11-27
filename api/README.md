@@ -44,11 +44,11 @@ python -m gkod_api.load data/parts/<run>/parts.jsonl --run <name>
 
 (That needs the package installed; see [Run from your own shell](#run-from-your-own-shell). To use the API image instead, mount the folder: `docker compose run --rm -v "$PWD/data:/data:ro" api python -m gkod_api.load /data/parts/<run>/parts.jsonl --run <name>`.)
 
-- `--run` names the run; it defaults to the file's folder name. `--batch` sets the rows per batch (500). `--dry-run` reads and checks the file without a database.
+- `--run` names the run; it defaults to the file's folder name. `--batch` sets the rows per batch (500). `--dry-run` reads and checks the file without a database. `--no-manifest` loads a file that has no `manifest.json` beside it (see below).
 - **A row is refused** when it has no generator name, version or commit (the commit must be a git commit id), no seed, no index (a whole number, 0 or more), no request or no code. It is also refused if it is not a JSON object, uses an index already used earlier in the file, comes from a different generator than the manifest names, has a field far too long to be a real part, or has text or a number PostgreSQL cannot store (a number such as 1e400 is too large). If the database still turns a row down, only that row is refused; the rest of its batch loads. Each refusal is counted with its reason and line numbers, printed, and kept with the run. The good rows still load, and the command exits with 3 so a script notices.
 - **Loading again adds nothing**: parts are keyed by run and index. A load that stopped halfway can simply be run again.
 - **One run is one file.** The run records the file's sha256, and the sha256 of `manifest.json` if there is one. A run name already used for a different file is refused, and so is a file already loaded under another name.
-- **The manifest is checked**: if it lists the file's sha256, the file must match, or nothing is loaded.
+- **The manifest is required and checked.** The generator writes `manifest.json` last, so a file without one may still be being written, or the run may have stopped early: it is refused unless you pass `--no-manifest`. The file must match the sha256 and the row count the manifest lists for it, or nothing is loaded.
 - Fields are read defensively. `labels` may say `compile.ok` or `compile_ok`; the checks may be `checks.ok`, a list of results or an object of results. `compile_ok` and `checks_ok` get columns of their own for filtering; when a result cannot be read it is stored as unknown, never guessed. Fields without a column (such as the generator's own row id) are kept in `extra`.
 
 ## Endpoints

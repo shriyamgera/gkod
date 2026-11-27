@@ -4,8 +4,12 @@
 
 Rows go in in batches. A row without generator provenance (generator name, version and commit, seed,
 index, request and code) is refused and counted with a plain reason; so is a row the database will not
-store. The other rows still load, and the command then exits with 3. Loading the same file again adds nothing. If a manifest.json sits beside the
-file, its sha256 is recorded with the run, and the file must match the sha256 the manifest gives for it.
+store. The other rows still load, and the command then exits with 3. Loading the same file again adds
+nothing.
+
+The generator writes manifest.json beside the file last, so a file without one may still be being written:
+it is not loaded unless --no-manifest is given. The manifest's sha256 is recorded with the run, and the file
+must match the sha256 and the row count the manifest gives for it.
 """
 
 import argparse
@@ -75,17 +79,24 @@ class LoadReport:
     manifest: Manifest | None
     read: ReadResult
     added: int | None = None  # None for a dry run
-    matches_manifest: bool = False  # the manifest lists this file's sha256, and it matches
+    # What the manifest lists for this file and the file matched: "sha256", "row count", both or neither.
+    manifest_checks: tuple[str, ...] = ()
+
+    @property
+    def matches_manifest(self) -> bool:
+        """The manifest lists this file's sha256, and it matches."""
+        return "sha256" in self.manifest_checks
 
     def summary(self) -> str:
         out = [f"Read {self.read.rows} rows from {self.source} (sha256 {self.sha256[:12]})."]
         if self.manifest:
             kept = ", recorded with the run" if self.added is not None else ""
-            listed = "lists this file's sha256, and it matches" if self.matches_manifest else (
-                "does not list this file's sha256")
+            match = "they match" if len(self.manifest_checks) > 1 else "it matches"
+            listed = (f"lists this file's {' and '.join(self.manifest_checks)}, and {match}" if self.manifest_checks
+                      else "does not list this file's sha256 or row count")
             out.append(f"manifest.json (sha256 {self.manifest.sha256[:12]}{kept}) {listed}.")
         else:
-            out.append("No manifest.json beside the file.")
+            out.append("No manifest.json beside the file (--no-manifest), so it was not checked as complete.")
         if self.added is None:
             out.append(f'Checked only: {self.read.accepted} rows would be loaded as run "{self.run}".')
         else:
@@ -128,17 +139,31 @@ def read_manifest(parts_path: Path) -> Manifest | None:
     return Manifest(obj, hashlib.sha256(data).hexdigest())
 
 
-def check_against_manifest(manifest: Manifest, parts_path: Path, sha256: str) -> bool:
-    """If the manifest lists this file's sha256, the file must match it. True when it was listed."""
+def check_against_manifest(manifest: Manifest, parts_path: Path, sha256: str) -> tuple[str, ...]:
+    """The file must match the sha256 and the row count the manifest lists for it. Returns what was listed."""
     files = manifest.data.get("files")
     entry = files.get(parts_path.name) if isinstance(files, dict) else None
-    expected = entry.get("sha256") if isinstance(entry, dict) else None
-    if isinstance(expected, str) and expected.lower() != sha256:
-        raise LoadError(
-            f"{parts_path.name} does not match manifest.json: its sha256 is {sha256[:12]}, the manifest says "
-            f"{expected[:12]}. The file was changed after the generator wrote it, or the manifest is for another run."
-        )
-    return isinstance(expected, str)
+    entry = entry if isinstance(entry, dict) else {}
+    checks: list[str] = []
+    expected = entry.get("sha256")
+    if isinstance(expected, str):
+        if expected.lower() != sha256:
+            raise LoadError(
+                f"{parts_path.name} does not match manifest.json: its sha256 is {sha256[:12]}, the manifest says "
+                f"{expected[:12]}. The file was changed after the generator wrote it, or the manifest is for another "
+                "run."
+            )
+        checks.append("sha256")
+    expected_rows = entry.get("rows")
+    if isinstance(expected_rows, int) and not isinstance(expected_rows, bool):
+        rows = count_rows(parts_path)
+        if rows != expected_rows:
+            raise LoadError(
+                f"{parts_path.name} has {rows} rows, but manifest.json says the generator wrote {expected_rows}. "
+                "The file was cut short or added to, or the manifest is for another run. Nothing was loaded."
+            )
+        checks.append("row count")
+    return tuple(checks)
 
 
 def manifest_generator(manifest: Manifest | None) -> dict[str, str]:
@@ -155,38 +180,51 @@ def iter_rows(path: Path, result: ReadResult, generator: dict[str, str] | None =
         yield row
 
 
-def _numbered_rows(path: Path, result: ReadResult, generator: dict[str, str] | None) -> Iterator[tuple[int, PartRow]]:
-    """iter_rows, with the line number of each row."""
-    seen: set[int] = set()
+def _lines(path: Path) -> Iterator[tuple[int, bytes | None]]:
+    """Each line that is not blank, with its line number. None for a line too long to keep."""
     with path.open("rb") as f:
         line_no = 0
         while True:
             raw = f.readline(MAX_LINE_BYTES + 2)
             if not raw:
-                break
+                return
             line_no += 1
             too_long = not raw.endswith(b"\n") and len(raw) > MAX_LINE_BYTES + 1
             while too_long and raw and not raw.endswith(b"\n"):
                 raw = f.readline(1 << 20)  # skip the rest of a line too long to keep
-            line = b"" if too_long else raw.rstrip(b"\r\n")
-            if not too_long and not line.strip():
+            if too_long:
+                yield line_no, None
                 continue
-            result.rows += 1
-            try:
-                if too_long:
-                    raise Refused("line is longer than 1 MB")
-                row = parse_line(line)
-                if row.part_index in seen:
-                    raise Refused("index already used earlier in the file")
-                actual = {"name": row.generator_name, "version": row.generator_version,
-                          "commit": row.generator_commit}
-                if generator and any(actual[k] != v for k, v in generator.items()):
-                    raise Refused("generator differs from the one in manifest.json")
-            except Refused as e:
-                result.refuse(e.reason, line_no)
-                continue
-            seen.add(row.part_index)
-            yield line_no, row
+            line = raw.rstrip(b"\r\n")
+            if line.strip():
+                yield line_no, line
+
+
+def count_rows(path: Path) -> int:
+    """The rows in the file, as the generator counts them: every line that is not blank."""
+    return sum(1 for _ in _lines(path))
+
+
+def _numbered_rows(path: Path, result: ReadResult, generator: dict[str, str] | None) -> Iterator[tuple[int, PartRow]]:
+    """iter_rows, with the line number of each row."""
+    seen: set[int] = set()
+    for line_no, line in _lines(path):
+        result.rows += 1
+        try:
+            if line is None:
+                raise Refused("line is longer than 1 MB")
+            row = parse_line(line)
+            if row.part_index in seen:
+                raise Refused("index already used earlier in the file")
+            actual = {"name": row.generator_name, "version": row.generator_version,
+                      "commit": row.generator_commit}
+            if generator and any(actual[k] != v for k, v in generator.items()):
+                raise Refused("generator differs from the one in manifest.json")
+        except Refused as e:
+            result.refuse(e.reason, line_no)
+            continue
+        seen.add(row.part_index)
+        yield line_no, row
 
 
 def _source_name(path: Path) -> str:
@@ -194,7 +232,7 @@ def _source_name(path: Path) -> str:
     return f"{path.parent.name}/{path.name}" if path.parent.name else path.name
 
 
-def _prepare(path: Path, run: str) -> tuple[str, Manifest | None, bool]:
+def _prepare(path: Path, run: str, require_manifest: bool) -> tuple[str, Manifest | None, tuple[str, ...]]:
     if not RUN_NAME.match(run):
         raise LoadError(
             f"The run name {run!r} is not allowed: use up to 64 letters, digits, '.', '_' and '-', "
@@ -202,19 +240,24 @@ def _prepare(path: Path, run: str) -> tuple[str, Manifest | None, bool]:
         )
     if not path.is_file():
         raise LoadError(f"There is no file at {path}.")
-    sha256 = file_sha256(path)
     manifest = read_manifest(path)
-    matches = check_against_manifest(manifest, path, sha256) if manifest else False
-    return sha256, manifest, matches
+    if manifest is None and require_manifest:
+        raise LoadError(
+            f"There is no manifest.json beside {path.name}. The generator writes it last, so the run may still be "
+            "going or may have stopped early. Load the file anyway with --no-manifest."
+        )
+    sha256 = file_sha256(path)
+    checks = check_against_manifest(manifest, path, sha256) if manifest else ()
+    return sha256, manifest, checks
 
 
-def check_file(path: Path, run: str) -> LoadReport:
+def check_file(path: Path, run: str, require_manifest: bool = True) -> LoadReport:
     """Read and check the file without a database (--dry-run)."""
-    sha256, manifest, matches = _prepare(path, run)
+    sha256, manifest, checks = _prepare(path, run, require_manifest)
     result = ReadResult()
     for _ in iter_rows(path, result, manifest_generator(manifest)):
         pass
-    return LoadReport(run, _source_name(path), sha256, manifest, result, None, matches)
+    return LoadReport(run, _source_name(path), sha256, manifest, result, None, checks)
 
 
 def _claim_run(conn: psycopg.Connection, run: str, source: str, sha256: str, manifest: Manifest | None) -> None:
@@ -265,10 +308,12 @@ def _insert_batch(conn: psycopg.Connection, batch: list[tuple[int, tuple]], resu
     return added
 
 
-def load_file(conn: psycopg.Connection, path: Path, run: str, batch_size: int = DEFAULT_BATCH) -> LoadReport:
+def load_file(
+    conn: psycopg.Connection, path: Path, run: str, batch_size: int = DEFAULT_BATCH, require_manifest: bool = True
+) -> LoadReport:
     """Load one generator file as one run. Each batch is its own transaction, so a load that stops halfway
     can simply be run again: rows already in are skipped by the (run_id, part_index) key."""
-    sha256, manifest, matches = _prepare(path, run)
+    sha256, manifest, checks = _prepare(path, run, require_manifest)
     source = _source_name(path)
     try:
         with conn.transaction():
@@ -293,7 +338,7 @@ def load_file(conn: psycopg.Connection, path: Path, run: str, batch_size: int = 
             " WHERE run_id = %s",
             (result.rows, result.refused.total(), Jsonb(dict(result.refused)), run),
         )
-    return LoadReport(run, source, sha256, manifest, result, added, matches)
+    return LoadReport(run, source, sha256, manifest, result, added, checks)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -302,6 +347,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run", help="a name for this run (default: the name of the file's folder)")
     parser.add_argument("--batch", type=int, default=DEFAULT_BATCH, help=f"rows per batch (default {DEFAULT_BATCH})")
     parser.add_argument("--dry-run", action="store_true", help="read and check the file only; no database needed")
+    parser.add_argument("--no-manifest", action="store_true",
+                        help="load the file although no manifest.json sits beside it, so it is not checked as complete")
     args = parser.parse_args(argv)
     if not 1 <= args.batch <= 10_000:
         parser.error("--batch must be between 1 and 10000")
@@ -310,11 +357,11 @@ def main(argv: list[str] | None = None) -> int:
     settings = None
     try:
         if args.dry_run:
-            report = check_file(args.file, run)
+            report = check_file(args.file, run, not args.no_manifest)
         else:
             settings = get_settings()
             with connect(settings) as conn:
-                report = load_file(conn, args.file, run, args.batch)
+                report = load_file(conn, args.file, run, args.batch, not args.no_manifest)
     except (LoadError, SettingsError) as e:
         print(f"load: {e}", file=sys.stderr)
         return 1
