@@ -15,8 +15,9 @@ export const spacer = {
 export function sampleSpacer(rng: Rng): Tree {
   const f = spacer;
   const hex = rng.chance(f.hex);
-  const diameter = rng.size(f.diameter[0], f.diameter[1], 0.5);
-  const bore = rng.pick(f.bores.filter((b) => b <= diameter - 3.5));
+  const bore = rng.pick(f.bores);
+  // a tube around its screw: the wall is never thinner than 1.75 mm nor much thicker than the screw
+  const diameter = rng.size(Math.max(f.diameter[0], bore + 3.5), Math.min(f.diameter[1], 2.5 * bore + 8), 0.5);
   const height = rng.size(f.height[0], f.height[1], 0.5);
   const features: Feature[] = [];
   if (height >= 5 && rng.chance(f.flange)) {
