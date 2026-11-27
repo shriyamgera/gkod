@@ -106,10 +106,17 @@ function EngineChoice({ dialog }: { dialog: RefObject<HTMLDialogElement | null> 
   // Claude Code is offered once the bridge answers on this computer (or while it is the engine in use)
   const shown = ENGINE_CHOICES.filter((choice) => choice.id === 'gemini' || bridge.status === 'found' || choice.id === engine);
 
+  // picking an engine that still needs a key or a code goes straight to its field, once that field is on the page
+  const focusField = useRef(false);
+  useEffect(() => {
+    if (!focusField.current) return;
+    focusField.current = false;
+    dialog.current?.querySelector<HTMLInputElement>(CODE_FIELD)?.focus();
+  }, [engine, dialog]);
+
   function choose(next: EngineId) {
+    focusField.current = !engineReady(next);
     engineSettings.setEngine(next);
-    // picking an engine that still needs a key or a code goes straight to its field
-    if (!engineReady(next)) requestAnimationFrame(() => dialog.current?.querySelector<HTMLInputElement>(CODE_FIELD)?.focus());
   }
 
   return (
