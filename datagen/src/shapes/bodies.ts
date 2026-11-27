@@ -154,16 +154,18 @@ export function bodyShapes(tree: Tree): Built {
       };
     }
     case 'clip': {
-      const ring = translate([0, r('ring_y')], circle(mul(2, r('outer_r'))));
-      const inside = translate([0, r('ring_y')], circle(r('cable_d')));
-      const gap = translate([neg(half(r('opening'))), r('ring_y')], square([r('opening'), add(r('outer_r'), 1)]));
+      const d = r('outer_d');
+      // a column that rises from the base and is round on top, with the cable's hole and a way in from the top
+      const holder = hull(translate([neg(half(d)), 0], square([d, r('base_thickness')])), translate([0, r('center_y')], circle(d)));
+      const hole = translate([0, r('center_y')], circle(r('cable_d')));
+      const entry = translate([neg(half(r('opening'))), r('center_y')], square([r('opening'), d]));
       return {
         modules: [
           {
             name: 'profile',
-            body: [translate([neg(half(r('pad_width'))), 0], square([r('pad_width'), r('pad_thickness')])), difference(ring, inside, gap)],
+            body: [translate([neg(half(r('base_width'))), 0], square([r('base_width'), r('base_thickness')])), difference(holder, hole, entry)],
           },
-          // drawn lying on its side, the way it prints, so the ring needs no supports
+          // drawn lying on its side, the way it prints, so the round part needs no supports
           { name: 'clip', body: [linearExtrude(r('length'), call('profile'))] },
         ],
         adds: [call('clip')],

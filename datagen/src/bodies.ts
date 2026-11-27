@@ -235,36 +235,37 @@ export function bodyPiece(body: Body): BodyPiece {
     }
     case 'clip': {
       const cable = ref('cable_d');
-      const grip = ref('grip');
+      const snap = ref('snap');
       const len = ref('length');
-      const pad = ref('pad_width');
-      const outer = ref('outer_r');
+      const base = ref('base_width');
+      const outer = ref('outer_d');
       return {
         sizes: [
-          size(at('cable'), body.cable, 'cable_d', 'Cable diameter (mm)', 0.5, 3, 40),
-          size(at('wall'), body.wall, 'wall', 'Ring wall thickness (mm)', 0.2, W, 6),
-          size(at('grip'), body.grip, 'grip', 'Opening narrower than the cable by (mm)', 0.5, 0.5, 6),
-          size(at('length'), body.length, 'length', 'Clip length along the cable (mm)', 1, 5, 100),
-          size(at('pad'), body.pad, 'pad_width', 'Pad width (mm)', 1, 8, 150),
-          size(at('padThickness'), body.padThickness, 'pad_thickness', 'Pad thickness (mm)', 0.5, W, 10),
+          size(at('cable'), body.cable, 'cable_d', 'Diameter of the cable or pipe it holds (mm)', 0.5, 3, 40),
+          size(at('wall'), body.wall, 'ring_wall', 'Wall around the cable (mm)', 0.2, W, 6),
+          size(at('grip'), body.grip, 'snap', 'Opening narrower than the cable by (mm)', 0.5, 0.5, 6),
+          size(at('length'), body.length, 'length', 'Length along the cable (mm)', 1, 5, 100),
+          size(at('pad'), body.pad, 'base_width', 'Base width (mm)', 1, 8, 150),
+          size(at('padThickness'), body.padThickness, 'base_thickness', 'Base thickness (mm)', 0.5, W, 10),
         ],
         derived: [
-          { name: 'outer_r', value: add(half(cable), ref('wall')) },
-          { name: 'opening', value: sub(cable, grip) },
-          { name: 'ring_y', value: sub(add(ref('pad_thickness'), outer), half(ref('wall'))) },
+          { name: 'outer_d', value: add(cable, mul(2, ref('ring_wall'))) },
+          { name: 'opening', value: sub(cable, snap) },
+          // the cable rests one wall above the base
+          { name: 'center_y', value: add(add(ref('base_thickness'), ref('ring_wall')), half(cable)) },
         ],
         rules: [
-          le(grip, half(cable), 'The opening is less than half the cable, so the cable cannot go in.'),
-          ge(pad, mul(2, outer), 'The pad is narrower than the ring.'),
+          le(snap, half(cable), 'The opening is less than half the cable, so the cable cannot go in.'),
+          ge(base, outer, 'The base is narrower than the part that holds the cable.'),
         ],
         shapes: (env) => [
-          { face: 'pad', cut: false, edge: true, what: 'ring', u0: -env.outer_r!, v0: 0, u1: env.outer_r!, v1: env.length! },
+          { face: 'pad', cut: false, edge: true, what: 'cable holder', u0: -env.outer_d! / 2, v0: 0, u1: env.outer_d! / 2, v1: env.length! },
         ],
-        extent: { x: pad, y: add(ref('ring_y'), outer), z: len },
+        extent: { x: base, y: add(ref('center_y'), half(outer)), z: len },
         trims: ['y'],
         faces: {
           pad: {
-            u0: half(mul(-1, pad)), u1: half(pad), v0: 0, v1: len, uMid: 0, vMid: half(len), uLen: pad, thick: ref('pad_thickness'),
+            u0: half(mul(-1, base)), u1: half(base), v0: 0, v1: len, uMid: 0, vMid: half(len), uLen: base, thick: ref('base_thickness'),
             at: (u, v) => [u, 0, v], normal: 'y', uAxis: 'x', vAxis: 'z', flat: false,
           },
         },

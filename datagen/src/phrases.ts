@@ -135,7 +135,7 @@ export function bodyPhrases(say: Say): Phrase[] {
         ),
         ph(`${mm(s, b.length)} long`, sized(say, 'length', b.length, 'z')),
       ];
-      if (rng.chance(0.5)) out.push(np(a(`${mm(s, b.pad)} wide base`), sized(say, 'pad_width', b.pad, 'x')));
+      if (rng.chance(0.5)) out.push(np(a(`${mm(s, b.pad)} wide base`), sized(say, 'base_width', b.pad, 'x')));
       return out;
     }
   }
