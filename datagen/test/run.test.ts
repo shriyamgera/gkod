@@ -41,6 +41,8 @@ describe('run', () => {
       expect(row.seed).toBe(1);
       expect(row.id).toBe(`s1-${String(row.index).padStart(6, '0')}`);
       expect(row.request.length).toBeGreaterThan(10);
+      // a count in digits never sits right before a size
+      expect(row.request).not.toMatch(/\b\d+ \d/);
       expect(row.code.startsWith(`// ${row.title}\n`)).toBe(true);
       expect(row.labels.checks?.results.map((check) => check.id)).toEqual(['closed', 'fits-bed', 'flat-base', 'overhang']);
     }

@@ -190,8 +190,10 @@ export function featurePhrase(say: Say, f: Feature): Phrase | null {
       const amount = f.count === 1 ? 'a' : count(s, f.count);
       if (rng.chance(0.5)) {
         facts.push(sized(say, `${p}slot_width`, f.width));
-        const both = `${pair(s, f.length, f.width)} ${plural('slot', f.count)}`;
-        return np(`${f.count === 1 ? a(both) : `${amount} ${both}`}${p ? ` in the ${p.slice(0, -1)}` : ''}`, ...facts);
+        const size = pair(s, f.length, f.width);
+        // "2 20 x 4.5 mm slots" reads as 220, so a count in digits comes before the noun and the size after it
+        const text = f.count === 1 ? a(`${size} slot`) : s.words ? `${amount} ${size} slots` : `${amount} slots of ${size}`;
+        return np(`${text}${p ? ` in the ${p.slice(0, -1)}` : ''}`, ...facts);
       }
       return np(`${amount} ${plural('slot', f.count)} ${mm(s, f.length)} long${f.count > 1 ? ' each' : ''}${p ? ` in the ${p.slice(0, -1)}` : ''}`, ...facts);
     }
