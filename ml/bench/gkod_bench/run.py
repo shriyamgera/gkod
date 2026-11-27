@@ -35,6 +35,11 @@ class RowMismatch(RuntimeError):
     pass
 
 
+def say(line: str) -> None:
+    """One progress line, flushed at once so a night log shows each prompt as it finishes."""
+    print(line, flush=True)
+
+
 def raw_dir(results: Path, row: str, split: str) -> Path:
     return results / "raw" / row / split
 
@@ -122,7 +127,7 @@ def run_row(
     workers: int = 4,
     slider_ends: bool = True,
     max_errors: int = 3,
-    log: Callable[[str], None] = print,
+    log: Callable[[str], None] = say,
 ) -> dict:
     check_open(split, final)
     if shots not in (0, 3):
@@ -227,7 +232,7 @@ def summarize_row(row: str, split: str, *, final: bool = False, results: Path = 
     return write_summary(results, row, split, items, config)
 
 
-def rescore_row(row: str, split: str, *, final: bool = False, results: Path = RESULTS, sets_dir: Path = SETS, hashes: Path = SETS_HASHES, workers: int = 4, log: Callable[[str], None] = print) -> dict:
+def rescore_row(row: str, split: str, *, final: bool = False, results: Path = RESULTS, sets_dir: Path = SETS, hashes: Path = SETS_HASHES, workers: int = 4, log: Callable[[str], None] = say) -> dict:
     """Scores every saved answer again with the current scorer (for a new measurer); the answers are not asked again."""
     check_open(split, final)
     config_path = row_dir(results, row, split) / "run.json"
