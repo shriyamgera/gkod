@@ -60,6 +60,7 @@ class Gkod:
         self.timeout = timeout
         self._ids = itertools.count()
         self._replies: queue.Queue = queue.Queue()
+        self._stderr: list[str] = []
         command = [find_node(), str(GKOD_BIN), "batch", "--workers", str(workers), "--printer", printer]
         try:
             self._proc = subprocess.Popen(
@@ -74,7 +75,6 @@ class Gkod:
             )
         except OSError as error:
             raise GkodError(f"Could not start gkod batch: {error}") from None
-        self._stderr: list[str] = []
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._read_errors, daemon=True).start()
 
@@ -82,8 +82,13 @@ class Gkod:
         assert self._proc.stdout is not None
         for line in self._proc.stdout:
             line = line.strip()
-            if line:
+            if not line:
+                continue
+            try:
                 self._replies.put(json.loads(line))
+            except json.JSONDecodeError:
+                # not a reply (a stray line from Node); keep it with the error lines for the message
+                self._stderr.append(line[:300])
         self._replies.put(None)
 
     def _read_errors(self) -> None:

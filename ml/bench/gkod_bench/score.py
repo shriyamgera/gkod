@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from gkod_bench.extract import extract_code
-from gkod_bench.gkod import Gkod
+from gkod_bench.gkod import TIMEOUT_MESSAGE, Gkod
 from gkod_bench.mesh import MeshInfo, measure
 from gkod_bench.stl import read_stl
 from gkod_bench.voxel import iou as voxel_iou
@@ -30,6 +30,7 @@ SIZE_TOLERANCE_MM = 0.5
 # edit values are written with a few decimals; scaled sizes are exact to 1e-6 in code B
 VALUE_TOLERANCE = 1e-3
 MAX_SLIDERS = 30
+REFERENCE_TRIES = 3
 AXES = {"x": (0,), "y": (1,), "z": (2,), "xy": (0, 1)}
 
 
@@ -170,8 +171,12 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
         ref_stl = Path(tmp) / "reference.stl"
         ans_stl = Path(tmp) / "answer.stl"
         ref_code, ref_sha = reference_code(row, task)
-        ref = gkod.compile(ref_code, stl=ref_stl, check=False)
-        if not ref.get("ok"):
+        # the reference passed every label when the set was made, so a failure here is the machine (a stall); try again
+        for _ in range(REFERENCE_TRIES):
+            ref = gkod.compile(ref_code, stl=ref_stl, check=False)
+            if ref.get("ok"):
+                break
+        else:
             raise RuntimeError(f"the reference part of {row['id']} did not compile: {ref.get('error')}")
         ref_tri = read_stl(ref_stl)
         ref_info = measure(ref_tri)
@@ -187,6 +192,11 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
         compiled = None
         if code is not None:
             compiled = gkod.compile(code, stl=ans_stl, check=True)
+            if not compiled.get("ok") and compiled.get("error") == TIMEOUT_MESSAGE:
+                # once more, so a stall of the machine does not count against the code; slow code fails twice
+                again = gkod.compile(code, stl=ans_stl, check=True)
+                again["first_try"] = {"error": compiled.get("error"), "ms": compiled.get("ms")}
+                compiled = again
         ok = bool(compiled and compiled.get("ok"))
         scores["compiles"] = ok
         scores["compile"] = None if compiled is None else {

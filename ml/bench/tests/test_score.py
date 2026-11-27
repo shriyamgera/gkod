@@ -244,3 +244,21 @@ def test_an_edit_answer_against_code_b(gkod):
     # changing a kept size as well
     s = score_answer(gkod, row, "edit", f"```openscad\n{b.replace('depth = 30;', 'depth = 32;')}```", slider_ends=False)
     assert not s["edit"]["sizes_ok"] and s["edit"]["size_block"]["kept"] == {"n": 3, "ok": 2}
+
+
+@needs_compiler
+def test_an_answer_that_hits_the_time_limit_once_is_compiled_again(gkod, monkeypatch):
+    from gkod_bench.gkod import TIMEOUT_MESSAGE
+
+    real = gkod.compile
+    seen = []
+
+    def stalled_once(code, defines=None, stl=None, check=True):
+        if check and not seen:
+            seen.append(code)
+            return {"ok": False, "error": TIMEOUT_MESSAGE, "ms": 10000.0}
+        return real(code, defines, stl, check)
+
+    monkeypatch.setattr(gkod, "compile", stalled_once)
+    s = score_answer(gkod, CREATE_ROW, "create", f"```openscad\n{PLATE}```", slider_ends=False)
+    assert s["compiles"] and s["compile"]["first_try"] == {"error": TIMEOUT_MESSAGE, "ms": 10000.0}
