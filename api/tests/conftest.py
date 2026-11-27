@@ -8,7 +8,6 @@ the compose and CI users have. Without DATABASE_URL these tests are skipped and 
 
 import os
 import uuid
-from pathlib import Path
 
 import psycopg
 import pytest
@@ -17,8 +16,6 @@ from psycopg.conninfo import make_conninfo
 
 from gkod_api.migrate import migrate
 from gkod_api.settings import DEFAULT_MIGRATIONS
-
-FIXTURES = Path(__file__).parent / "fixtures"
 
 NO_DATABASE = (
     "DATABASE_URL is not set, so the database tests are skipped. Start the database with "

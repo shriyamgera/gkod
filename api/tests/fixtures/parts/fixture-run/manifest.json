@@ -1,0 +1,19 @@
+{
+  "generator": {
+    "name": "gkod-datagen",
+    "version": "0.1.0",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "dirty": false
+  },
+  "seed": 7,
+  "count": 8,
+  "rows": 8,
+  "skipped": 0,
+  "files": {
+    "parts.jsonl": {
+      "rows": 8,
+      "bytes": 7593,
+      "sha256": "9f96d68a8c68fb4d54f1e93618db41025f530b84051397d67adb248d6a82c0b2"
+    }
+  }
+}
