@@ -190,7 +190,10 @@ ml/.venv/bin/python -m gkod_bench fewshot
 
 - `run` asks the engine once per prompt and scores the answer. `--limit` runs only the next N prompts, so a row can be
   run in stages. Running the same command again carries on: prompts with a scored answer are skipped. The prompts come
-  in a fixed mixed order (by the sha256 of their id), so a part-done row already covers every tier.
+  in a fixed mixed order (by the sha256 of their id), so a part-done row already covers every tier. A row carries on
+  only with the engine settings, few-shot examples, system prompt, set files (by sha256) and scoring settings it began
+  with; every record keeps the sha256 of the set file its prompt came from, and `summarize` and `rescore` refuse a row
+  whose set files have changed, so answers scored against two versions of a set never mix.
 - `summarize` writes the summary again from the saved records. `rescore` scores the saved answers again with the
   current scorer (for a new measurer) without asking the engine. `compare` puts two rows side by side on the prompts
   both have answered. `fewshot` prints the fixed examples.
@@ -334,6 +337,7 @@ hidden hollow, open and flipped faces, holes added up over pieces) and on hand-w
 stood up (it meets the request and overlaps 1, and fails only the strict columns), no code, broken code, a slider end
 that breaks the part, an edit, a timeout tried again), the extractor cases, the intervals and paired tests, the data
 loader and its hash and split checks, the few-shot rule, a whole row on a small hand-made set, resuming after a stop or
-after errors, a resumed row with other settings, few-shot turns, the comparison, the closed test split in every command,
-and the Gemini and Claude Code adapters against recorded replies (no real calls). With `GKOD_BENCH_LOCAL=1` it also
-loads the local model and checks that greedy answers repeat exactly.
+after errors, a resumed row with other settings, other scoring settings or a remade set, prompts turned down or timed
+out scored as no code, few-shot turns, the comparison, the closed test split in every command, and the Gemini and Claude
+Code adapters against recorded replies (no real calls). With `GKOD_BENCH_LOCAL=1` it also loads the local model and
+checks that greedy answers repeat exactly.

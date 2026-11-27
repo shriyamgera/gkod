@@ -1,12 +1,12 @@
 import json
 
 import pytest
-from fake_set import ScriptedEngine, echo_reference, make_set
+from fake_set import ScriptedEngine, echo_reference, make_hashes, make_set
 
 from gkod_bench.data import SplitClosed
 from gkod_bench.engines.base import Answer
 from gkod_bench.paths import REPO
-from gkod_bench.run import RowMismatch, raw_dir, read_records, row_dir, run_row, summarize_row
+from gkod_bench.run import RowMismatch, raw_dir, read_records, rescore_row, row_dir, run_row, summarize_row
 
 pytestmark = pytest.mark.skipif(
     not (REPO / "app" / "public" / "openscad" / "openscad.wasm").exists(),
@@ -100,6 +100,28 @@ def test_a_resumed_row_must_keep_its_settings(fake):
     # a new day is fine
     later = ScriptedEngine(echo_reference, settings={"engine": "scripted", "temperature": 0, "date": "2026-12-01"})
     run_row(later, "fixed", "dev", limit=1, **fake)
+
+
+def test_a_resumed_row_must_keep_its_set_files_and_scoring(fake, tmp_path):
+    run_row(ScriptedEngine(echo_reference), "frozen", "dev", limit=2, **fake)
+    record = read_records(fake["results"], "frozen", "dev")[0]
+    assert record["data_sha256"] == json.loads((row_dir(fake["results"], "frozen", "dev") / "run.json").read_text())["data"]["files"][f"dev/{record['task']}.jsonl"]
+    # the scoring settings may not change between stages
+    with pytest.raises(RowMismatch, match="scoring"):
+        run_row(ScriptedEngine(echo_reference), "frozen", "dev", slider_ends=False, **fake)
+    # the set is made again with other sizes under the same ids: nothing may mix with the old answers
+    path = fake["sets_dir"] / "dev" / "create.jsonl"
+    path.write_text(path.read_text().replace('"value": 70', '"value": 77'))
+    hashes = make_hashes(fake["sets_dir"])
+    changed = {**fake, "hashes": hashes}
+    engine = ScriptedEngine(echo_reference)
+    with pytest.raises(RowMismatch, match="data"):
+        run_row(engine, "frozen", "dev", **changed)
+    assert engine.calls == []
+    with pytest.raises(RowMismatch, match="set's files changed"):
+        summarize_row("frozen", "dev", results=fake["results"], sets_dir=fake["sets_dir"], hashes=hashes)
+    with pytest.raises(RowMismatch, match="set's files changed"):
+        rescore_row("frozen", "dev", results=fake["results"], sets_dir=fake["sets_dir"], hashes=hashes, log=lambda line: None)
 
 
 def test_few_shot_rows_put_the_fixed_train_examples_first(fake):

@@ -85,14 +85,18 @@ def make_set(root: Path) -> Path:
         "train/create.jsonl": [create_row(f"tr-{f}", "train", "train", 55, family=f) for f in ("spacer", "plate", "bracket")],
         "train/edit.jsonl": [{**edit_row(f"tre-{k}", "train", 60, 64), "op": {"kind": k}} for k in ("size", "add", "remove")],
     }
-    lines = []
     for name, rows in files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("".join(json.dumps(r) + "\n" for r in rows))
-        lines.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {name}")
+    return make_hashes(root)
+
+
+def make_hashes(root: Path) -> Path:
+    """The hash list of the set's jsonl files, written again (after a test changes a file)."""
+    names = sorted(str(p.relative_to(root)) for p in root.glob("*/*.jsonl"))
     hashes = root / "hashes.sha256"
-    hashes.write_text("\n".join(lines) + "\n")
+    hashes.write_text("".join(f"{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}\n" for name in names))
     return hashes
 
 

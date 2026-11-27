@@ -2,7 +2,9 @@
 by code, one record per prompt in results/raw/<row>/<split>/<id>.json, then results/<row>/<split>/summary.json.
 
 A run resumes: prompts with a done record are skipped, so a crash, a stop or a --limit stage loses nothing. A
-resumed row must have the same engine settings, few-shot examples and system prompt as when it began. Prompts the
+resumed row must have the same engine settings, few-shot examples, system prompt, set files and scoring settings as
+when it began, and every record keeps the sha256 of the set file its prompt came from, so answers scored against two
+versions of a set never mix in one summary. Prompts the
 engine gave no answer for, for a reason that passes (a rate limit, a busy server, the network), are recorded as errors
 and tried again by the next run. A prompt the engine turned down, or ran out of time or turns on, is an answer with no
 code: it is scored, and counts in every rate.
@@ -97,19 +99,38 @@ def _check_same_row(path: Path, config: dict) -> None:
     if not path.exists():
         return
     before = json.loads(path.read_text())
-    for key in ("engine", "shots", "system_sha256", "tiers"):
-        a = _comparable(before[key]) if key == "engine" else before.get(key)
-        b = _comparable(config[key]) if key == "engine" else config.get(key)
+    for key in ("engine", "shots", "system_sha256", "tiers", "data", "scoring"):
+        a, b = before.get(key), config.get(key)
+        if key == "engine":
+            a, b = _comparable(a), _comparable(b)
+        if key == "data":
+            # the folder may move; the files' sha256 may not
+            a, b = (a or {}).get("files"), (b or {}).get("files")
         if a != b:
             raise RowMismatch(f"Row {config['row']} was started with other {key} settings ({a} then, {b} now). Use a new --row name.")
+
+
+def _check_same_files(config: dict, files: dict) -> None:
+    """A row's answers were scored against the set files it began with; summarising or scoring them again against
+    other files would mix two sets."""
+    if config.get("data", {}).get("files") != files:
+        raise RowMismatch(
+            f"The set's files changed since row {config['row']} began ({config.get('data', {}).get('files')} then, {files} now), "
+            "so its answers do not belong to these prompts. Use a new --row name."
+        )
+
+
+def _current(records: list[dict], files: dict) -> list[dict]:
+    """The records whose prompt came from these set files (a record from another version of the set is left out)."""
+    return [r for r in records if r.get("data_sha256") is None or r["data_sha256"] == files.get(f"{r['split']}/{r['task']}.jsonl")]
 
 
 def expected_of(items: list[Item]) -> list[dict]:
     return [{"id": i.id, "tier": i.tier, "family": i.family} for i in items]
 
 
-def write_summary(results: Path, row: str, split: str, items: list[Item], config: dict) -> dict:
-    summary = summarize(read_records(results, row, split), expected_of(items), config)
+def write_summary(results: Path, row: str, split: str, items: list[Item], config: dict, files: dict) -> dict:
+    summary = summarize(_current(read_records(results, row, split), files), expected_of(items), config)
     write_json(row_dir(results, row, split) / "summary.json", summary)
     return summary
 
@@ -187,6 +208,7 @@ def run_row(
                 "family": item.family,
                 "held_out_pair": item.row.get("held_out_pair"),
                 "source_tier": item.row.get("source_tier"),
+                "data_sha256": files[f"{split}/{item.task}.jsonl"],
                 "prompt": msgs.record(),
                 "answer": answer.text,
                 "engine_error": answer.error,
@@ -214,7 +236,7 @@ def run_row(
                 # every prompt turned down or timed out is more likely the setup than the model: stop and look
                 log(f"Stopping: {failures_in_a_row} prompts in a row were turned down or ran out of time ({answer.error}). Check the engine's settings; they are scored as no code.")
                 break
-    return write_summary(results, row, split, items, config)
+    return write_summary(results, row, split, items, config, files)
 
 
 def _line(n: int, total: int, item: Item, s: dict, seconds: float) -> str:
@@ -233,10 +255,11 @@ def summarize_row(row: str, split: str, *, final: bool = False, results: Path = 
     if not config_path.exists():
         raise FileNotFoundError(f"There is no row {row} on {split} in {results}.")
     config = json.loads(config_path.read_text())
-    items, _ = load_split(split, final, sets_dir, hashes)
+    items, files = load_split(split, final, sets_dir, hashes)
+    _check_same_files(config, files)
     if config.get("tiers"):
         items = [i for i in items if i.tier in config["tiers"]]
-    return write_summary(results, row, split, items, config)
+    return write_summary(results, row, split, items, config, files)
 
 
 def rescore_row(row: str, split: str, *, final: bool = False, results: Path = RESULTS, sets_dir: Path = SETS, hashes: Path = SETS_HASHES, workers: int = 4, log: Callable[[str], None] = say) -> dict:
@@ -246,11 +269,12 @@ def rescore_row(row: str, split: str, *, final: bool = False, results: Path = RE
     if not config_path.exists():
         raise FileNotFoundError(f"There is no row {row} on {split} in {results}.")
     config = json.loads(config_path.read_text())
-    items, _ = load_split(split, final, sets_dir, hashes)
+    items, files = load_split(split, final, sets_dir, hashes)
+    _check_same_files(config, files)
     by_id = {i.id: i for i in items}
     slider_ends = config.get("scoring", {}).get("slider_ends", True)
     with Gkod(workers=workers) as gkod:
-        for record in read_records(results, row, split):
+        for record in _current(read_records(results, row, split), files):
             if record.get("status") != "done" or record["id"] not in by_id:
                 continue
             item = by_id[record["id"]]
