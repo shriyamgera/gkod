@@ -9,7 +9,7 @@ describe('families', () => {
     expect(ids).toEqual([
       'plate', 'bracket', 'channel', 'tray', 'spacer', 'hook', 'knob', 'clip',
       'washer', 'shelf', 'tool_holder', 'slot_plate', 'divider', 'coaster', 'enclosure', 'foot',
-      'grommet', 'cup', 'comb', 'saddle', 'handle', 'corner_plate',
+      'grommet', 'cup', 'comb', 'saddle', 'handle', 'corner_plate', 'bit_holder', 'battery_holder',
     ]);
     expect(findFamily('hook')?.id).toBe('hook');
     expect(findFamily('nope')).toBeUndefined();
