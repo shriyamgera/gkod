@@ -18,7 +18,8 @@ export function sampleCoaster(rng: Rng): Tree {
   const size = rng.size(f.size[0], f.size[1]);
   const thickness = rng.size(f.thickness[0], f.thickness[1], 0.5);
   const features: Feature[] = [];
-  if (rng.chance(f.rim)) features.push({ kind: 'lip', height: rng.size(f.rimHeight[0], f.rimHeight[1], 0.5), wall: rng.size(f.rimWall[0], f.rimWall[1], 0.2) });
+  // a plain disc would have only two sizes, so a round coaster always has its rim
+  if (round || rng.chance(f.rim)) features.push({ kind: 'lip', height: rng.size(f.rimHeight[0], f.rimHeight[1], 0.5), wall: rng.size(f.rimWall[0], f.rimWall[1], 0.2) });
   if (round) return { family: f.id, body: { kind: 'disc', diameter: size, thickness }, features };
   // a square coaster always has its corners taken off
   const corner = rng.chance(0.75) ? 'round' : 'chamfer';
