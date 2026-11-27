@@ -1,0 +1,26 @@
+# The parts library for local development: PostgreSQL 17 with pgvector.
+# Values come from .env (copy .env.example). Ports are published on 127.0.0.1 only.
+name: gkod
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg17-trixie
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?copy .env.example to .env first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.example to .env first}
+      POSTGRES_DB: ${POSTGRES_DB:?copy .env.example to .env first}
+    ports:
+      - "127.0.0.1:${GKOD_DB_PORT:-5432}:5432"
+    volumes:
+      - gkod-db:/var/lib/postgresql/data
+    # Over TCP, so the check fails while the image's first-run setup server (socket only) is up.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  gkod-db:
