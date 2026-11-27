@@ -197,7 +197,7 @@ The last column counts a feature on every training family, which makes some feat
 **Rules,** checked when the set is made and again by `check`:
 
 - Parts are split first; edit pairs are made inside each split from its own parts.
-- No tree is in two splits, and no tree is within 0.5 mm of a tree of the same shape in another split (every number of the tree, same family, features, faces, patterns and flags). This covers parts and both sides of every edit pair.
+- No tree is in two splits, and no tree is within 0.5 mm of a tree of the same shape in another split (every number of the tree, same body, features, faces, patterns and flags, whatever the family: a washer drawn the same as a plain spacer counts). This covers parts and both sides of every edit pair.
 - Training rows have no held-out pair; dev rows have no test pair and test rows no dev pair.
 - Every row compiled, passed every print check, and its size block and stated sizes matched (edits: code A compiled and only the edited sizes changed). A row that fails is compiled again, up to three tries; one that still fails stops the run, so the set never depends on the machine's speed.
 - Every piece has its own seed: train parts 101, train edits 102, dev 201 to 204 and test 301 to 304 (t1, t2, t3, edits).

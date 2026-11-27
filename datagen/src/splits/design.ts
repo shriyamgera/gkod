@@ -79,7 +79,7 @@ export type Counts = { train: { create: number; edit: number }; holdout: { t1: n
 /** Rows in each piece; dev and test have the same structure. */
 export const COUNTS: Counts = { train: { create: 6000, edit: 3000 }, holdout: { t1: 100, t2: 100, t3: 100, edit: 100 } };
 
-/** Two trees of the same family and shape whose numbers all differ by at most this much are near-copies (mm). */
+/** Two trees of the same shape, whatever their family, whose numbers all differ by at most this much are near-copies (mm). */
 export const NEAR_MM = 0.5;
 
 /** The feature tokens of a tree: each feature's kind, with its face for holes, slots and pockets. */

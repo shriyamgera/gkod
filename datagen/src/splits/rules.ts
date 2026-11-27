@@ -3,7 +3,11 @@
 import type { Tree } from '../tree.ts';
 import { FAMILY_SPLIT, forbiddenPairs, HELD_OUT, NEAR_MM, type Pair, pairKey, pairsIn, type Split, SPLITS, type Tier } from './design.ts';
 
-/** A tree with every number taken out, and the numbers in order: two trees with the same shape have the same key. */
+/**
+ * A tree with every number taken out, and the numbers in order: two trees with the same shape have the same key. The
+ * family's name is left out, so a part of one family that is drawn the same as a part of another (a washer and a plain
+ * spacer on the same round body) has the same key; the tree's hash still holds the family.
+ */
 export function shapeOf(tree: Tree): { key: string; values: number[] } {
   const values: number[] = [];
   const strip = (value: unknown): unknown => {
@@ -18,11 +22,12 @@ export function shapeOf(tree: Tree): { key: string; values: number[] } {
     }
     return value;
   };
-  const key = JSON.stringify(strip(tree));
+  const { family: _family, ...geometry } = tree;
+  const key = JSON.stringify(strip(geometry));
   return { key, values };
 }
 
-/** Near-copies: the same family and shape (body, features, faces, patterns, flags) with every number within NEAR_MM. */
+/** Near-copies: the same shape (body, features, faces, patterns, flags), whatever the family, with every number within NEAR_MM. */
 export class NearIndex {
   private buckets = new Map<string, number[][]>();
   size = 0;

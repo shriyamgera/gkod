@@ -91,12 +91,15 @@ describe('near-copies', () => {
     const hex = structuredClone(spacer);
     (hex.body as { hex: boolean }).hex = !(spacer.body as { hex: boolean }).hex;
     expect(index.has(hex)).toBe(false);
-    expect(index.has({ ...spacer, family: 'washer' })).toBe(false);
+    // the family's name is not geometry: a part of another family drawn the same way is a near-copy too
+    expect(index.has({ ...spacer, family: 'washer' })).toBe(true);
+    expect(index.has({ ...moved(spacer, 0.6), family: 'washer' })).toBe(false);
   });
 
   it('reads the numbers in the same order whatever order the keys were written in', () => {
     const flipped = { features: spacer.features, body: Object.fromEntries(Object.entries(spacer.body).reverse()), family: spacer.family } as Tree;
     expect(shapeOf(flipped)).toEqual(shapeOf(spacer));
+    expect(shapeOf({ ...spacer, family: 'washer' })).toEqual(shapeOf(spacer));
   });
 });
 
