@@ -72,12 +72,13 @@ export function pairingProblem(input: string): string | null {
   return null;
 }
 
-export const NOT_REMEMBERED_CODE = 'This browser would not let the code be remembered, so it is kept for this tab only.';
+export const NOT_REMEMBERED_CODE = 'This browser would not let the code be kept, so it lasts until the page reloads.';
 
+// The pairing code is never saved on the device; "keep" holds it in this tab until the tab is closed.
 export function pairingRememberMessage(change: 'new-code' | 'box', asked: boolean, remembered: boolean): string {
   if (asked && !remembered) return change === 'new-code' ? `Code set. ${NOT_REMEMBERED_CODE}` : NOT_REMEMBERED_CODE;
-  if (change === 'new-code') return remembered ? 'Code set and remembered on this device' : 'Code set for this tab';
-  return remembered ? 'Code remembered on this device' : 'Code kept for this tab only';
+  if (change === 'new-code') return remembered ? 'Code set and kept until you close this tab' : 'Code set until the page reloads';
+  return remembered ? 'Code kept until you close this tab' : 'Code kept until the page reloads';
 }
 
 // What the status line says while Claude Code works, under the step it is on.

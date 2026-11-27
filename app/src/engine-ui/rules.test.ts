@@ -6,7 +6,9 @@ import {
   keyProblem,
   otherModel,
   NOT_REMEMBERED,
+  NOT_REMEMBERED_CODE,
   pairingProblem,
+  pairingRememberMessage,
   PHOTO_ONLY_REQUEST,
   rememberMessage,
   requestText,
@@ -151,5 +153,17 @@ describe('pairingProblem', () => {
     expect(pairingProblem('')).toBe('Type the pairing code first.');
     expect(pairingProblem('ABCD-EFGH')).toContain('12 letters and digits');
     expect(pairingProblem('ABCD-EFGH-JKM0')).toContain('not a pairing code');
+  });
+});
+
+describe('pairingRememberMessage', () => {
+  it('never says the code is saved on the device', () => {
+    expect(pairingRememberMessage('new-code', true, true)).toBe('Code set and kept until you close this tab');
+    expect(pairingRememberMessage('new-code', false, false)).toBe('Code set until the page reloads');
+    expect(pairingRememberMessage('box', true, true)).toBe('Code kept until you close this tab');
+    expect(pairingRememberMessage('box', true, false)).toBe(NOT_REMEMBERED_CODE);
+    for (const change of ['new-code', 'box'] as const) {
+      for (const remembered of [true, false]) expect(pairingRememberMessage(change, true, remembered)).not.toContain('device');
+    }
   });
 });

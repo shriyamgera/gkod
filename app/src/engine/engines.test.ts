@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBridgeStatus, fetchHealth, SEEN_KEY } from './bridge';
 import { forgetTurnedDown, needsCredential } from './engines';
-import { createKeyStore, PAIRING_STORAGE_KEY, pairingStore, STORAGE_KEY } from './keyStore';
+import { createKeyStore, createPairingStore, PAIRING_STORAGE_KEY, pairingStore, STORAGE_KEY } from './keyStore';
 import { createSettings, DEFAULT_CLAUDE_MODEL, DEFAULT_MODEL, ENGINE_STORAGE_KEY } from './settings';
 
 class FakeStorage {
@@ -71,6 +71,39 @@ describe('pairing code store', () => {
     code.set('ABCD-EFGH-JKMN', false);
     expect(code.get()).toBe('ABCD-EFGH-JKMN');
     expect(storage.items.size).toBe(0);
+  });
+
+  it('is remembered in this tab only, never in the storage other pages on the address share', () => {
+    const tab = new FakeStorage();
+    const shared = new FakeStorage();
+    const code = createPairingStore(() => tab, () => shared);
+    code.set('ABCD-EFGH-JKMN', true);
+    expect(code.isRemembered()).toBe(true);
+    expect(tab.items.get(PAIRING_STORAGE_KEY)).toBe('ABCD-EFGH-JKMN');
+    expect(shared.items.size).toBe(0);
+    // a reload in the same tab finds it again
+    expect(createPairingStore(() => tab, () => shared).get()).toBe('ABCD-EFGH-JKMN');
+  });
+
+  it('takes out a code an earlier version saved on the device, and leaves the Gemini key', () => {
+    const tab = new FakeStorage();
+    const shared = new FakeStorage();
+    shared.items.set(PAIRING_STORAGE_KEY, 'ABCD-EFGH-JKMN');
+    shared.items.set(STORAGE_KEY, 'AQ.test-key-1234567890');
+    const code = createPairingStore(() => tab, () => shared);
+    expect(code.get()).toBeNull();
+    expect(shared.items.has(PAIRING_STORAGE_KEY)).toBe(false);
+    expect(shared.items.get(STORAGE_KEY)).toBe('AQ.test-key-1234567890');
+  });
+
+  it('works when storage throws', () => {
+    const blocked = () => {
+      throw new Error('SecurityError');
+    };
+    const code = createPairingStore(blocked, blocked);
+    code.set('ABCD-EFGH-JKMN', true);
+    expect(code.get()).toBe('ABCD-EFGH-JKMN');
+    expect(code.isRemembered()).toBe(false);
   });
 });
 

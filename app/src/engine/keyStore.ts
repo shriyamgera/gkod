@@ -74,10 +74,20 @@ export function createKeyStore(getStorage: () => StorageLike | null, storageKey 
 }
 
 const local = () => (typeof window === 'undefined' ? null : window.localStorage);
+const tab = () => (typeof window === 'undefined' ? null : window.sessionStorage);
 
 export const keyStore = createKeyStore(local);
 
-export const pairingStore = createKeyStore(local, PAIRING_STORAGE_KEY);
+// The pairing code is never saved on the device. Every page on the same web address shares localStorage and passes
+// the bridge's Origin check: all of the account's GitHub Pages sites, or any project served on the same localhost
+// port. So "remember" keeps it in this tab's own storage only, through reloads, until the tab is closed. A code an
+// earlier version saved on the device is taken out.
+export function createPairingStore(getTab: () => StorageLike | null, getShared: () => StorageLike | null) {
+  attempt(() => getShared()?.removeItem(PAIRING_STORAGE_KEY), undefined);
+  return createKeyStore(getTab, PAIRING_STORAGE_KEY);
+}
+
+export const pairingStore = createPairingStore(tab, local);
 
 export function useGeminiKey(): { key: string | null; remembered: boolean } {
   return useSyncExternalStore(keyStore.subscribe, keyStore.snapshot, keyStore.snapshot);

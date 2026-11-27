@@ -34,6 +34,7 @@ Settings, all optional:
 - It listens on `127.0.0.1:8765` only, so nothing else on the network can reach it, and it refuses any `Host` other than `127.0.0.1:8765` or `localhost:8765` (no DNS rebinding).
 - On first start it makes a random pairing code, such as `K7QX-M2PD-9HTR`, and keeps it in `bridge/.pairing` (owner-only file, git-ignored), so a restart keeps the same code. Every request except `GET /health` must send it in the `X-GKod-Pairing` header. Case, spaces and dashes do not matter.
 - Pages may call it only from `https://shriyamgera.github.io` and the local dev and preview servers (`http://localhost:5173`, `http://localhost:4173`, `http://127.0.0.1:5173`, `http://127.0.0.1:4173`). Any other `Origin` gets 403. Preflights are answered, including Chrome's Private Network Access header (`Access-Control-Allow-Private-Network: true`).
+- An origin is a whole web address, so every page on it passes this check: every GitHub Pages site on `shriyamgera.github.io`, and any project served on `localhost:5173` or `:4173`. The pairing code is what keeps them out. The site therefore keeps the code in memory, or with "Keep it until I close this tab" in that tab's `sessionStorage`, never in `localStorage`, which every page on the origin shares. Serving GKod from its own domain and allowing only that would narrow it further.
 
 ## What a job runs
 

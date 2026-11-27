@@ -13,8 +13,8 @@ type Props = {
   onCancel?: () => void;
 };
 
-// The pairing code the bridge prints in its terminal. Kept like the Gemini key: in memory, or on this device
-// only when "Remember" is ticked.
+// The pairing code the bridge prints in its terminal. Kept in memory, or, when "Keep" is ticked, in this tab's own
+// storage until the tab is closed. Never on the device: other pages on the same web address could read it there.
 export function PairingPanel({ title, titleAs: Title = 'h2', message, autoFocus = false, onCodeSet, onCancel }: Props) {
   const { key: code, remembered } = usePairingCode();
   const [input, setInput] = useState('');
@@ -122,9 +122,10 @@ export function PairingPanel({ title, titleAs: Title = 'h2', message, autoFocus 
           onChange={(event) => changeRemember(event.target.checked)}
           aria-describedby={`${id}-remember-help`}
         />
-        <label htmlFor={`${id}-remember`}>Remember on this device</label>
+        <label htmlFor={`${id}-remember`}>Keep it until I close this tab</label>
         <p id={`${id}-remember-help`} className="muted">
-          Only tick this on your own computer.
+          It stays through a reload. It is never saved on the device, because other pages on this web address could
+          read it there.
         </p>
         {rememberFailed && <p>{NOT_REMEMBERED_CODE}</p>}
       </div>
@@ -146,8 +147,8 @@ export function PairingPanel({ title, titleAs: Title = 'h2', message, autoFocus 
       </div>
 
       <p id={`${id}-privacy`} className="key-privacy muted">
-        The bridge shows the code in its terminal when it starts. It stays in this browser and is sent only to the
-        bridge on this Mac.
+        The bridge shows the code in its terminal when it starts. It stays in this tab and is sent only to the bridge
+        on this Mac.
       </p>
       <p role="status" className="visually-hidden">
         {said}
