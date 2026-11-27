@@ -39,3 +39,8 @@ playwright-report/
 
 # Kiri:Moto engine build (made by scripts/fetch-kiri.sh)
 app/public/kiri/
+
+# Benchmark results (engine answers are results only, never data), the ML virtualenv and downloaded model weights
+/results/
+/ml/.venv/
+/ml/models/

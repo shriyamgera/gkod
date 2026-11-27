@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gkod-bench"
+version = "0.1.0"
+description = "GKod benchmark harness: runs engines on the frozen sets and scores every answer by code"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = ["numpy==2.5.5"]
+
+[project.optional-dependencies]
+local = ["mlx-lm==0.32.2"]
+
+[project.scripts]
+gkod-bench = "gkod_bench.cli:main"
+
+[tool.setuptools]
+packages = ["gkod_bench", "gkod_bench.engines"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

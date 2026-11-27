@@ -1,0 +1,7 @@
+# For the benchmark tests: the harness pins plus pytest and what it pulls in.
+-r requirements-bench.txt
+iniconfig==2.3.1
+packaging==26.4
+pluggy==1.7.0
+Pygments==2.21.0
+pytest==9.2.0
