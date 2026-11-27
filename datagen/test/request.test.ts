@@ -30,14 +30,14 @@ function truth(tree: Tree, fact: Fact): number | undefined {
   const env = envOf(model);
   if (fact.unit === 'mm') return model.sizes.find((s) => s.name === fact.key)?.value;
   const find = (kind: Feature['kind'], face?: string) => tree.features.find((f) => f.kind === kind && (!face || ('face' in f && f.face === face)));
-  const face = fact.key.startsWith('base_') ? 'base' : fact.key.startsWith('upright_') ? 'upright' : undefined;
+  const face = /^(base|upright|arm1|arm2)_/.exec(fact.key)?.[1];
   const key = face ? fact.key.slice(face.length + 1) : fact.key;
   const holes = find('holes', face) as Extract<Feature, { kind: 'holes' }> | undefined;
   const b = tree.body;
   switch (key) {
     case 'hole_count': return holes && holeCount(holes);
     case 'countersunk': return holes?.countersink ? 1 : undefined;
-    case 'slot_count': return (find('slots', face) as { count: number } | undefined)?.count;
+    case 'slot_count': return (find('slots', face) as { count: number } | undefined)?.count ?? env.slot_count;
     case 'rib_count': return env.rib_count;
     case 'boss_count': return find('bosses') ? 4 : undefined;
     case 'tab_count': return find('tabs') ? 2 : undefined;
@@ -52,7 +52,13 @@ function truth(tree: Tree, fact: Fact): number | undefined {
     case 'grip': return find('grips') ? 1 : undefined;
     case 'shaft_flat': return find('flat') ? 1 : undefined;
     case 'notch': return find('notch') ? 1 : undefined;
+    case 'slotted': return find('slit') ? 1 : undefined;
+    case 'finger_grooves': return find('grooves') ? 1 : undefined;
+    case 'hexagonal': return b.kind === 'cup' && b.sides === 6 ? 1 : undefined;
+    case 'octagonal': return b.kind === 'cup' && b.sides === 8 ? 1 : undefined;
   }
+  // any other count is a named size of its own, such as a comb's slots or a block's rows of sockets
+  if (fact.unit === 'count') return model.sizes.find((s) => s.name === fact.key)?.value;
   return undefined;
 }
 
@@ -74,7 +80,7 @@ describe('compose', () => {
       for (const fact of facts) {
         if (fact.unit === 'mm') expect(request, fact.key).toMatch(new RegExp(`(^|[^\\d.])${num(fact.value).replace('.', '\\.')}( ?mm| x| by|x)`));
         if (fact.unit === 'count') {
-          const said = [String(fact.value), NUMBER_WORDS[fact.value]!, ...(fact.value === 1 ? ['a', 'one'] : [])];
+          const said = [String(fact.value), NUMBER_WORDS[fact.value]!, ...(fact.value === 1 ? ['a', 'an', 'one'] : [])];
           expect(said.some((word) => new RegExp(`\\b${word}\\b`).test(request)), `${fact.key} in "${request}"`).toBe(true);
         }
       }
@@ -113,7 +119,7 @@ describe('compose', () => {
       expect(t.title).toMatch(/^[A-Z]/);
       expect(t.request).not.toMatch(/\b(a [aeio8]|an (?!M\d)[bcdfgjkmnpqrstvwxz2-79])/i);
       // a screw is named as M3, M4 and so on, never by a hole size
-      expect(t.request).not.toMatch(/[\d.]+ ?mm screw(?! holes?\b)/);
+      expect(t.request).not.toMatch(/[\d.]+ ?mm screws?\b(?! holes?\b)/);
       expect(t.request).not.toMatch(/\b\d+ \d/);
       // what the part is for follows its name, never a list, and what follows it belongs to the part
       expect(t.request).not.toMatch(/(,| and) (for|that fits) /);

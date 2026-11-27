@@ -12,7 +12,7 @@ function nounsOf(tree: Tree): readonly string[] {
   if (b.kind === 'round' && b.hex) return NOUNS.hexSpacer!;
   if (b.kind === 'clip' && b.cable >= 12) return NOUNS.pipeClip!;
   // a plate with nothing to fix it by is not called a mounting plate
-  if (b.kind === 'plate' && !tree.features.some((f) => ['holes', 'slots', 'bosses'].includes(f.kind))) {
+  if (tree.family === 'plate' && !tree.features.some((f) => ['holes', 'slots', 'bosses'].includes(f.kind))) {
     return NOUNS.plate!.filter((noun) => noun !== 'mounting plate');
   }
   return NOUNS[tree.family] ?? [tree.family];

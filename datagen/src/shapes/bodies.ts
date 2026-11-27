@@ -6,6 +6,7 @@ import {
   cube,
   cylinder,
   difference,
+  each,
   div,
   cos,
   half,
@@ -23,6 +24,7 @@ import {
   square,
   sub,
   translate,
+  union,
 } from '../scad.ts';
 import type { Body, Tree } from '../tree.ts';
 
@@ -167,6 +169,113 @@ export function bodyShapes(tree: Tree): Built {
           { name: 'clip', body: [linearExtrude(r('length'), call('profile'))] },
         ],
         adds: [call('clip')],
+        cuts: [],
+      };
+    }
+    case 'disc':
+      return {
+        modules: [
+          { name: 'outline', body: [circle(r('diameter'))] },
+          { name: 'disc', body: [linearExtrude(r('thickness'), call('outline'))] },
+        ],
+        adds: [call('disc')],
+        cuts: [],
+      };
+    case 'saddle': {
+      const [pipe, t, outer, span] = [r('pipe_d'), r('thickness'), r('outer_r'), r('span')];
+      // the pipe's centre sits half a pipe out from the wall; the strap goes over it and down to the feet
+      const strap = union(
+        translate([neg(half(span)), 0], square([span, t])),
+        translate([neg(outer), 0], square([mul(2, outer), half(pipe)])),
+        translate([0, half(pipe)], circle(mul(2, outer))),
+      );
+      const room = [translate([0, half(pipe)], circle(pipe)), translate([neg(half(pipe)), -1], square([pipe, add(half(pipe), 1)]))];
+      return {
+        modules: [
+          { name: 'profile', body: [difference(strap, ...room)] },
+          // drawn lying on its side, the way it prints, so the round strap needs no supports
+          { name: 'saddle', body: [linearExtrude(r('width'), call('profile'))] },
+        ],
+        adds: [call('saddle')],
+        cuts: [],
+      };
+    }
+    case 'handle': {
+      const [len, h, grip, post, spacing] = [r('length'), r('height'), r('grip'), r('post'), r('hole_spacing')];
+      const end = half(sub(len, grip));
+      const bar = hull(translate([neg(end), sub(h, half(grip))], circle(grip)), translate([end, sub(h, half(grip))], circle(grip)));
+      const posts = each([['x', [neg(half(spacing)), half(spacing)]]], translate([sub(r('x'), half(post)), 0], square([post, sub(h, half(grip))])));
+      const holes = each(
+        [['x', [neg(half(spacing)), half(spacing)]]],
+        translate([r('x'), -1, half(r('width'))], rotate([-90, 0, 0], cylinder({ d: r('screw_d'), h: add(r('screw_depth'), 1) }))),
+      );
+      return {
+        modules: [
+          { name: 'profile', body: [bar, posts] },
+          // drawn lying on its side, the way it prints, so the bar needs no supports
+          { name: 'handle', body: [linearExtrude(r('width'), call('profile'))] },
+          // screws come in from behind the drawer front, into the posts
+          { name: 'screw_holes', body: [holes] },
+        ],
+        adds: [call('handle')],
+        cuts: [call('screw_holes')],
+      };
+    }
+    case 'foot':
+      return {
+        // printed wide end down; it narrows to the top
+        modules: [{ name: 'foot', body: [cylinder({ d1: r('diameter'), d2: r('top_d'), h: r('height') })] }],
+        adds: [call('foot')],
+        cuts: [],
+      };
+    case 'sleeve':
+      return {
+        modules: [
+          { name: 'sleeve', body: [cylinder({ d: r('diameter'), h: r('height') })] },
+          { name: 'opening', body: [translate([0, 0, -1], cylinder({ d: r('inner_d'), h: add(r('height'), 2) }))] },
+        ],
+        adds: [call('sleeve')],
+        cuts: [call('opening')],
+      };
+    case 'cup': {
+      const fn = body.sides || undefined;
+      const inside = translate([0, 0, r('floor_thickness')], cylinder({ d: r('inner_d'), h: r('height'), fn }));
+      return {
+        modules: [{ name: 'cup', body: [difference(cylinder({ d: r('diameter'), h: r('height'), fn }), inside)] }],
+        adds: [call('cup')],
+        cuts: [],
+      };
+    }
+    case 'comb': {
+      const w = r('slot_width');
+      // each slot runs in from the front edge and ends in a half circle
+      const slot = hull(translate([neg(half(w)), -1], square([w, 1])), translate([0, sub(r('slot_depth'), half(w))], circle(w)));
+      const slots = each([['i', { from: 0, to: sub(r('slot_count'), 1) }]], translate([mul(add(r('i'), 0.5), r('slot_pitch')), 0], slot));
+      return {
+        modules: [
+          { name: 'outline', body: [difference(square([r('width'), r('depth')]), slots)] },
+          { name: 'comb', body: [linearExtrude(r('thickness'), call('outline'))] },
+        ],
+        adds: [call('comb')],
+        cuts: [],
+      };
+    }
+    case 'corner': {
+      const [len, arm, f] = [r('length'), r('arm_width'), r('fillet')];
+      return {
+        modules: [
+          {
+            name: 'outline',
+            body: [
+              square([len, arm]),
+              square([arm, len]),
+              // a rounded fill in the inside corner, where the arms meet
+              translate([arm, arm], difference(square([f, f]), translate([f, f], circle(mul(2, f))))),
+            ],
+          },
+          { name: 'corner_plate', body: [linearExtrude(r('thickness'), call('outline'))] },
+        ],
+        adds: [call('corner_plate')],
         cuts: [],
       };
     }

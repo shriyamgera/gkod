@@ -45,7 +45,8 @@ export function bodyPiece(body: Body): BodyPiece {
         sizes: [
           size(at('width'), body.width, 'width', 'Plate width (mm)', 1, 10, P),
           size(at('depth'), body.depth, 'depth', 'Plate depth, front to back (mm)', 1, 10, P),
-          size(at('thickness'), body.thickness, 'thickness', 'Plate thickness (mm)', 0.5, W, 20),
+          // up to a block deep enough for battery sockets
+          size(at('thickness'), body.thickness, 'thickness', 'Plate thickness (mm)', 0.5, W, 40),
           ...cornerSize(body),
         ],
         derived: [],
@@ -270,6 +271,209 @@ export function bodyPiece(body: Body): BodyPiece {
             u0: half(mul(-1, base)), u1: half(base), v0: 0, v1: len, uMid: 0, vMid: half(len), uLen: base, thick: ref('base_thickness'),
             at: (u, v) => [u, 0, v], normal: 'y', uAxis: 'x', vAxis: 'z', flat: false,
           },
+        },
+      };
+    }
+    case 'disc': {
+      const dia = ref('diameter');
+      return {
+        sizes: [
+          size(at('diameter'), body.diameter, 'diameter', 'Diameter (mm)', 1, 10, P),
+          size(at('thickness'), body.thickness, 'thickness', 'Thickness (mm)', 0.5, W, 20),
+        ],
+        derived: [],
+        rules: [],
+        shapes: none,
+        extent: { x: dia, y: dia, z: ref('thickness') },
+        faces: {},
+      };
+    }
+    case 'saddle': {
+      const pipe = ref('pipe_d');
+      const t = ref('thickness');
+      const outer = ref('outer_r');
+      const span = ref('span');
+      return {
+        sizes: [
+          size(at('pipe'), body.pipe, 'pipe_d', 'Pipe diameter (mm)', 0.5, 4, 120),
+          size(at('thickness'), body.thickness, 'thickness', 'Strap thickness (mm)', 0.5, 2, 10),
+          size(at('foot'), body.foot, 'foot_length', 'Foot length, each side (mm)', 1, 6, 60),
+          size(at('width'), body.width, 'width', 'Strap width, along the pipe (mm)', 1, 6, 100),
+        ],
+        derived: [
+          { name: 'outer_r', value: add(half(pipe), t) },
+          // from the end of one foot to the end of the other
+          { name: 'span', value: mul(2, add(outer, ref('foot_length'))) },
+        ],
+        rules: [],
+        // the strap stands up from the wall between the feet; screws go through the feet only
+        shapes: (env) => [{ face: 'feet', cut: false, edge: true, what: 'pipe strap', u0: -env.outer_r!, v0: 0, u1: env.outer_r!, v1: env.width! }],
+        extent: { x: span, y: add(pipe, t), z: w },
+        faces: {
+          feet: {
+            u0: half(mul(-1, span)), u1: half(span), v0: 0, v1: w, uMid: 0, vMid: half(w), uLen: span, thick: t,
+            at: (u, v) => [u, 0, v], normal: 'y', uAxis: 'x', vAxis: 'z', flat: false,
+          },
+        },
+      };
+    }
+    case 'handle': {
+      const spacing = ref('hole_spacing');
+      const len = ref('length');
+      const h = ref('height');
+      const grip = ref('grip');
+      const post = ref('post');
+      const screw = ref('screw_d');
+      return {
+        sizes: [
+          size(at('spacing'), body.spacing, 'hole_spacing', 'Distance between the screw holes (mm)', 1, 16, 190),
+          size(at('length'), body.length, 'length', 'Handle length, end to end (mm)', 1, 30, P),
+          size(at('height'), body.height, 'height', 'Height out from the drawer (mm)', 1, 12, 80),
+          size(at('grip'), body.grip, 'grip', 'Grip bar thickness (mm)', 0.5, 5, 20),
+          size(at('post'), body.post, 'post', 'Post width (mm)', 0.5, 6, 30),
+          size(at('width'), body.width, 'width', 'Bar width (mm)', 1, 8, 40),
+          size(at('screw'), body.screw, 'screw_d', 'Screw hole diameter (mm)', 0.5, LIMITS.holeMin, LIMITS.sideHoleMax),
+          size(at('screwDepth'), body.screwDepth, 'screw_depth', 'Screw hole depth (mm)', 0.5, 4, 40),
+        ],
+        derived: [],
+        rules: [
+          ge(len, add(add(spacing, post), grip), 'The posts stick out past the ends of the bar.'),
+          ge(sub(spacing, post), 30, 'There is no room for a hand between the posts.'),
+          ge(sub(h, grip), 14, 'There is no room for fingers under the bar.'),
+          ge(post, add(screw, 2 * W), 'The posts are too thin for their screw holes.'),
+          ge(w, add(screw, 2 * W), 'The bar is too narrow for its screw holes.'),
+          le(ref('screw_depth'), sub(h, 2), 'The screw holes go through the top of the handle.'),
+        ],
+        shapes: none,
+        extent: { x: len, y: h, z: w },
+        faces: {},
+      };
+    }
+    case 'foot': {
+      const dia = ref('diameter');
+      const top = ref('top_d');
+      const h = ref('height');
+      return {
+        sizes: [
+          size(at('diameter'), body.diameter, 'diameter', 'Base diameter (mm)', 1, 8, 120),
+          size(at('top'), body.top, 'top_d', 'Top diameter (mm)', 1, 6, 120),
+          size(at('height'), body.height, 'height', 'Height (mm)', 0.5, 2, 60),
+        ],
+        derived: [],
+        rules: [
+          le(top, dia, 'The top is wider than the base.'),
+          le(h, dia, 'The foot is taller than it is wide.'),
+        ],
+        shapes: none,
+        extent: { x: dia, y: dia, z: h },
+        faces: {
+          // a screw hole goes down the middle; the box around the top circle is close enough for one centre hole
+          top: {
+            u0: half(mul(-1, top)), u1: half(top), v0: half(mul(-1, top)), v1: half(top), uMid: 0, vMid: 0, uLen: top, thick: h,
+            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', vAxis: 'y', flat: true,
+          },
+        },
+      };
+    }
+    case 'sleeve': {
+      const dia = ref('diameter');
+      return {
+        sizes: [
+          size(at('diameter'), body.diameter, 'diameter', 'Outer diameter, to fit the hole (mm)', 0.5, 10, P),
+          size(at('wall'), body.wall, 'wall', 'Wall thickness (mm)', 0.2, W, 10),
+          size(at('height'), body.height, 'height', 'Height (mm)', 0.5, 4, 100),
+        ],
+        derived: [{ name: 'inner_d', value: sub(dia, mul(2, ref('wall'))) }],
+        rules: [ge(ref('inner_d'), 6, 'The opening is narrower than 6 mm.')],
+        shapes: none,
+        extent: { x: dia, y: dia, z: ref('height') },
+        faces: {},
+      };
+    }
+    case 'cup': {
+      const dia = ref('diameter');
+      const wall = ref('wall');
+      const f = ref('floor_thickness');
+      const n = body.sides;
+      // the wall is measured across a flat, so a corner of the inside sits farther out than the wall
+      const inner = n ? sub(dia, div(mul(2, wall), cos(180 / n))) : sub(dia, mul(2, wall));
+      // holes in the floor stay inside the square that fits in the floor's inner circle
+      const flatR = n ? mul(half(ref('inner_d')), cos(180 / n)) : half(ref('inner_d'));
+      const box = div(flatR, 1.4142);
+      return {
+        sizes: [
+          size(at('diameter'), body.diameter, 'diameter', n ? 'Width across the corners (mm)' : 'Outer diameter (mm)', 1, 20, P),
+          size(at('height'), body.height, 'height', 'Height (mm)', 1, 10, P),
+          size(at('wall'), body.wall, 'wall', 'Wall thickness (mm)', 0.2, W, 10),
+          size(at('floor'), body.floor, 'floor_thickness', 'Floor thickness (mm)', 0.2, W, 10),
+        ],
+        derived: [{ name: 'inner_d', value: inner }],
+        rules: [
+          ge(ref('inner_d'), 10, 'The inside is narrower than 10 mm.'),
+          ge(ref('height'), add(f, 5), 'The cup is not deeper than its floor.'),
+        ],
+        shapes: none,
+        extent: { x: dia, y: n === 6 ? mul(dia, cos(30)) : dia, z: ref('height') },
+        faces: {
+          floor: {
+            u0: mul(-1, box), u1: box, v0: mul(-1, box), v1: box, uMid: 0, vMid: 0, uLen: mul(2, box), thick: f,
+            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', vAxis: 'y', flat: true,
+          },
+        },
+      };
+    }
+    case 'comb': {
+      const d = ref('depth');
+      const slotDepth = ref('slot_depth');
+      return {
+        sizes: [
+          size(at('width'), body.width, 'width', 'Comb width (mm)', 1, 20, P),
+          size(at('depth'), body.depth, 'depth', 'Depth, front to back (mm)', 1, 15, P),
+          size(at('thickness'), body.thickness, 'thickness', 'Thickness (mm)', 0.5, W, 20),
+          size(at('slots'), body.slots, 'slot_count', 'Number of cable slots', 1, 2, 20),
+          size(at('slot'), body.slot, 'slot_width', 'Slot width, for the cable (mm)', 0.5, 2, 20),
+          size(at('slotDepth'), body.slotDepth, 'slot_depth', 'Slot depth, in from the front edge (mm)', 0.5, 3, 150),
+        ],
+        derived: [{ name: 'slot_pitch', value: div(w, ref('slot_count')) }],
+        rules: [
+          ge(sub(ref('slot_pitch'), ref('slot_width')), 4, 'The fingers between the slots are thinner than 4 mm.'),
+          ge(slotDepth, ref('slot_width'), 'A slot is shallower than it is wide.'),
+          ge(sub(d, slotDepth), 8, 'The slots cut too far into the comb.'),
+        ],
+        shapes: none,
+        extent: { x: w, y: d, z: ref('thickness') },
+        faces: {
+          // the solid strip behind the slots, where the screws go
+          spine: {
+            u0: 0, u1: w, v0: slotDepth, v1: d, uMid: half(w), vMid: half(add(slotDepth, d)), uLen: w, thick: ref('thickness'),
+            at: (u, v) => [u, v, 0], normal: 'z', uAxis: 'x', vAxis: 'y', flat: true,
+          },
+        },
+      };
+    }
+    case 'corner': {
+      const len = ref('length');
+      const arm = ref('arm_width');
+      const t = ref('thickness');
+      // each arm carries holes from just past the square where the arms meet out to its end
+      const start = add(arm, W);
+      const face = (at: Face['at'], uAxis: 'x' | 'y', vAxis: 'x' | 'y'): Face => ({
+        u0: start, u1: len, v0: 0, v1: arm, uMid: half(add(start, len)), vMid: half(arm), uLen: sub(len, start), thick: t,
+        at, normal: 'z', uAxis, vAxis, flat: true,
+      });
+      return {
+        sizes: [
+          size(at('length'), body.length, 'length', 'Arm length, from the outside corner (mm)', 1, 20, P),
+          size(at('arm'), body.arm, 'arm_width', 'Arm width (mm)', 1, 8, 60),
+          size(at('thickness'), body.thickness, 'thickness', 'Plate thickness (mm)', 0.5, W, 15),
+        ],
+        derived: [{ name: 'fillet', value: half(arm) }],
+        rules: [ge(len, add(arm, 10), 'The arms are too short for their width.')],
+        shapes: none,
+        extent: { x: len, y: len, z: t },
+        faces: {
+          arm1: face((u, v) => [u, v, 0], 'x', 'y'),
+          arm2: face((u, v) => [v, u, 0], 'y', 'x'),
         },
       };
     }

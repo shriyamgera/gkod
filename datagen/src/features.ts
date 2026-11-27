@@ -9,9 +9,11 @@ const P = LIMITS.part;
 
 export type Ctx = { body: Body; faces: Record<string, Face>; index: number };
 
-/** Prefix for size names and captions: only the bracket has two faces that can both carry holes. */
+/** Prefix for size names and captions: only the bracket and the corner plate have two faces that can both carry holes. */
 export function prefixOf(body: Body, face: string): { p: string; label: string } {
-  return body.kind === 'angle' ? { p: `${face}_`, label: `${face} ` } : { p: '', label: '' };
+  if (body.kind === 'angle') return { p: `${face}_`, label: `${face} ` };
+  if (body.kind === 'corner') return { p: `${face}_`, label: face === 'arm1' ? 'first arm ' : 'second arm ' };
+  return { p: '', label: '' };
 }
 
 const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -185,9 +187,12 @@ export function featurePiece(f: Feature, ctx: Ctx): Piece {
       };
     }
     case 'bosses': {
-      const face = ctx.faces.top!;
+      // on a plate's top, or on the floor inside a box
+      const name = ctx.faces.top ? 'top' : 'floor';
+      const face = ctx.faces[name]!;
       const placed = placeSizes(f.place, path, face, '', '', 'boss');
       const where = spots(f.place, face, '', 'boss');
+      const inBox = body.kind === 'box' ? [le(add(face.thick, ref('boss_height')), sub(ref('height'), 2), 'The standoffs stand as tall as the walls.')] : [];
       return {
         sizes: [
           size(at('d'), f.d, 'boss_d', 'Standoff diameter (mm)', 0.5, 4, 30),
@@ -199,20 +204,32 @@ export function featurePiece(f: Feature, ctx: Ctx): Piece {
         rules: [
           ge(ref('boss_d'), add(ref('boss_hole_d'), 2 * W), 'The standoff wall around its hole is too thin.'),
           le(ref('boss_height'), mul(4, ref('boss_d')), 'The standoffs are too tall for their width.'),
+          ...inBox,
         ],
-        shapes: (env) => centers(where, env).map(([u, v]) => ({ face: 'top', cut: false, what: 'standoff', u, v, r: env.boss_d! / 2 })),
-        extent: { z: add(ref('thickness'), ref('boss_height')) },
+        shapes: (env) => centers(where, env).map(([u, v]) => ({ face: name, cut: false, what: 'standoff', u, v, r: env.boss_d! / 2 })),
+        extent: { z: add(face.thick, ref('boss_height')) },
       };
     }
     case 'lip': {
+      const sizes = [
+        size(at('height'), f.height, 'lip_height', 'Rim height (mm)', 0.5, 1, 50),
+        size(at('wall'), f.wall, 'lip_wall', 'Rim thickness (mm)', 0.2, W, 10),
+      ];
+      const tall = le(ref('lip_height'), mul(10, ref('lip_wall')), 'The rim is too tall for its thickness.');
+      if (body.kind === 'disc') {
+        return {
+          sizes,
+          derived: [],
+          rules: [tall, ge(sub(ref('diameter'), mul(2, ref('lip_wall'))), 6, 'The rim leaves too little room inside.')],
+          shapes: () => [],
+          extent: { z: add(ref('thickness'), ref('lip_height')) },
+        };
+      }
       return {
-        sizes: [
-          size(at('height'), f.height, 'lip_height', 'Rim height (mm)', 0.5, 1, 50),
-          size(at('wall'), f.wall, 'lip_wall', 'Rim thickness (mm)', 0.2, W, 10),
-        ],
+        sizes,
         derived: [],
         rules: [
-          le(ref('lip_height'), mul(10, ref('lip_wall')), 'The rim is too tall for its thickness.'),
+          tall,
           ge(sub(ref('width'), mul(2, ref('lip_wall'))), 6, 'The rim leaves too little room inside.'),
           ge(sub(ref('depth'), mul(2, ref('lip_wall'))), 6, 'The rim leaves too little room inside.'),
         ],
@@ -374,6 +391,56 @@ export function featurePiece(f: Feature, ctx: Ctx): Piece {
         derived: [],
         rules: [le(ref('flat_depth'), div(ref('shaft_d'), 3), 'The flat is too deep for the shaft hole.')],
         shapes: () => [],
+        extent: {},
+      };
+    }
+    case 'slit':
+      // as wide as the bore, so it has no size of its own; it cuts through the outer edge along y
+      return { sizes: [], derived: [], rules: [], shapes: () => [], extent: {}, trims: ['y'] };
+    case 'grooves': {
+      return {
+        sizes: [
+          size(at('count'), f.count, 'groove_count', 'Number of finger grooves', 1, 2, 12),
+          size(at('d'), f.d, 'groove_d', 'Finger groove diameter (mm)', 0.5, 4, 30),
+        ],
+        derived: [{ name: 'groove_pitch', value: mul(1.5, ref('groove_d')) }],
+        rules: [
+          le(
+            add(mul(sub(ref('groove_count'), 1), ref('groove_pitch')), ref('groove_d')),
+            sub(sub(ref('hole_spacing'), ref('post')), 4),
+            'The finger grooves run into the posts.',
+          ),
+          ge(sub(ref('grip'), half(ref('groove_d'))), 4, 'The finger grooves cut too deep into the bar.'),
+        ],
+        shapes: () => [],
+        extent: {},
+      };
+    }
+    case 'sockets': {
+      const face = ctx.faces.top!;
+      return {
+        sizes: [
+          size(at('columns'), f.columns, 'column_count', 'Number of sockets, left to right', 1, 1, 30),
+          size(at('rows'), f.rows, 'row_count', 'Number of rows of sockets, front to back', 1, 1, 20),
+          size(at('d'), f.d, 'socket_d', f.hex ? 'Socket width across the flats (mm)' : 'Socket diameter (mm)', 0.1, 2, 40),
+          size(at('depth'), f.depth, 'socket_depth', 'Socket depth (mm)', 0.5, 1, 50),
+          size(at('pitch'), f.pitch, 'socket_pitch', 'Distance between socket centres (mm)', 0.5, 3, 60),
+        ],
+        derived: [],
+        rules: [le(ref('socket_depth'), sub(ref('thickness'), W), 'The sockets leave less than 1.6 mm under them.')],
+        shapes: (env) => {
+          const [cols, rows, pitch] = [Math.round(env.column_count!), Math.round(env.row_count!), env.socket_pitch!];
+          // a hex socket reaches out to its corners
+          const r = f.hex ? env.socket_d! / 2 / Math.cos(Math.PI / 6) : env.socket_d! / 2;
+          const [um, vm] = [evaluate(face.uMid, env), evaluate(face.vMid, env)];
+          const out: Shape[] = [];
+          for (let i = 0; i < cols; i++) {
+            for (let j = 0; j < rows; j++) {
+              out.push({ face: 'top', cut: true, what: 'socket', u: um + (i - (cols - 1) / 2) * pitch, v: vm + (j - (rows - 1) / 2) * pitch, r });
+            }
+          }
+          return out;
+        },
         extent: {},
       };
     }

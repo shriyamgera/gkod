@@ -11,7 +11,22 @@ export type Body =
   | { kind: 'round'; diameter: number; height: number; bore: number; hex: boolean }
   | { kind: 'hook'; width: number; plate: number; reach: number; tip: number; thickness: number }
   | { kind: 'knob'; diameter: number; height: number; shaft: number; shaftDepth: number; chamfer: number }
-  | { kind: 'clip'; cable: number; wall: number; grip: number; length: number; pad: number; padThickness: number };
+  | { kind: 'clip'; cable: number; wall: number; grip: number; length: number; pad: number; padThickness: number }
+  | { kind: 'disc'; diameter: number; thickness: number }
+  // a strap over a pipe with a foot on each side, printed on its side
+  | { kind: 'saddle'; pipe: number; thickness: number; foot: number; width: number }
+  // a bar on two posts, printed on its side; spacing is between the screw holes
+  | { kind: 'handle'; spacing: number; length: number; height: number; grip: number; post: number; width: number; screw: number; screwDepth: number }
+  // a round foot, wide end down, narrowing to its top
+  | { kind: 'foot'; diameter: number; top: number; height: number }
+  // a tube that fits a hole; diameter is its outside
+  | { kind: 'sleeve'; diameter: number; wall: number; height: number }
+  // sides 0 is round, 6 or 8 a hexagon or octagon; diameter is across the corners
+  | { kind: 'cup'; diameter: number; height: number; wall: number; floor: number; sides: 0 | 6 | 8 }
+  // a plate with a row of slots in its front edge
+  | { kind: 'comb'; width: number; depth: number; thickness: number; slots: number; slot: number; slotDepth: number }
+  // a flat L: two arms of the same length meeting at a square corner
+  | { kind: 'corner'; length: number; arm: number; thickness: number };
 
 export type BodyKind = Body['kind'];
 
@@ -39,7 +54,12 @@ export type Feature =
   | { kind: 'flange'; d: number; thickness: number; holes: number; hole: number }
   | { kind: 'lips'; width: number }
   | { kind: 'grips'; count: number; d: number }
-  | { kind: 'flat'; depth: number };
+  | { kind: 'flat'; depth: number }
+  // a cut as wide as the bore, from the bore out through the side, so a washer slides on from the side
+  | { kind: 'slit' }
+  | { kind: 'grooves'; count: number; d: number }
+  // a grid of blind sockets in the top, round or hex (d is across the flats)
+  | { kind: 'sockets'; columns: number; rows: number; d: number; depth: number; pitch: number; hex: boolean };
 
 export type FeatureKind = Feature['kind'];
 
@@ -60,17 +80,25 @@ export const LIMITS = {
 /** Which features each body takes, and which faces carry features. */
 export const ALLOWED: Record<BodyKind, { features: FeatureKind[]; faces: Record<string, Pattern[]> }> = {
   plate: {
-    features: ['holes', 'slots', 'pocket', 'ribs', 'bosses', 'lip', 'notch'],
+    features: ['holes', 'slots', 'pocket', 'ribs', 'bosses', 'lip', 'notch', 'sockets'],
     faces: { top: ['center', 'pair', 'row', 'corners', 'grid'] },
   },
-  box: { features: ['holes', 'tabs', 'dividers'], faces: { floor: ['center', 'pair', 'row', 'corners', 'grid'] } },
+  box: { features: ['holes', 'tabs', 'dividers', 'bosses'], faces: { floor: ['center', 'pair', 'row', 'corners', 'grid'] } },
   angle: {
     features: ['holes', 'slots', 'gussets'],
     faces: { base: ['center', 'pair', 'row'], upright: ['center', 'pair', 'row'] },
   },
   channel: { features: ['holes', 'slots', 'lips'], faces: { floor: ['center', 'pair', 'row'] } },
-  round: { features: ['flange'], faces: {} },
+  round: { features: ['flange', 'slit'], faces: {} },
   hook: { features: ['holes'], faces: { plate: ['center', 'pair'] } },
   knob: { features: ['grips', 'flat'], faces: {} },
   clip: { features: ['holes'], faces: { pad: ['pair'] } },
+  disc: { features: ['lip'], faces: {} },
+  saddle: { features: ['holes'], faces: { feet: ['pair'] } },
+  handle: { features: ['grooves'], faces: {} },
+  foot: { features: ['holes'], faces: { top: ['center'] } },
+  sleeve: { features: ['flange'], faces: {} },
+  cup: { features: ['holes'], faces: { floor: ['center', 'grid'] } },
+  comb: { features: ['holes'], faces: { spine: ['center', 'pair', 'row'] } },
+  corner: { features: ['holes'], faces: { arm1: ['center', 'pair', 'row'], arm2: ['center', 'pair', 'row'] } },
 };

@@ -134,3 +134,56 @@ describe('serialized parts compile and pass the print checks', () => {
     }
   }, 120000);
 });
+
+// The bodies and features the newer families are built from, each from a fixed tree, through the real compiler.
+describe('newer bodies and features compile and pass the print checks', () => {
+  const holes = (face: string, d: number, countersink: boolean, place: Extract<Tree['features'][number], { kind: 'holes' }>['place']) =>
+    ({ kind: 'holes', face, d, countersink, place }) as const;
+  const trees: [string, Tree][] = [
+    ['disc with a rim', { family: 'test', body: { kind: 'disc', diameter: 90, thickness: 4 }, features: [{ kind: 'lip', height: 2, wall: 2 }] }],
+    ['saddle', { family: 'test', body: { kind: 'saddle', pipe: 22, thickness: 3, foot: 14, width: 20 }, features: [holes('feet', 4, false, { pattern: 'pair', spacing: 42 })] }],
+    [
+      'handle with grooves',
+      { family: 'test', body: { kind: 'handle', spacing: 96, length: 130, height: 30, grip: 10, post: 12, width: 14, screw: 3.5, screwDepth: 12 }, features: [{ kind: 'grooves', count: 4, d: 10 }] },
+    ],
+    ['foot', { family: 'test', body: { kind: 'foot', diameter: 30, top: 22, height: 12 }, features: [holes('top', 4, true, { pattern: 'center' })] }],
+    ['sleeve with a flange', { family: 'test', body: { kind: 'sleeve', diameter: 60, wall: 2, height: 20 }, features: [{ kind: 'flange', d: 84, thickness: 3, holes: 3, hole: 4 }] }],
+    ['hex cup', { family: 'test', body: { kind: 'cup', diameter: 70, height: 90, wall: 2, floor: 2.4, sides: 6 }, features: [holes('floor', 5, false, { pattern: 'grid', x: 20, y: 20 })] }],
+    [
+      'comb',
+      { family: 'test', body: { kind: 'comb', width: 100, depth: 35, thickness: 4, slots: 8, slot: 6, slotDepth: 18 }, features: [holes('spine', 4, true, { pattern: 'pair', spacing: 60 })] },
+    ],
+    [
+      'corner plate',
+      {
+        family: 'test',
+        body: { kind: 'corner', length: 80, arm: 18, thickness: 4 },
+        features: [holes('arm1', 4, false, { pattern: 'pair', spacing: 20 }), holes('arm2', 4, false, { pattern: 'pair', spacing: 20 })],
+      },
+    ],
+    ['slotted washer', { family: 'test', body: { kind: 'round', diameter: 20, height: 2, bore: 8.5, hex: false }, features: [{ kind: 'slit' }] }],
+    [
+      'hex sockets',
+      { family: 'test', body: { kind: 'plate', width: 80, depth: 40, thickness: 12, corner: 'round', cornerSize: 4 }, features: [{ kind: 'sockets', columns: 6, rows: 3, d: 6.8, depth: 9, pitch: 11, hex: true }] },
+    ],
+    [
+      'standoffs in a box',
+      {
+        family: 'test',
+        body: { kind: 'box', width: 100, depth: 70, height: 30, wall: 2, floor: 2.4, corner: 'round', cornerSize: 4 },
+        features: [{ kind: 'bosses', d: 7, height: 6, hole: 3, place: { pattern: 'grid', x: 60, y: 40 } }],
+      },
+    ],
+  ];
+
+  const bed = PRINTERS.kobra2neo!.bed;
+
+  it.each(trees)('%s', async (_, tree) => {
+    expect(validate(tree)).toEqual([]);
+    const part = written(tree);
+    const result = await compileScad(part.code);
+    expect(result.error).toBeNull();
+    expect(result.params).toEqual(part.params);
+    expect(checkStl(result.stl!, { bed }).results.filter((check) => !check.ok)).toEqual([]);
+  }, 30000);
+});

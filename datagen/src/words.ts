@@ -14,6 +14,22 @@ export const NOUNS: Record<string, readonly string[]> = {
   knob: ['knob', 'control knob', 'round knob', 'dial knob'],
   clip: ['cable clip', 'wire clip', 'cable holder'],
   pipeClip: ['pipe clip', 'tube clip', 'pipe holder'],
+  washer: ['washer', 'flat washer', 'spacer washer', 'shim washer'],
+  shelf: ['wall shelf', 'small shelf', 'shelf', 'small wall shelf', 'display shelf'],
+  tool_holder: ['tool holder', 'screwdriver holder', 'tool rack', 'wall tool holder', 'screwdriver rack'],
+  slot_plate: ['slotted mounting plate', 'adjustable mounting plate', 'slotted plate', 'slotted base plate'],
+  divider: ['bin divider', 'drawer divider', 'divider plate', 'organizer divider'],
+  enclosure: ['enclosure base', 'electronics enclosure base', 'project box base', 'PCB enclosure', 'case bottom'],
+  coaster: ['coaster', 'drink coaster', 'cup coaster', 'mug coaster'],
+  foot: ['furniture foot', 'bumper foot', 'round foot', 'foot', 'device foot'],
+  grommet: ['desk grommet', 'cable grommet', 'grommet', 'desk cable grommet'],
+  cup: ['pen holder', 'pen cup', 'pencil cup', 'desk cup', 'brush holder'],
+  comb: ['cable comb', 'cable organizer', 'wire comb', 'cable guide'],
+  saddle: ['pipe saddle', 'pipe clamp', 'saddle clamp', 'pipe strap', 'conduit clamp'],
+  handle: ['drawer pull', 'drawer handle', 'cabinet handle', 'pull handle', 'bar handle'],
+  corner_plate: ['corner plate', 'flat corner brace', 'L plate', 'flat L bracket', 'corner brace'],
+  bit_holder: ['bit holder', 'hex bit holder', 'bit organizer', 'screwdriver bit holder'],
+  battery_holder: ['battery holder', 'battery organizer', 'battery storage block', 'battery rack'],
 };
 
 export const ASKS = ['', '', '', 'Make ', 'I need ', 'Design ', 'Create ', 'Print '] as const;

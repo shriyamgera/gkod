@@ -4,6 +4,7 @@ import type { Model } from '../model.ts';
 import {
   add,
   call,
+  cos,
   cube,
   cylinder,
   difference,
@@ -80,11 +81,12 @@ export function featureShapes(f: Feature, tree: Tree, model: Model): Built {
       return { modules: [{ name: 'ribs', body: [node] }], adds: [call('ribs')], cuts: [] };
     }
     case 'bosses': {
-      const face = model.faces.top!;
+      // on a plate's top, or on the floor inside a box
+      const face = model.faces.top ?? model.faces.floor!;
       const where = spots(f.place, face, '', 'boss');
-      const posts = placeAll(where, face, (at) => translate([at[0]!, at[1]!, r('thickness')], cylinder({ d: r('boss_d'), h: r('boss_height') })));
+      const posts = placeAll(where, face, (at) => translate([at[0]!, at[1]!, face.thick], cylinder({ d: r('boss_d'), h: r('boss_height') })));
       const holes = placeAll(where, face, (at) =>
-        translate([at[0]!, at[1]!, -1], cylinder({ d: r('boss_hole_d'), h: add(add(r('thickness'), r('boss_height')), 2) })),
+        translate([at[0]!, at[1]!, -1], cylinder({ d: r('boss_hole_d'), h: add(add(face.thick, r('boss_height')), 2) })),
       );
       return {
         modules: [
@@ -176,6 +178,35 @@ export function featureShapes(f: Feature, tree: Tree, model: Model): Built {
         rotate([0, 0, div(mul(r('i'), 360), n)], translate([half(r('diameter')), 0, -1], cylinder({ d: r('grip_d'), h: add(r('height'), 2) }))),
       );
       return { modules: [{ name: 'grips', body: [node] }], adds: [], cuts: [call('grips')] };
+    }
+    case 'slit': {
+      const body = tree.body;
+      const outer = body.kind === 'round' && body.hex ? r('across_flats') : r('diameter');
+      const node = translate([neg(half(r('bore_d'))), 0, -1], cube([r('bore_d'), outer, add(r('height'), 2)]));
+      return { modules: [{ name: 'slit', body: [node] }], adds: [], cuts: [call('slit')] };
+    }
+    case 'grooves': {
+      // round scallops in the underside of the bar, between the posts, where the fingers go
+      const x = mul(sub(r('i'), half(sub(r('groove_count'), 1))), r('groove_pitch'));
+      const node = each(
+        [['i', { from: 0, to: sub(r('groove_count'), 1) }]],
+        translate([x, sub(r('height'), r('grip')), -1], cylinder({ d: r('groove_d'), h: add(r('width'), 2) })),
+      );
+      return { modules: [{ name: 'grooves', body: [node] }], adds: [], cuts: [call('grooves')] };
+    }
+    case 'sockets': {
+      const face = model.faces.top!;
+      const [pitch, d, depth] = [r('socket_pitch'), r('socket_d'), r('socket_depth')];
+      const at = (index: string, n: string, mid: Expr) => add(mid, mul(sub(r(index), half(sub(r(n), 1))), pitch));
+      const socket = f.hex ? cylinder({ d: div(d, cos(30)), h: add(depth, 1), fn: 6 }) : cylinder({ d, h: add(depth, 1) });
+      const node = each(
+        [
+          ['i', { from: 0, to: sub(r('column_count'), 1) }],
+          ['j', { from: 0, to: sub(r('row_count'), 1) }],
+        ],
+        translate([at('i', 'column_count', face.uMid), at('j', 'row_count', face.vMid), sub(face.thick, depth)], socket),
+      );
+      return { modules: [{ name: 'sockets', body: [node] }], adds: [], cuts: [call('sockets')] };
     }
     case 'lips':
     case 'flat':
