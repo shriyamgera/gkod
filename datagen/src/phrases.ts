@@ -197,9 +197,10 @@ export function featurePhrase(say: Say, f: Feature): Phrase {
     }
     case 'bosses': {
       const facts = [many('boss_count', 4), sized(say, 'boss_height', f.height)];
-      let text = `${count(s, 4)} ${mm(s, f.height)} tall standoffs`;
+      // "4 9 mm tall standoffs" reads badly, so a count in digits comes after the noun's size
+      let text = s.words ? `${count(s, 4)} ${mm(s, f.height)} tall standoffs` : `4 standoffs, ${mm(s, f.height)} tall`;
       if (rng.chance(0.6)) {
-        text += ` with ${mm(s, f.hole)} holes`;
+        text += `${s.words ? '' : ','} with ${mm(s, f.hole)} holes`;
         facts.push(sized(say, 'boss_hole_d', f.hole));
       }
       if (f.place.pattern === 'grid' && rng.chance(0.7)) {

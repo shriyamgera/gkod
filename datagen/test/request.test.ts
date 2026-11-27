@@ -57,7 +57,7 @@ function truth(tree: Tree, fact: Fact): number | undefined {
 }
 
 describe('compose', () => {
-  const parts = samples(5, 400);
+  const parts = samples(5, 1000);
 
   it('states only facts the tree has', () => {
     for (const { tree, rng } of parts) {
