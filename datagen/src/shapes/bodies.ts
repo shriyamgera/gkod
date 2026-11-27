@@ -44,16 +44,14 @@ function outline(body: Extract<Body, { corner: unknown }>): Module {
   return { name: 'outline', body: [square([w, d])] };
 }
 
-// The upturned hook, drawn as a side view: back plate, arm with a rounded end, tip, and a fillet in the corner.
+// The hook seen from the side: one outline for the back, the arm and the tip, with the outer front corner cut off, and a
+// rounded inside corner where the arm meets the back.
 function hookProfile(): Node[] {
-  const t = r('thickness');
-  const endX = sub(r('arm_length'), half(t));
-  const end = translate([endX, half(t)], circle(t));
+  const [t, x, b, tip, f] = [r('thickness'), r('arm_length'), r('bevel'), r('tip_height'), r('fillet')];
+  const inner = sub(x, t);
   return [
-    square([t, r('plate_height')]),
-    hull(square([t, t]), end),
-    hull(end, translate([endX, sub(r('tip'), half(t))], circle(t))),
-    polygon([[t, t], [add(t, r('fillet')), t], [t, add(t, r('fillet'))]]),
+    polygon([[0, 0], [sub(x, b), 0], [x, b], [x, tip], [inner, tip], [inner, t], [t, t], [t, r('back_height')], [0, r('back_height')]]),
+    translate([t, t], difference(square([f, f]), translate([f, f], circle(mul(2, f))))),
   ];
 }
 

@@ -23,7 +23,7 @@ export function sampleHook(rng: Rng): Tree {
   const plate = rng.size(f.plate[0], f.plate[1]);
   const features: Feature[] = [];
   if (rng.chance(f.holes)) {
-    const start = Math.max(tip, thickness + reach * 0.4) + 1;
+    const start = Math.max(tip, thickness + reach / 3) + 1;
     const holes = screwHoles(rng, 'plate', f.patterns, plate - start, width, thickness, f.countersink, 5);
     if (holes) features.push(holes);
   }

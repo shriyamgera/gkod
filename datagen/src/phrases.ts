@@ -106,8 +106,8 @@ export function bodyPhrases(say: Say): Phrase[] {
         ph(`${mm(s, b.width)} wide`, sized(say, 'width', b.width, 'z')),
         rng.chance(0.5) ? ph(`reaching out ${mm(s, b.reach)}`, sized(say, 'reach', b.reach)) : np(a(`${mm(s, b.reach)} reach`), sized(say, 'reach', b.reach)),
       ];
-      if (rng.chance(0.7)) out.push(np(a(`${mm(s, b.plate)} tall back plate`), sized(say, 'plate_height', b.plate, 'y')));
-      if (rng.chance(0.4)) out.push(np(a(`${mm(s, b.tip)} tall tip`), sized(say, 'tip', b.tip)));
+      if (rng.chance(0.7)) out.push(np(a(`${mm(s, b.plate)} tall back plate`), sized(say, 'back_height', b.plate, 'y')));
+      if (rng.chance(0.4)) out.push(np(a(`${mm(s, b.tip)} tall tip`), sized(say, 'tip_height', b.tip)));
       if (rng.chance(0.5)) out.push(ph(`${mm(s, b.thickness)} thick`, sized(say, 'thickness', b.thickness)));
       return out;
     }

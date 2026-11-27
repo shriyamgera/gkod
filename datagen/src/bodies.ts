@@ -174,34 +174,35 @@ export function bodyPiece(body: Body): BodyPiece {
       };
     }
     case 'hook': {
-      const plate = ref('plate_height');
+      const back = ref('back_height');
       const reach = ref('reach');
-      const tip = ref('tip');
+      const tip = ref('tip_height');
       const t = ref('thickness');
-      const fillet = ref('fillet');
-      const start = add(max(tip, add(t, fillet)), 1);
+      // screws go above the tip and the rounded inside corner, where a screwdriver can reach them
+      const start = add(max(tip, add(t, ref('fillet'))), 1);
       return {
         sizes: [
-          size(at('width'), body.width, 'width', 'Hook width (mm)', 1, 8, 100),
-          size(at('plate'), body.plate, 'plate_height', 'Back plate height (mm)', 1, 30, P),
+          size(at('width'), body.width, 'width', 'Width, side to side on the wall (mm)', 1, 8, 100),
+          size(at('plate'), body.plate, 'back_height', 'Back height, against the wall (mm)', 1, 30, P),
           size(at('reach'), body.reach, 'reach', 'How far the hook reaches out (mm)', 1, 8, 100),
-          size(at('tip'), body.tip, 'tip', 'Tip height (mm)', 1, 4, 60),
-          size(at('thickness'), body.thickness, 'thickness', 'Material thickness (mm)', 0.5, 3, 15),
+          size(at('tip'), body.tip, 'tip_height', 'Tip height, from the bottom (mm)', 1, 4, 60),
+          size(at('thickness'), body.thickness, 'thickness', 'Thickness of the back, arm and tip (mm)', 0.5, 3, 15),
         ],
         derived: [
           { name: 'arm_length', value: add(reach, mul(2, t)) },
-          { name: 'fillet', value: mul(reach, 0.4) },
+          { name: 'fillet', value: div(reach, 3) },
+          { name: 'bevel', value: half(t) },
         ],
         rules: [
           ge(tip, add(t, 2), 'The tip is not taller than the arm.'),
-          ge(plate, add(start, 12), 'The back plate is too short to hold a screw above the hook.'),
+          ge(back, add(start, 12), 'The back is too short to hold a screw above the hook.'),
           ge(reach, t, 'The hook reaches out less than its thickness.'),
         ],
         shapes: none,
-        extent: { x: ref('arm_length'), y: plate, z: w },
+        extent: { x: ref('arm_length'), y: back, z: w },
         faces: {
           plate: {
-            u0: start, u1: plate, v0: 0, v1: w, uMid: half(add(start, plate)), vMid: half(w), uLen: sub(plate, start), thick: t,
+            u0: start, u1: back, v0: 0, v1: w, uMid: half(add(start, back)), vMid: half(w), uLen: sub(back, start), thick: t,
             at: (u, v) => [0, u, v], normal: 'x', uAxis: 'y', vAxis: 'z', flat: false,
           },
         },
