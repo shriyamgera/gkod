@@ -1,0 +1,110 @@
+import json
+
+import pytest
+from fake_set import ScriptedEngine, echo_reference, make_set
+
+from gkod_bench.data import SplitClosed
+from gkod_bench.engines.base import Answer
+from gkod_bench.paths import REPO
+from gkod_bench.run import RowMismatch, raw_dir, read_records, row_dir, run_row, summarize_row
+
+pytestmark = pytest.mark.skipif(
+    not (REPO / "app" / "public" / "openscad" / "openscad.wasm").exists(),
+    reason="the OpenSCAD web build is missing (npm run fetch:openscad)",
+)
+
+
+@pytest.fixture
+def fake(tmp_path):
+    sets = tmp_path / "sets"
+    hashes = make_set(sets)
+    return {"sets_dir": sets, "hashes": hashes, "results": tmp_path / "results", "log": lambda line: None}
+
+
+def test_a_row_writes_one_record_per_prompt_and_a_summary(fake):
+    engine = ScriptedEngine(echo_reference)
+    summary = run_row(engine, "ref", "dev", **fake)
+    assert summary["complete"] and summary["done"] == 4 and summary["missing"] == 0
+    o = summary["overall"]
+    assert o["compiles"]["rate"] == 1.0 and o["checks_pass"]["rate"] == 1.0 and o["meets_request"]["rate"] == 1.0
+    assert o["iou"]["mean"] == pytest.approx(1.0)
+    assert set(summary["tiers"]) == {"t1", "t2", "t3", "edit"}
+    assert summary["tiers"]["edit"]["edit_sizes_ok"]["rate"] == 1.0
+    assert summary["t3_families"].keys() == {"coaster"}
+    assert summary["tiers"]["t1"]["compiles"]["ci95"][1] == 1.0
+    records = read_records(fake["results"], "ref", "dev")
+    assert {r["id"] for r in records} == {"d-1", "d-2", "d-3", "de-1"}
+    r = next(r for r in records if r["id"] == "d-2")
+    assert r["status"] == "done" and r["code"].startswith("// Plate") and r["answer"].startswith("```openscad")
+    assert r["prompt"]["user"].startswith("Make this part: A plate 70 mm wide") and r["prompt"]["shots"] == []
+    assert r["scores"]["facts_passed"] == 3 and r["timings"]["score_s"] > 0
+    assert (row_dir(fake["results"], "ref", "dev") / "summary.json").exists()
+    config = json.loads((row_dir(fake["results"], "ref", "dev") / "run.json").read_text())
+    assert config["engine"] == {"engine": "scripted", "temperature": 0} and config["shots"] is None
+
+
+def test_a_row_resumes_where_it_stopped(fake):
+    first = ScriptedEngine(echo_reference)
+    summary = run_row(first, "staged", "dev", limit=2, **fake)
+    assert len(first.calls) == 2 and summary["done"] == 2 and not summary["complete"]
+    assert "2 of 4 prompts have no scored answer" in summary["note"]
+    second = ScriptedEngine(echo_reference)
+    summary = run_row(second, "staged", "dev", **fake)
+    assert len(second.calls) == 2 and summary["complete"]
+    asked = {m.user for m in first.calls} | {m.user for m in second.calls}
+    assert len(asked) == 4
+    # nothing left: a third run asks nothing
+    third = ScriptedEngine(echo_reference)
+    run_row(third, "staged", "dev", **fake)
+    assert third.calls == []
+
+
+def test_prompts_with_no_answer_are_kept_as_errors_and_tried_again(fake):
+    broken = ScriptedEngine(lambda m: Answer)
+    summary = run_row(broken, "flaky", "dev", max_errors=3, **fake)
+    # it stops after three in a row, and none of them counts as done
+    assert len(broken.calls) == 3 and summary["done"] == 0 and summary["engine_errors"] == 3 and summary["overall"] is None
+    statuses = {r["status"] for r in read_records(fake["results"], "flaky", "dev")}
+    assert statuses == {"error"}
+    fixed = ScriptedEngine(echo_reference)
+    summary = run_row(fixed, "flaky", "dev", **fake)
+    assert len(fixed.calls) == 4 and summary["complete"] and summary["engine_errors"] == 0
+
+
+def test_a_resumed_row_must_keep_its_settings(fake):
+    run_row(ScriptedEngine(echo_reference), "fixed", "dev", limit=1, **fake)
+    changed = ScriptedEngine(echo_reference, settings={"engine": "scripted", "temperature": 0.7})
+    with pytest.raises(RowMismatch, match="engine"):
+        run_row(changed, "fixed", "dev", **fake)
+    # a new day is fine
+    later = ScriptedEngine(echo_reference, settings={"engine": "scripted", "temperature": 0, "date": "2026-12-01"})
+    run_row(later, "fixed", "dev", limit=1, **fake)
+
+
+def test_few_shot_rows_put_the_fixed_train_examples_first(fake):
+    engine = ScriptedEngine(echo_reference)
+    run_row(engine, "three", "dev", shots=3, **fake)
+    create = next(m for m in engine.calls if m.user.startswith("Make this part:"))
+    assert create.shots == ("tr-spacer", "tr-plate", "tr-bracket")
+    assert [t["role"] for t in create.turns] == ["user", "assistant"] * 3 + ["user"]
+    assert create.turns[1]["content"].startswith("```openscad\n// Plate")
+    edit = next(m for m in engine.calls if m.user.startswith("Here is the current"))
+    assert edit.shots == ("tre-size", "tre-add", "tre-remove")
+    config = json.loads((row_dir(fake["results"], "three", "dev") / "run.json").read_text())
+    assert config["shots"]["create"]["ids"] == ["tr-spacer", "tr-plate", "tr-bracket"]
+
+
+def test_summarize_again_from_the_records(fake):
+    run_row(ScriptedEngine(echo_reference), "again", "dev", **fake)
+    (raw_dir(fake["results"], "again", "dev") / "d-1.json").unlink()
+    summary = summarize_row("again", "dev", results=fake["results"], sets_dir=fake["sets_dir"], hashes=fake["hashes"])
+    assert summary["done"] == 3 and summary["missing"] == 1
+
+
+def test_the_test_split_is_refused_before_anything_runs(fake):
+    engine = ScriptedEngine(echo_reference)
+    with pytest.raises(SplitClosed):
+        run_row(engine, "peek", "test", **fake)
+    with pytest.raises(SplitClosed):
+        summarize_row("peek", "test", results=fake["results"])
+    assert engine.calls == [] and not fake["results"].exists()
