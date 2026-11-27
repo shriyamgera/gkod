@@ -152,13 +152,15 @@ function EngineChoice({ dialog }: { dialog: RefObject<HTMLDialogElement | null> 
         <KeyPanel title="GKod uses your own free Gemini key" titleAs="h3" />
       )}
       <ModelMenu engine={engine} />
+      <BridgeLook bridge={bridge} />
     </>
   );
 }
 
-// What is known about the bridge, and on the public site a button to look for it.
+// What is known about the bridge.
 function BridgeLine({ bridge, engine }: { bridge: BridgeState; engine: EngineId }) {
-  if (bridge.status === 'checking') {
+  // when the visitor pressed "Look for", the button below says it is looking instead
+  if (bridge.status === 'checking' && bridgeStatus.mayLookOnItsOwn()) {
     return (
       <p role="status" className="muted bridge-line">
         Looking for the GKod bridge on this computer…
@@ -179,16 +181,30 @@ function BridgeLine({ bridge, engine }: { bridge: BridgeState; engine: EngineId 
       </p>
     );
   }
-  if (bridgeStatus.mayLookOnItsOwn() && bridge.status === 'unknown') return null;
+  return null;
+}
+
+// On the public site, a quiet button at the end to look for the bridge; the page never looks on its own there.
+function BridgeLook({ bridge }: { bridge: BridgeState }) {
+  if (bridge.status === 'found') return null;
+  if (bridgeStatus.mayLookOnItsOwn() && bridge.status !== 'absent') return null;
+  const checking = bridge.status === 'checking';
   return (
     <div className="bridge-look">
-      <button type="button" className="eu-quiet" onClick={() => void bridgeStatus.check()}>
+      <button
+        type="button"
+        className="eu-quiet"
+        aria-disabled={checking ? true : undefined}
+        onClick={checking ? undefined : () => void bridgeStatus.check()}
+      >
         Look for Claude Code on this Mac
       </button>
       <p role="status" className="muted">
-        {bridge.status === 'absent'
-          ? 'No GKod bridge answered on this computer. It only runs on the owner’s own Mac.'
-          : 'Only with the GKod bridge running on this computer. Your browser may ask to let this page reach apps on this device.'}
+        {checking
+          ? 'Looking for the GKod bridge on this computer…'
+          : bridge.status === 'absent'
+            ? 'No GKod bridge answered on this computer. It only runs on the owner’s own Mac.'
+            : 'Only with the GKod bridge running on this computer. Your browser may ask to let this page reach apps on this device.'}
       </p>
     </div>
   );
