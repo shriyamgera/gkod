@@ -13,9 +13,10 @@ export const knob = {
 
 export function sampleKnob(rng: Rng): Tree {
   const f = knob;
-  const diameter = rng.size(f.diameter[0], f.diameter[1]);
-  const height = rng.size(f.height[0], f.height[1], 0.5);
-  const shaft = rng.pick(f.shafts.filter((s) => s <= diameter / 2 - 4));
+  const shaft = rng.pick(f.shafts);
+  // a knob grows with its shaft, from a grip around it up to about six times it, and is not taller than it is wide
+  const diameter = rng.size(Math.max(f.diameter[0], 2 * shaft + 8), Math.min(f.diameter[1], 6 * shaft + 10));
+  const height = rng.size(f.height[0], Math.min(f.height[1], Math.max(10, diameter)), 0.5);
   const shaftDepth = rng.size(5, height - 2, 0.5);
   const chamfer = rng.size(0.5, Math.max(0.5, Math.min(2, Math.floor((height / 3) * 2) / 2, Math.floor((diameter / 6) * 2) / 2)), 0.5);
   const features: Feature[] = [];
