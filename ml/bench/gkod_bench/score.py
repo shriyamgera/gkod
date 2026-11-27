@@ -29,7 +29,7 @@ from typing import Any
 
 from gkod_bench.extract import extract_code
 from gkod_bench.gkod import TIMEOUT_MESSAGE, Gkod
-from gkod_bench.mesh import MeshInfo, measure
+from gkod_bench.mesh import JOIN_MM, MeshInfo, measure
 from gkod_bench.stl import read_stl
 from gkod_bench.voxel import best_turn_iou
 
@@ -84,7 +84,8 @@ def plan_facts(facts: list[dict], reference: MeshInfo | None) -> list[dict]:
 
 
 def _size_ok(got: list[float], value: float) -> bool:
-    return all(abs(g - value) <= SIZE_TOLERANCE_MM for g in got)
+    # STL corners are 32-bit floats, so 2.7 comes back as 2.70000005: the join tolerance keeps +0.5 and -0.5 alike
+    return all(abs(g - value) <= SIZE_TOLERANCE_MM + JOIN_MM for g in got)
 
 
 def orient(planned: list[dict], size: tuple[float, float, float]) -> tuple[int, int, int]:

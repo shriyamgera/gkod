@@ -262,8 +262,8 @@ the split it is read from.
 - **Passes the print checks.** All four checks for the Anycubic Kobra 2 Neo bed (220 x 220 x 250 mm, 45 degree
   overhangs). False when it does not compile.
 - **Meets the request.** Each fact the request states is marked pass, fail or unmeasured:
-  - an overall size (a fact with an axis) passes when the answer's bounding box is within 0.5 mm on the side matched
-    to that axis (two sides for a diameter). No prompt says which side is x, and some parts are drawn lying on their
+  - an overall size (a fact with an axis) passes when the answer's bounding box is within 0.5 mm (plus 0.0001 mm, as
+    the STL's corners are 32-bit numbers and 2.7 comes back as 2.70000005) on the side matched to that axis (two sides for a diameter). No prompt says which side is x, and some parts are drawn lying on their
     side (hooks, clips, saddles, handles), so the prompt's overall sizes are matched to the box's three sides in the one
     order that fits the most of them (then the smallest total error, then the order as drawn): a right part standing
     up passes. `meets_request_strict` keeps the stricter result, every size on the axis the reference is drawn with,

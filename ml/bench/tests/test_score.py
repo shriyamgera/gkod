@@ -64,6 +64,13 @@ def test_one_order_of_the_sides_serves_every_size_of_a_prompt():
     assert [r["status"] for r in results] == ["pass", "pass"] and by_key(results)["diameter"]["answer_axis"] == "xz"
 
 
+def test_half_a_millimetre_either_way_whatever_the_float_rounding():
+    planned = plan_facts([fact("thickness", 2.2, axis="z")], measure(box(10, 10, 2.2)))
+    # the STL's 32-bit corners: 2.7 is read back as 2.70000005 and 1.7 as 1.70000005
+    for z, status in ((np.float32(2.7), "pass"), (np.float32(1.7), "pass"), (2.75, "fail"), (1.65, "fail")):
+        assert check_facts(planned, measure(box(10, 10, float(z))))[0]["status"] == status, z
+
+
 def test_a_diameter_is_checked_on_x_and_y():
     planned = plan_facts([fact("diameter", 30, axis="xy")], measure(box(30, 30, 5)))
     assert check_facts(planned, measure(box(30, 30, 2)))[0]["status"] == "pass"
