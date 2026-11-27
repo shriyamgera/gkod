@@ -139,6 +139,16 @@ def test_health_names_what_is_missing_before_migrations(db_url):
     assert "Run python -m gkod_api.migrate" in body["problems"][1]
 
 
+def test_health_says_when_the_database_is_newer_than_the_code(migrated_url):
+    sql(migrated_url, "INSERT INTO schema_migrations (version, name, sha256) VALUES (999, 'future', 'x')")
+    with client_for(migrated_url) as client:
+        response = client.get("/health")
+    assert response.status_code == 503
+    (problem,) = response.json()["problems"]
+    assert problem.startswith("The database schema is at version 999; this code expects ")
+    assert problem.endswith("This code is older than the database; update it.")
+
+
 def test_parts_answer_503_with_a_hint_before_migrations(db_url):
     with client_for(db_url) as client:
         response = client.get("/parts")

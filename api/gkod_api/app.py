@@ -168,10 +168,9 @@ def _add_routes(app: FastAPI) -> None:
             if pgvector is None:
                 problems.append("The pgvector extension is not installed in the database.")
             if version != expected:
-                problems.append(
-                    f"The database schema is at version {version or 0}; this code expects {expected}. "
-                    "Run python -m gkod_api.migrate."
-                )
+                fix = ("This code is older than the database; update it." if (version or 0) > (expected or 0)
+                       else "Run python -m gkod_api.migrate.")
+                problems.append(f"The database schema is at version {version or 0}; this code expects {expected}. {fix}")
         if problems:
             response.status_code = 503
         return Health(status="error" if problems else "ok", database=database, pgvector=pgvector,
