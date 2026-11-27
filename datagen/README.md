@@ -150,6 +150,84 @@ A script also read every row: each title's hole count matches the tree, each hoo
 
 What these numbers do not show: every part passes because the rules are strict and the shapes are simple (boxes and cylinders, no angled or curved features beyond hull and offset). Some features are rare (in 1,000 parts: 5 pockets, 9 rib sets, 9 standoff sets, 11 notches, 12 rims), and more than a quarter of the parts have no features at all. Plain spacers have only a few sizes, so two runs with different seeds can share a part; use `tree_sha256` to keep any part out of two splits.
 
+## Frozen sets
+
+The train, dev and test sets, made once by program and frozen with their sha256 in the repo. The design is in [src/splits/design.ts](src/splits/design.ts).
+
+```sh
+node datagen/bin/gkod-datagen.mjs sets make --out data/sets/v1 [--workers 8]
+node datagen/bin/gkod-datagen.mjs sets check [--dir data/sets/v1] [--hashes datagen/sets-v1.sha256]
+```
+
+`make` runs only from a clean commit and only into a new folder inside `data/` (or outside the repo). `check` verifies every file against [sets-v1.sha256](sets-v1.sha256) and then every rule below on every row, and prints counts only. `cd data/sets/v1 && shasum -a 256 -c ../../../datagen/sets-v1.sha256` checks the files too.
+
+**Families.** Each family is in one split. The level is the median number of named sizes in a 6,000-part run (seed 7): simple 3 to 5, medium 6 or 7, harder 8 or more.
+
+| Split | Simple | Medium | Harder |
+|---|---|---|---|
+| train (15) | spacer, divider, grommet, cup | plate, channel, tray, hook, knob, clip | bracket, shelf, tool_holder, bit_holder, battery_holder |
+| dev only (3) | coaster | corner_plate | comb |
+| test only (6) | washer, foot | slot_plate, saddle | enclosure, handle |
+
+Three test families share a body with a training family (washer: the spacer's round body; slot_plate: the plate and its slots; enclosure: the tray's box) and three have a body no training part has (foot, saddle, handle). In dev, a square coaster is the plate body with a rim; corner_plate and comb have bodies of their own.
+
+**Held-out feature pairs.** A feature is its kind, with its face for holes, slots and pockets (`holes@top`, `slots@base`); corner shapes and countersinks are not features. No training part, and neither side of any training edit, has both features of a pair, but each feature is in training parts on its own:
+
+| Pair | Where it shows up | Split | Training parts with each feature |
+|---|---|---|---|
+| holes@top + lip | plate: holes and a rim | dev | 214 / 12 |
+| dividers + tabs | tray | dev | 124 / 38 |
+| gussets + slots@base | bracket | dev | 704 / 16 |
+| holes@floor + lips | channel: floor holes and inward lips | dev | 341 / 55 |
+| holes@top + notch | plate | test | 214 / 365 |
+| holes@top + ribs | plate | test | 214 / 17 |
+| holes@floor + tabs | tray | test | 341 / 38 |
+| holes@upright + slots@base | bracket | test | 1,149 / 16 |
+| flat + grips | knob: a D-shaped shaft and grip notches | test | 27 / 228 |
+
+**Tiers.** Dev and test have the same structure, 100 rows in each tier and 100 edit pairs:
+
+- `t1`, new sizes: training families on their own seeds, 7 or 6 parts a family, no held-out pair.
+- `t2`, new feature pairs: training families with exactly one of the split's pairs, 25 a pair in dev and 20 in test.
+- `t3`, new families: the split's own families, 34, 33 and 33 in dev and 17 or 16 in test.
+- `edit`: pairs made from the split's own parts (all three tiers), by the edits code above.
+
+**Rules,** checked when the set is made and again by `check`:
+
+- Parts are split first; edit pairs are made inside each split from its own parts.
+- No tree is in two splits, and no tree is within 0.5 mm of a tree of the same shape in another split (every number of the tree, same family, features, faces, patterns and flags). This covers parts and both sides of every edit pair.
+- Training rows have no held-out pair; dev rows have no test pair and test rows no dev pair.
+- Every row compiled, passed every print check, and its size block and stated sizes matched (edits: code A compiled and only the edited sizes changed). A row that fails is compiled again, up to three tries; one that still fails stops the run, so the set never depends on the machine's speed.
+- Every piece has its own seed: train parts 101, train edits 102, dev 201 to 204 and test 301 to 304 (t1, t2, t3, edits).
+
+**Files** in `data/sets/v1` (git-ignored): `train/`, `dev/` and `test/`, each with `create.jsonl` (parts) and `edit.jsonl` (edit pairs); `manifest.json`; `sets.sha256`. A part row is a generator row as above with `split`, `tier` (`train`, `t1`, `t2` or `t3`) and `held_out_pair` (the pair for `t2`, otherwise null) after its `id`; an edit row is an edit pair with `split`, `tier` `edit` and `source_tier`. Every row keeps its generator commit, seed and part or pair seed. The manifest has the design, the seeds, the counts by split, tier and family, how many indices each piece looked at and why it passed over the rest, the edit kinds, each split's tree count with one sha256 of its sorted tree hashes, the token estimate and every file's rows, bytes and sha256.
+
+**The test split stays closed** until the final run. `readSplit` in [src/splits/read.ts](src/splits/read.ts) refuses it unless it is called with `final: true`, and the benchmark must refuse to score it without `--final`, which only the final run passes. `check` reads its rows only to hash and count them.
+
+**Set v1,** made at commit `15974c9` with a clean tree, with 8 workers in 328 s and again with 5 workers in 445 s: all eight files byte-identical. 28 MB.
+
+| | train | dev | test |
+|---|---|---|---|
+| Parts | 6,000 | 100 + 100 + 100 | 100 + 100 + 100 |
+| Edit pairs | 3,000 | 100 | 100 |
+| Different trees (parts and both sides of edits) | 8,998 | 400 | 400 |
+| `create.jsonl` sha256 | `0457c63f…2f09` | `a6c2e9bf…157e` | `cef696df…aaac` |
+| `edit.jsonl` sha256 | `59116dc0…c0f8` | `0bb986c6…f14b` | `4d5eadf9…38a9` |
+
+`manifest.json` sha256 `9dcc31deddb1bb8644221682cc2004308c6d5700559286d3a18cf362cae048f6`; the full hashes are in [sets-v1.sha256](sets-v1.sha256). No tree is in two splits and none has a near-copy in another. Training parts by family: 323 (knob, tray) to 464 (cup). Training edits by kind: size 1,443, hole_d 212, move 158, count 299, scale 239, add 280, remove 369. Dev edits came from 36 tier 1, 32 tier 2 and 32 tier 3 parts; test edits from 37, 35 and 28.
+
+**Training tokens, roughly** (characters / 3.5; day 8 measures with the real tokenizer), counting the site's system prompt, the words the site sends ([app/src/engine/prompts.ts](../app/src/engine/prompts.ts)) and the answer as one code block:
+
+| | Rows | With the system prompt | Without it | Answer only |
+|---|---|---|---|---|
+| Create | 6,000 | 4.44 M | 1.91 M | 1.70 M |
+| Edit | 3,000 | 3.29 M | 2.02 M | 0.84 M |
+| Total | 9,000 | 7.73 M | 3.94 M | 2.54 M |
+
+What these numbers do not show: every row, test included, comes from this generator, so the wording and the code style are the same in every split; tier 3 families are new, the way they are written is not. Tier 2 covers only the five training families that take two or more kinds of feature (plate, bracket, tray, channel, knob). Some held-out features are rare on their own in training (a rim on 12 training parts, base slots on 16, ribs on 17, a shaft flat on 27), so a tier 2 miss may come from a feature seen rarely, not only from a new pair. Tier 1 keeps out trees within 0.5 mm of a training part, not ones 1 mm away. The levels come from code size, not from measured difficulty.
+
+`npm test` covers the design (every family in one split, the level mix, the pairs), near-copies, each split rule, the shares, picking the same parts twice, edit pairs inside a split, a small set made twice with different worker counts and byte-identical, the token count against the site's prompt, the check passing a good set and failing a changed, extra or missing file, a tree in two splits and a training part with a held-out pair, the closed test split and the command's options.
+
 ## Tests
 
 `npm test` covers the random number generator, the expression and code printer, the rules, the slider ranges, each family's valid-tree rate, a fixing on every bracket and hook, the size block format (read the way the customizer reads it), one part per family through the real compiler at its default sizes and at both ends of every slider, the request facts against the tree, the title's hole count, the wording rules on two seeds, the tree hash, the byte-identical end-to-end run with different worker counts, and the refusal to start when the OpenSCAD build is missing.
