@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gkod-api"
+version = "0.1.0"
+description = "GKod backend: the parts library behind the site, served with FastAPI from PostgreSQL with pgvector"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.165.0",
+  "psycopg[binary]==3.3.9",
+  "psycopg-pool==3.3.3",
+  "uvicorn==0.54.0",
+]
+
+[tool.setuptools]
+packages = ["gkod_api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
