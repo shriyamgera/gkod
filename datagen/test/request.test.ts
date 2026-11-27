@@ -116,6 +116,8 @@ describe('compose', () => {
       // what the part is for follows its name, never a list, and what follows it belongs to the part
       expect(t.request).not.toMatch(/(,| and) (for|that fits) /);
       expect(t.request).not.toMatch(/\b(for|fits) (an? )?[\d.]+ ?mm [\w-]+ with\b/);
+      // an open box's depth is never called deep, which would read as its height
+      if (/\b(tray|box)\b/.test(t.request)) expect(t.request).not.toMatch(/\bdeep\b/);
       // the shaft hole and its flat are said once
       expect(t.request.match(/shaft/g)?.length ?? 0).toBeLessThanOrEqual(1);
     }

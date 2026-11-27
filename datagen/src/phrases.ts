@@ -64,7 +64,8 @@ export function bodyPhrases(say: Say): Phrase[] {
       return out;
     }
     case 'box': {
-      const out = outer(say, b.width, b.depth, b.height, ['wide', 'deep', rng.pick(['tall', 'high'])]);
+      // "deep" would read as how deep the box is inside, so its depth is said as front to back
+      const out = outer(say, b.width, b.depth, b.height, ['wide', 'front to back', rng.pick(['tall', 'high'])]);
       if (rng.chance(0.5)) out.push(np(`${mm(s, b.wall)} walls`, sized(say, 'wall', b.wall)));
       if (rng.chance(0.25)) out.push(np(a(`${mm(s, b.floor)} floor`), sized(say, 'floor_thickness', b.floor)));
       if (b.corner !== 'sharp') out.push(np(`${b.corner === 'round' ? 'rounded' : 'chamfered'} corners`, flag(`${b.corner === 'round' ? 'rounded' : 'chamfered'}_corners`)));
