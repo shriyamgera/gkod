@@ -45,7 +45,7 @@ def compare_rows(row_a: str, row_b: str, split: str, *, final: bool = False, res
         "b": row_b,
         "split": split,
         "prompts": {"a": len(a), "b": len(b), "both": len(common)},
-        "method": "differences are A - B; rates: Newcombe's paired interval (method 10) and the exact McNemar test; iou: mean paired difference with a normal interval and the exact sign test",
+        "method": "differences are A - B; rates: Newcombe's paired interval (method 10) and the exact McNemar test; iou: mean paired difference with a Student t interval and the exact sign test",
         "overall": _block([(a[i]["scores"], b[i]["scores"]) for i in common]) if common else None,
         "tiers": {},
     }

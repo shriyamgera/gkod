@@ -31,8 +31,54 @@ def rate(successes: int, n: int) -> dict:
     return {"n": n, "k": successes, "rate": successes / n if n else None, "ci95": [low, high]}
 
 
-def mean_ci(values: Sequence[float], z: float = Z95) -> dict:
-    """A mean with a normal-approximation 95% interval (sample standard deviation)."""
+def _beta_fraction(a: float, b: float, x: float) -> float:
+    """The continued fraction of the incomplete beta function (modified Lentz)."""
+    tiny = 1e-300
+    c, d = 1.0, 1.0 - (a + b) * x / (a + 1)
+    d = 1.0 / (d if abs(d) > tiny else tiny)
+    out = d
+    for m in range(1, 500):
+        for num in (m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m)), -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1))):
+            d = 1.0 + num * d
+            d = 1.0 / (d if abs(d) > tiny else tiny)
+            c = 1.0 + num / c
+            c = c if abs(c) > tiny else tiny
+            out *= c * d
+        if abs(c * d - 1.0) < 1e-15:
+            break
+    return out
+
+
+def beta_reg(a: float, b: float, x: float) -> float:
+    """The regularized incomplete beta function I_x(a, b)."""
+    if x <= 0:
+        return 0.0
+    if x >= 1:
+        return 1.0
+    front = math.exp(math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log1p(-x))
+    if x < (a + 1) / (a + b + 2):
+        return front * _beta_fraction(a, b, x) / a
+    return 1.0 - front * _beta_fraction(b, a, 1.0 - x) / b
+
+
+def t95(df: int) -> float:
+    """The two-sided 95% quantile of Student's t with `df` degrees of freedom (2.131 for 15), found by bisection on
+    P(|T| > t) = I_{df / (df + t^2)}(df / 2, 1 / 2) = 0.05."""
+    if df < 1:
+        raise ValueError("Student's t needs at least 1 degree of freedom")
+    low, high = 0.0, 1000.0
+    for _ in range(200):
+        mid = (low + high) / 2
+        if beta_reg(df / 2, 0.5, df / (df + mid * mid)) > 0.05:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
+
+
+def mean_ci(values: Sequence[float]) -> dict:
+    """A mean with a 95% interval from Student's t on n - 1 degrees of freedom (sample standard deviation). With about
+    16 prompts in a tier 3 family, the normal z would make it about 8% too narrow."""
     n = len(values)
     if n == 0:
         return {"n": 0, "mean": None, "ci95": None}
@@ -40,7 +86,7 @@ def mean_ci(values: Sequence[float], z: float = Z95) -> dict:
     if n == 1:
         return {"n": 1, "mean": mean, "ci95": None}
     var = sum((v - mean) ** 2 for v in values) / (n - 1)
-    half = z * math.sqrt(var / n)
+    half = t95(n - 1) * math.sqrt(var / n)
     return {"n": n, "mean": mean, "ci95": [mean - half, mean + half]}
 
 
@@ -92,12 +138,12 @@ def paired_rates(a: Sequence[bool], b: Sequence[bool], z: float = Z95) -> dict:
     }
 
 
-def paired_means(a: Sequence[float], b: Sequence[float], z: float = Z95) -> dict:
-    """Mean of A - B on the same prompts with a normal 95% interval, and the exact sign test p (ties dropped)."""
+def paired_means(a: Sequence[float], b: Sequence[float]) -> dict:
+    """Mean of A - B on the same prompts with a Student t 95% interval, and the exact sign test p (ties dropped)."""
     if len(a) != len(b):
         raise ValueError("paired means need the same prompts on both sides")
     diffs = [x - y for x, y in zip(a, b)]
-    stats = mean_ci(diffs, z)
+    stats = mean_ci(diffs)
     wins = sum(1 for d in diffs if d > 0)
     losses = sum(1 for d in diffs if d < 0)
     return {

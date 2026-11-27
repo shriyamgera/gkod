@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from gkod_bench.stats import binom_two_sided, mean_ci, median, paired_means, paired_rates, rate, wilson
+from gkod_bench.stats import binom_two_sided, mean_ci, median, paired_means, paired_rates, rate, t95, wilson
 
 
 def close(a, b, tol=1e-4):
@@ -33,11 +33,27 @@ def test_rate_record():
     assert rate(0, 0)["rate"] is None
 
 
+def test_student_t_quantiles():
+    # closed forms for 1 and 2 degrees of freedom, and published table values
+    assert math.isclose(t95(1), math.tan(0.475 * math.pi), abs_tol=1e-6)
+    assert math.isclose(t95(2), 0.95 / math.sqrt(2 * 0.975 * 0.025), abs_tol=1e-6)
+    for df, value in ((3, 3.182446), (10, 2.228139), (15, 2.131450), (30, 2.042272), (60, 2.000298), (120, 1.979930), (1000, 1.962339)):
+        assert math.isclose(t95(df), value, abs_tol=1e-6), df
+    with pytest.raises(ValueError):
+        t95(0)
+
+
 def test_mean_and_median():
     m = mean_ci([1.0, 2.0, 3.0, 4.0])
     assert m["mean"] == 2.5
-    half = 1.959964 * math.sqrt((2.25 + 0.25 + 0.25 + 2.25) / 3 / 4)
+    # Student's t on 3 degrees of freedom, not the normal 1.96
+    half = 3.182446 * math.sqrt((2.25 + 0.25 + 0.25 + 2.25) / 3 / 4)
     assert close(m["ci95"], [2.5 - half, 2.5 + half])
+    # 16 prompts, as in one tier 3 family of the test split: t on 15 degrees of freedom
+    values = [0.1 * (i % 7) for i in range(16)]
+    mean = sum(values) / 16
+    sd = math.sqrt(sum((v - mean) ** 2 for v in values) / 15)
+    assert close(mean_ci(values)["ci95"], [mean - 2.131450 * sd / 4, mean + 2.131450 * sd / 4], 1e-6)
     assert mean_ci([])["mean"] is None
     assert mean_ci([0.5])["ci95"] is None
     assert median([3, 1, 2]) == 2 and median([4, 1, 2, 3]) == 2.5 and median([]) is None

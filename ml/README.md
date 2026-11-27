@@ -263,10 +263,10 @@ the split it is read from.
   overhangs). False when it does not compile.
 - **Meets the request.** Each fact the request states is marked pass, fail or unmeasured:
   - an overall size (a fact with an axis) passes when the answer's bounding box is within 0.5 mm (plus 0.0001 mm, as
-    the STL's corners are 32-bit numbers and 2.7 comes back as 2.70000005) on the side matched to that axis (two sides for a diameter). No prompt says which side is x, and some parts are drawn lying on their
-    side (hooks, clips, saddles, handles), so the prompt's overall sizes are matched to the box's three sides in the one
-    order that fits the most of them (then the smallest total error, then the order as drawn): a right part standing
-    up passes. `meets_request_strict` keeps the stricter result, every size on the axis the reference is drawn with,
+    the STL's corners are 32-bit numbers and 2.7 comes back as 2.70000005) on the side matched to that axis (two sides
+    for a diameter). No prompt says which side is x, and some parts are drawn lying on their side (hooks, clips,
+    saddles, handles), so the prompt's overall sizes are matched to the box's three sides in the one order that fits
+    the most of them (then the smallest total error, then the order as drawn): a right part standing up passes. `meets_request_strict` keeps the stricter result, every size on the axis the reference is drawn with,
     as a second column that is labelled as such and is not the score;
   - stated hole counts (keys ending in `hole_count`, joined by `slot_count` when needed) are checked with the mesh's
     genus, its number of through holes. They are measured only when the reference part is one closed body whose genus
@@ -304,8 +304,8 @@ Every scored prompt also compiles the reference again and saves whether its STL 
 |---|---|
 | `results/raw/<row>/<split>/<id>.json` | One prompt: tier, family, the prompt (system sha256, the user words, the few-shot ids), the answer text, the code read from it, the engine's notes, the scores, the times and the harness commit. Written whole or not at all. |
 | `results/<row>/<split>/run.json` | The row: engine settings, few-shot record, system prompt sha256, data files and their sha256, scoring settings, the harness commit at the start. |
-| `results/<row>/<split>/summary.json` | Rates with 95% Wilson intervals overall, per tier (`t1`, `t2`, `t3`, `edit`) and per tier 3 family: compiles, print checks, meets the request (and the strict-axes column), measured facts (by measurer), shape overlap (best turn and as drawn, each a mean with a normal 95% interval, and median), slider ends, edit size blocks, why answers had no code, which checks failed, time per prompt, tokens or cost. It says how many prompts are done, missing or without an answer, and is marked incomplete until every prompt is scored. |
-| `results/compare/<a>__vs__<b>/<split>.json` | Two rows on the prompts both answered: each rate, the difference A - B with Newcombe's interval for paired rates and the exact McNemar test, and for overlap the mean paired difference with the sign test; overall and per tier. |
+| `results/<row>/<split>/summary.json` | Rates with 95% Wilson intervals overall, per tier (`t1`, `t2`, `t3`, `edit`) and per tier 3 family: compiles, print checks, meets the request (and the strict-axes column), measured facts (by measurer), shape overlap (best turn and as drawn, each a mean with a Student t 95% interval, and median), slider ends, edit size blocks, why answers had no code, which checks failed, time per prompt, tokens or cost. It says how many prompts are done, missing or without an answer, and is marked incomplete until every prompt is scored. |
+| `results/compare/<a>__vs__<b>/<split>.json` | Two rows on the prompts both answered: each rate, the difference A - B with Newcombe's interval for paired rates and the exact McNemar test, and for overlap the mean paired difference with a Student t interval and the sign test; overall and per tier. |
 
 ### Checked so far
 
