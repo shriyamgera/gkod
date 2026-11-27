@@ -1,6 +1,6 @@
 import type { Report } from '@gkod/checks';
 import { useRef } from 'react';
-import { KeyPanel } from '../engine-ui/KeyPanel';
+import { CredentialPanel } from '../engine-ui/CredentialPanel';
 import { WarningIcon } from '../part/LiveStatus';
 import { StatusBox } from './StatusBox';
 import type { FixHandle } from './useFix';
@@ -63,29 +63,28 @@ export function PrintStatus({ report, busy, fix, onFix, supportsChosen, onSuppor
       </div>
 
       {keyAsk && (
-        <section className="key-inline fix-key" aria-label="Gemini key">
-          <KeyPanel
-            title="Fix it for me uses your own free Gemini key"
-            message={keyAsk.message}
-            autoFocus
-            onKeySet={() => {
-              backToBox();
-              fix.closeKey();
-              onFix();
-            }}
-            onCancel={() => {
-              fix.closeKey();
-              backToBox();
-            }}
-          />
-        </section>
+        <CredentialPanel
+          engine={keyAsk.engine}
+          className="key-inline fix-key"
+          keyTitle="Fix it for me uses your own free Gemini key"
+          message={keyAsk.message}
+          onSet={() => {
+            backToBox();
+            fix.closeKey();
+            onFix();
+          }}
+          onCancel={() => {
+            fix.closeKey();
+            backToBox();
+          }}
+        />
       )}
 
       {failure && (
         <div className="make-problem fix-problem" role="alert">
           <h2>
             <WarningIcon />
-            {failure.problem === 'busy' ? 'Gemini is busy' : 'Could not fix the part'}
+            {failure.problem === 'busy' ? `${failure.engineLabel ?? 'Gemini'} is busy` : 'Could not fix the part'}
           </h2>
           <p>{failure.message}</p>
           <p className="muted">The part is as it was.</p>

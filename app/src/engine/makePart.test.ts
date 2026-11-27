@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CANCEL_MESSAGE, LOAD_MESSAGE, TIMEOUT_MESSAGE, type compile } from '../scad/client';
 import type { CompileResult } from '../scad/types';
-import { COMPILE_FAILED, makePart } from './makePart';
+import { COMPILE_FAILED, compileFailed, makePart } from './makePart';
 import type { Engine, EngineAnswer, EngineRequest } from './types';
 
 const good = '// Width (mm)\nwidth = 40; // [20:1:80]\ncube([width, 20, 5]);\n';
@@ -154,5 +154,33 @@ describe('makePart', () => {
     await makePart(engine, create, { compileFn, signal: controller.signal });
     expect(engine.run).toHaveBeenCalledWith(create, { model: undefined, signal: controller.signal });
     expect(compileFn).toHaveBeenCalledWith(good, {}, { signal: controller.signal });
+  });
+
+  it('passes the session and progress to the engine, sends a repair in the same session and returns it', async () => {
+    const session = '11111111-2222-4333-8444-555555555555';
+    const onProgress = vi.fn();
+    const { engine } = fakeEngine([
+      { ok: true, code: broken, model: 'claude-sonnet-5', ms: 10, session },
+      { ok: true, code: good, model: 'claude-sonnet-5', ms: 10, session, assumptions: 'A 40 mm box.' },
+    ]);
+    const { compileFn } = fakeCompile([failed('first error'), passed]);
+    const result = await makePart(engine, create, { compileFn, onProgress, session: 'earlier-session' });
+    expect(engine.run).toHaveBeenNthCalledWith(1, create, { model: undefined, signal: undefined, session: 'earlier-session', onProgress });
+    expect(engine.run).toHaveBeenNthCalledWith(2, expect.objectContaining({ kind: 'repair' }), {
+      model: 'claude-sonnet-5',
+      signal: undefined,
+      session,
+      onProgress,
+    });
+    expect(result).toMatchObject({ ok: true, code: good, session, assumptions: 'A 40 mm box.', attempts: 2 });
+  });
+
+  it('names the engine when its code will not compile', async () => {
+    const { engine } = fakeEngine([code(broken), code(broken)]);
+    const named = { ...engine, label: 'Claude Code' };
+    const { compileFn } = fakeCompile([failed('first error'), failed('second error')]);
+    const result = await makePart(named, create, { compileFn });
+    expect(result).toMatchObject({ ok: false, problem: 'compile', message: compileFailed('Claude Code') });
+    expect(compileFailed('Claude Code')).toContain('The code from Claude Code would not compile');
   });
 });

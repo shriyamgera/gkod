@@ -46,4 +46,8 @@ describe('modelName', () => {
     expect(modelName('gemini-9', models)).toBe('gemini-9');
     expect(modelName(undefined, models)).toBe('');
   });
+
+  it('names a Claude Code model by its full name', () => {
+    expect(modelName('claude-sonnet-5', [])).toBe('Claude Code (claude-sonnet-5)');
+  });
 });

@@ -6,6 +6,7 @@ import {
   keyProblem,
   otherModel,
   NOT_REMEMBERED,
+  pairingProblem,
   PHOTO_ONLY_REQUEST,
   rememberMessage,
   requestText,
@@ -136,5 +137,19 @@ describe('rememberMessage', () => {
   it('says what a click on the box did', () => {
     expect(rememberMessage('box', true, true)).toBe('Key remembered on this device');
     expect(rememberMessage('box', false, false)).toBe('Key kept for this tab only');
+  });
+});
+
+describe('pairingProblem', () => {
+  it('accepts a code in any case, with or without dashes and spaces', () => {
+    expect(pairingProblem('ABCD-EFGH-JKMN')).toBeNull();
+    expect(pairingProblem(' abcd efgh jkmn ')).toBeNull();
+    expect(pairingProblem('ABCDEFGHJKMN')).toBeNull();
+  });
+
+  it('says what is wrong with anything else', () => {
+    expect(pairingProblem('')).toBe('Type the pairing code first.');
+    expect(pairingProblem('ABCD-EFGH')).toContain('12 letters and digits');
+    expect(pairingProblem('ABCD-EFGH-JKM0')).toContain('not a pairing code');
   });
 });

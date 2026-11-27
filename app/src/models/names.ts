@@ -27,8 +27,11 @@ export function downloadName(title: string, v: number): string {
   return `${slug || 'part'}_v${v}.stl`;
 }
 
-// The menu name of the model that wrote a version, or its id if it is not on the menu.
+// The menu name of the model that wrote a version, or its id if it is not on the menu. Claude Code reports the
+// full model name, so its versions say "Claude Code (claude-...)".
 export function modelName(id: string | undefined, models: ModelChoice[]): string {
   if (!id) return '';
-  return models.find((model) => model.id === id)?.label ?? id;
+  const label = models.find((model) => model.id === id)?.label;
+  if (label) return label;
+  return id.startsWith('claude-') ? `Claude Code (${id})` : id;
 }

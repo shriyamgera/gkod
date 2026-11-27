@@ -162,4 +162,23 @@ describe('model store', () => {
     expect(store.create(first).id).toBe('same');
     expect(store.create(first).id).toBe('other');
   });
+
+  it('keeps the latest Claude Code session on the part, through a reload', () => {
+    const { store, storage } = setup();
+    const session = '11111111-2222-4333-8444-555555555555';
+    const later = '99999999-2222-4333-8444-555555555555';
+    const made = store.create({ ...first, model: 'claude-sonnet-5', session });
+    expect(made.session).toBe(session);
+    store.addVersion(made.id, { code: 'width = 90;', label: 'Wider', model: 'gemini-3.1-flash-lite' });
+    expect(store.get(made.id)?.session).toBe(session);
+    store.addVersion(made.id, { code: 'width = 100;', label: 'Wider again', model: 'claude-sonnet-5', session: later });
+    expect(store.get(made.id)?.session).toBe(later);
+    const reloaded = createModelStore({ getStorage: () => storage });
+    expect(reloaded.get(made.id)?.session).toBe(later);
+  });
+
+  it('drops a session that is not a session id', () => {
+    const { store } = setup();
+    expect(store.create({ ...first, session: '../../etc' }).session).toBeUndefined();
+  });
 });

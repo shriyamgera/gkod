@@ -59,3 +59,26 @@ export function rememberMessage(change: 'new-key' | 'box', asked: boolean, remem
   if (change === 'new-key') return remembered ? 'Key set and remembered on this device' : 'Key set for this tab';
   return remembered ? 'Key remembered on this device' : 'Key kept for this tab only';
 }
+
+// The bridge's codes use these letters and digits only (no 0, O, 1, I or L), in three groups of four.
+const PAIRING_LETTERS = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{12}$/;
+
+// Returns a plain message when the typed text cannot be a pairing code, else null.
+export function pairingProblem(input: string): string | null {
+  const plain = input.toUpperCase().replace(/[\s-]/g, '');
+  if (!plain) return 'Type the pairing code first.';
+  if (plain.length !== 12) return 'A pairing code has 12 letters and digits, like ABCD-EFGH-JKMN.';
+  if (!PAIRING_LETTERS.test(plain)) return 'This is not a pairing code. Copy it again from the bridge’s terminal.';
+  return null;
+}
+
+export const NOT_REMEMBERED_CODE = 'This browser would not let the code be remembered, so it is kept for this tab only.';
+
+export function pairingRememberMessage(change: 'new-code' | 'box', asked: boolean, remembered: boolean): string {
+  if (asked && !remembered) return change === 'new-code' ? `Code set. ${NOT_REMEMBERED_CODE}` : NOT_REMEMBERED_CODE;
+  if (change === 'new-code') return remembered ? 'Code set and remembered on this device' : 'Code set for this tab';
+  return remembered ? 'Code remembered on this device' : 'Code kept for this tab only';
+}
+
+// What the status line says while Claude Code works, under the step it is on.
+export const CLAUDE_SLOW_NOTE = 'Claude Code tests the part with GKod’s tools before it answers, so this can take a minute or two.';
