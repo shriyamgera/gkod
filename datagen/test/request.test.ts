@@ -119,6 +119,31 @@ describe('compose', () => {
     }
   });
 
+  it('gives the real number of holes in the title', () => {
+    let counted = 0;
+    for (const { tree, rng } of parts) {
+      const { title } = compose(tree, modelOf(tree), rng);
+      const said = /with (a|\w+) holes?$/.exec(title)?.[1];
+      if (said === undefined) continue;
+      counted++;
+      const n = said === 'a' ? 1 : NUMBER_WORDS.includes(said) ? NUMBER_WORDS.indexOf(said) : Number(said);
+      const sets = tree.features.filter((f) => f.kind === 'holes') as Extract<Feature, { kind: 'holes' }>[];
+      expect(n, `${title}: ${JSON.stringify(tree.features)}`).toBe(sets.reduce((sum, f) => sum + holeCount(f), 0));
+      expect(tree.features.some((f) => f.kind === 'tabs' || f.kind === 'bosses'), title).toBe(false);
+    }
+    expect(counted).toBeGreaterThan(200);
+    // a bracket with holes in both legs counts all of them
+    const bracket: Tree = {
+      family: 'bracket',
+      body: { kind: 'angle', width: 40, base: 50, height: 60, thickness: 4 },
+      features: [
+        { kind: 'holes', face: 'base', d: 4, countersink: false, place: { pattern: 'center' } },
+        { kind: 'holes', face: 'upright', d: 4, countersink: false, place: { pattern: 'pair', spacing: 20 } },
+      ],
+    };
+    expect(compose(bracket, modelOf(bracket), new Rng(1)).title).toMatch(/ with (3|three) holes$/);
+  });
+
   it('picks a or an by sound', () => {
     expect(article('80 mm plate')).toBe('an');
     expect(article('11 mm hole')).toBe('an');

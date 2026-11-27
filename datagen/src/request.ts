@@ -1,8 +1,8 @@
 // Puts a request together from the word lists and phrase pieces, with the tree's numbers, and lists the facts it states.
 import { envOf, type Model } from './model.ts';
-import { bodyPhrases, type Fact, featurePhrase, type Phrase, type Say } from './phrases.ts';
+import { bodyPhrases, type Fact, featurePhrase, holeCount, type Phrase, type Say } from './phrases.ts';
 import type { Rng } from './rng.ts';
-import type { Tree } from './tree.ts';
+import type { Feature, Tree } from './tree.ts';
 import { article, ASKS, cap, count, list, NOUNS, styleOf } from './words.ts';
 
 export type Request = { request: string; title: string; facts: Fact[] };
@@ -29,11 +29,12 @@ function shuffle<T>(rng: Rng, items: T[]): T[] {
   return out;
 }
 
-/** A short title for the part, also the first line of its code. */
+/** A short title for the part, also the first line of its code. It counts the holes of every face. */
 function titleOf(noun: string, tree: Tree, say: Say): string {
-  const holes = tree.features.find((f) => f.kind === 'holes');
-  if (!holes || holes.kind !== 'holes') return cap(noun);
-  const n = holes.place.pattern === 'center' ? 1 : holes.place.pattern === 'pair' ? 2 : holes.place.pattern === 'row' ? holes.place.count : 4;
+  const sets = tree.features.filter((f): f is Extract<Feature, { kind: 'holes' }> => f.kind === 'holes');
+  // tabs and standoffs have holes of their own, so a count of the plain holes would be short
+  if (!sets.length || tree.features.some((f) => f.kind === 'tabs' || f.kind === 'bosses')) return cap(noun);
+  const n = sets.reduce((sum, f) => sum + holeCount(f.place), 0);
   const title = `${cap(noun)} with ${n === 1 ? 'a hole' : `${count(say.s, n)} holes`}`;
   return title.length <= 40 ? title : cap(noun);
 }

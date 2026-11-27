@@ -3,7 +3,7 @@ import type { Axis, Model } from './model.ts';
 import { prefixOf } from './features.ts';
 import type { Rng } from './rng.ts';
 import { evaluate, type Env } from './scad.ts';
-import type { Feature, Tree } from './tree.ts';
+import type { Feature, Place, Tree } from './tree.ts';
 import { article, count, HOLE_NOUNS, mm, pair, PLACES, plural, type Style, triple } from './words.ts';
 
 /** One thing a request states, to be checked on the made part later. */
@@ -143,10 +143,13 @@ export function bodyPhrases(say: Say): Phrase[] {
 
 // ---- features
 
+/** How many holes a pattern makes. The request and the title both count with this. */
+export const holeCount = (place: Place) => (place.pattern === 'center' ? 1 : place.pattern === 'pair' ? 2 : place.pattern === 'row' ? place.count : 4);
+
 function holes(say: Say, f: Extract<Feature, { kind: 'holes' }>): Phrase {
   const { rng, s, tree } = say;
   const { p } = prefixOf(tree.body, f.face);
-  const n = f.place.pattern === 'center' ? 1 : f.place.pattern === 'pair' ? 2 : f.place.pattern === 'row' ? f.place.count : 4;
+  const n = holeCount(f.place);
   const facts: Fact[] = [many(`${p}hole_count`, n)];
   const noun = plural(rng.pick(HOLE_NOUNS), n);
   const sink = f.countersink ? 'countersunk ' : '';
