@@ -262,9 +262,12 @@ the split it is read from.
     as a second column that is labelled as such and is not the score;
   - stated hole counts (keys ending in `hole_count`, joined by `slot_count` when needed) are checked with the mesh's
     genus, its number of through holes. They are measured only when the reference part is one closed body whose genus
-    is exactly the stated total, so the genus is known to count those holes and nothing else. The answer's count is the
-    genus of all its closed surfaces added up, so a second piece brings its own holes and a hidden hollow brings none;
-    an answer that is not closed fails the count, since the reference showed it can be counted;
+    is exactly the stated total, so the genus is known to count those holes and nothing else. When two counts make the
+    total (the holes in each arm, or holes and slots), the genus measures only their sum: one added fact,
+    `holes_total`, is measured and the two counts are marked unmeasured, so the right total in the wrong places passes
+    once, not twice. The answer's count is the genus of all its closed surfaces added up, so a second piece brings its
+    own holes and a hidden hollow brings none; an answer that is not closed fails the count, since the reference
+    showed it can be counted;
   - every other fact (diameters, spacings, wall thickness, flags) is unmeasured until a measurer exists.
 
   A prompt meets the request when it compiles and every measured fact passes. With no part every measurable fact fails.
@@ -300,8 +303,10 @@ Every scored prompt also compiles the reference again and saves whether its STL 
 - Each reference's own code scored as the answer (30 create rows and 10 edits from dev): all compile, pass the checks,
   meet the request, overlap 1.0, every slider end compiles and every edit size block is right. Scoring takes about
   0.7 s a prompt with the slider ends.
-- What can be measured on dev: for create, 914 of the 1,833 stated facts (699 overall sizes and 215 hole counts by
-  genus, which covers 189 of the 191 `hole_count` facts), at least one in every prompt. For edits, 38 of 129, and only
+- What can be measured on dev: for create, 871 measured facts for the 1,833 stated, at least one in every prompt: 699
+  overall sizes and 172 hole counts by genus. 129 of those are stated counts; 43 are `holes_total` facts, each standing
+  for two stated counts whose sum is all one genus can measure (33 corner plates, 7 tool holders, 2 brackets and 1
+  plate). Together they cover 189 of the 191 `hole_count` facts. For edits, 38 of 129, and only
   27 of the 100 edit prompts state anything measurable, so for edits the size block is the score that matters.
 - Real calls, to prove the adapters (smoke checks in a throwaway folder, not scored rows): the local model on 8 dev
   prompts, zero-shot (5 compiled; 3 ran to the 1,024-token limit); Gemini 3 calls with gemini-3.1-flash-lite on one

@@ -83,10 +83,18 @@ def test_hole_count_from_genus_when_the_reference_agrees():
 def test_hole_counts_add_up_across_keys_and_slots_join_when_needed():
     reference = measure(plate_with_holes(4))
     facts = [fact("arm1_hole_count", 2, "count"), fact("arm2_hole_count", 2, "count")]
-    assert all(p["how"] == "holes" for p in plan_facts(facts, reference))
+    planned = plan_facts(facts, reference)
+    # the genus measures only the sum, so the sum is the one fact measured
+    assert [p["how"] for p in planned] == [None, None, "holes"]
+    assert "only the total of arm1_hole_count and arm2_hole_count" in planned[0]["reason"]
+    assert {k: planned[2][k] for k in ("key", "value", "of")} == {"key": "holes_total", "value": 4, "of": ["arm1_hole_count", "arm2_hole_count"]}
+    # four holes all in one arm: the total passes once, and neither arm passes on its own
+    results = check_facts(planned, measure(plate_with_holes(4)))
+    assert [r["status"] for r in results] == ["unmeasured", "unmeasured", "pass"]
+    assert check_facts(planned, measure(plate_with_holes(3)))[2]["status"] == "fail"
     # holes alone do not explain the genus, holes and slots do
     facts = [fact("hole_count", 1, "count"), fact("slot_count", 3, "count")]
-    assert [p["how"] for p in plan_facts(facts, reference)] == ["holes", "holes"]
+    assert [p["how"] for p in plan_facts(facts, reference)] == [None, None, "holes"]
     # holes explain it; the open slots of a comb are not tunnels and stay unmeasured
     facts = [fact("hole_count", 4, "count"), fact("slot_count", 8, "count")]
     planned = by_key(plan_facts(facts, reference))

@@ -8,7 +8,9 @@ What counts as measured:
   box's three sides in the one order that fits the most of them, since no prompt says which side is x. The axes the
   reference part is drawn with (a hook or clip lies on its side) are kept as a second, stricter result.
 - Stated hole counts (keys ending in hole_count, and slot_count with them when needed) are checked with the mesh's
-  genus: the number of through holes. They are measured only when the reference part is one closed body whose genus
+  genus: the number of through holes. When it takes more than one count to make the total (the holes in each arm, or
+  holes and slots), the genus measures only their sum, so one added fact, holes_total, is measured and the counts
+  themselves are unmeasured. They are measured only when the reference part is one closed body whose genus
   is exactly the stated total, so the genus is known to count those holes and nothing else; otherwise they are
   marked unmeasured, with the reason. The answer's holes are the genus of all its closed surfaces added up, so a
   second piece or a hidden hollow cannot hide missing holes; an answer that is not closed fails them, since a part
@@ -62,15 +64,22 @@ def plan_facts(facts: list[dict], reference: MeshInfo | None) -> list[dict]:
                 if group and sum(f["value"] for f in group) == genus:
                     chosen = group
                     break
+        chosen_keys = [f["key"] for f in chosen] if chosen else []
         for p in planned:
             if p["key"] not in keys_in_play:
                 continue
-            if chosen and any(p["key"] == f["key"] for f in chosen):
+            if p["key"] in chosen_keys and len(chosen_keys) == 1:
                 p["how"], p["reason"], p["expected_genus"] = "holes", None, genus
+            elif p["key"] in chosen_keys:
+                p["reason"] = f"only the total of {' and '.join(chosen_keys)} is measurable (holes_total)"
             elif genus is None:
                 p["reason"] = "the reference part is not one closed body, so its genus does not count holes"
-            elif not chosen or p["key"] not in {f["key"] for f in chosen}:
+            else:
                 p["reason"] = f"the reference part has {genus} through holes, not the stated total, so the genus cannot count these"
+        if len(chosen_keys) > 1:
+            # one genus measures only the sum: say so with one fact, so the right total in the wrong places (all the
+            # holes in one arm, holes for a slot) passes once, not once for each key
+            planned.append({"key": "holes_total", "value": genus, "unit": "count", "of": chosen_keys, "how": "holes", "reason": None, "expected_genus": genus})
     return planned
 
 
@@ -99,7 +108,7 @@ def check_facts(planned: list[dict], answer: MeshInfo | None) -> list[dict]:
     order = orient(planned, answer.size) if answer is not None else ORDERS[0]
     out = []
     for p in planned:
-        r = {k: p[k] for k in ("key", "value", "unit") if k in p}
+        r = {k: p[k] for k in ("key", "value", "unit", "of") if k in p}
         if p.get("axis"):
             r["axis"] = p["axis"]
         how = p["how"]

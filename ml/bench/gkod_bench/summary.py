@@ -24,6 +24,8 @@ def _group(records: list[dict]) -> dict:
         "note": "overall sizes on the axes the reference part is drawn with, which no prompt states; the score is meets_request",
     }
     facts = [f for x in s for f in x["facts"]]
+    # a holes_total fact is added by the scorer when one genus measures several stated counts; it is not stated
+    stated = [f for f in facts if "of" not in f]
     measured = [f for f in facts if f["status"] != "unmeasured"]
     by_how = {}
     for how in ("size", "holes"):
@@ -32,9 +34,10 @@ def _group(records: list[dict]) -> dict:
     sized = [f for f in measured if f["how"] == "size" and "strict" in f]
     by_how["size_strict_axes"] = rate(sum(f["strict"]["status"] == "pass" for f in sized), len(sized))
     out["facts"] = {
-        "stated": len(facts),
+        "stated": len(stated),
+        "totals_added": len(facts) - len(stated),
         "measured": len(measured),
-        "unmeasured": len(facts) - len(measured),
+        "unmeasured": sum(f["status"] == "unmeasured" for f in stated),
         # facts of one prompt are not independent, so this interval is narrower than it should be
         "passed": rate(sum(f["status"] == "pass" for f in measured), len(measured)),
         "by_measurer": by_how,
