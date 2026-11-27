@@ -3,6 +3,7 @@
 import asyncio
 import os
 import stat
+import time
 
 from conftest import PART, good_lines, init, result, say, tool_result, tool_use
 
@@ -87,6 +88,25 @@ def test_extract_finds_nothing_in_words():
     assert extract_answer("I would make a cube.") == (None, None)
 
 
+def test_a_rejected_rate_limit_event_is_the_usage_limit_with_its_reset_time():
+    stamp = 1795753200
+    lines = [
+        init(),
+        {"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "resetsAt": stamp, "rateLimitType": "five_hour"}},
+        result("API Error", is_error=True),
+    ]
+    parser, _ = feed_all(lines)
+    outcome = parser.outcome(1, "")
+    assert isinstance(outcome, Failure) and outcome.problem == "usage-limit"
+    assert time.strftime("%H:%M", time.localtime(stamp)) in outcome.message
+
+
+def test_an_allowed_rate_limit_event_changes_nothing():
+    lines = [init(), {"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "resetsAt": 1795753200}}, *good_lines()[1:]]
+    parser, _ = feed_all(lines)
+    assert isinstance(parser.outcome(0, ""), Answer)
+
+
 def test_failure_classes():
     assert classify_failure("Invalid API key · Please run /login", "", 1).problem == "not-logged-in"
     assert classify_failure("", "OAuth token has expired", 1).problem == "not-logged-in"
@@ -151,3 +171,12 @@ def test_claude_info_reads_only_logged_in_from_auth_status(tmp_path):
     fake = Fake(tmp_path)
     info = asyncio.run(ClaudeInfo(fake.make({"version": "2.1.276 (Claude Code)", "logged_in": False})).get())
     assert info == {"claude_found": True, "claude_version": "2.1.276", "logged_in": False}
+
+
+def test_a_tool_result_given_as_plain_text_is_read_too():
+    # Claude Code passes an MCP tool's JSON answer as one string, not a list of blocks
+    failed = tool_result("a", "")
+    failed["message"]["content"][0]["content"] = '{"ok":false,"error":"Parser error in line 4"}'
+    lines = [init(), tool_use("a", "compile_part", {"code": "x"}), failed, tool_use("b", "compile_part", {"code": "y"})]
+    _, seen = feed_all(lines)
+    assert seen == ["Writing the part", "Compiling", "Fixing"]

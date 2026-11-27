@@ -83,6 +83,8 @@ class StreamParser:
         self._names: dict[str, str] = {}
         self._problem = False
         self._last: str | None = None
+        # set when Claude Code says the plan's limit refused the request: the reset time, or 0 if not given
+        self.limit_resets_at: int | None = None
 
     def _step(self, step: str | None) -> list[str]:
         if not step or step == self._last:
@@ -115,6 +117,12 @@ class StreamParser:
                 if shows_problem(tool, _result_text(block), bool(block.get("is_error"))):
                     self._problem = True
             return []
+        if kind == "rate_limit_event":
+            info = line.get("rate_limit_info") or {}
+            if isinstance(info, dict) and info.get("status") == "rejected":
+                resets = info.get("resetsAt")
+                self.limit_resets_at = resets if isinstance(resets, int) else 0
+            return []
         if kind == "result":
             self.result = line
         return []
@@ -143,6 +151,8 @@ class StreamParser:
         text = result.get("result") if result else None
         text = text if isinstance(text, str) else ""
         failed = result is None or result.get("is_error") or result.get("subtype") != "success"
+        if failed and self.limit_resets_at is not None:
+            return Failure("usage-limit", usage_limit_message(f"|{self.limit_resets_at}" if self.limit_resets_at else ""))
         if failed:
             return classify_failure(text, stderr, returncode)
         code, assumptions = extract_answer(text)
