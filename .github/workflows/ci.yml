@@ -82,12 +82,22 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: mcp/requirements-dev.txt
+          cache-dependency-path: |
+            mcp/requirements-dev.txt
+            ml/requirements-dev.txt
 
       - name: Test the MCP server
         run: |
           python -m pip install -r mcp/requirements-dev.txt -e mcp
           python -m pytest -q mcp
+
+      # The benchmark harness: the scorer on hand-made meshes and code, the extractor, the intervals, resuming a row
+      # and the closed test split. The frozen sets are not in the repo and mlx runs only on Apple chips, so the tests
+      # that need them skip here.
+      - name: Test the benchmark harness
+        run: |
+          python -m pip install -r ml/requirements-dev.txt -e ml/bench
+          python -m pytest -q ml/bench
 
   # The backend: its tests against a real PostgreSQL with pgvector, then the same stack in Docker Compose.
   api:
