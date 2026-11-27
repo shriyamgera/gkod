@@ -1,12 +1,16 @@
 """The HTTP API, through FastAPI's test client."""
 
+import socket
+import threading
+import time
 from pathlib import Path
 
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from gkod_api.app import create_app
+from gkod_api.app import HEALTH_TIMEOUT_S, create_app
 from gkod_api.load import load_file
 from gkod_api.migrate import latest_version
 from gkod_api.settings import DEFAULT_MIGRATIONS, Settings, SettingsError, get_settings
@@ -36,6 +40,63 @@ def api(loaded_url):
 def sql(url: str, statement: str, params=()) -> None:
     with psycopg.connect(url) as conn:
         conn.execute(statement, params)
+
+
+class FreezingProxy:
+    """A TCP proxy in front of the database that can stop passing bytes while keeping every connection open,
+    as a paused server or a dropped network path would. New connections are then accepted but never answered."""
+
+    def __init__(self, url: str):
+        parts = conninfo_to_dict(url)
+        self.target = (parts.get("host") or "127.0.0.1", int(parts.get("port") or 5432))
+        self.flowing = threading.Event()
+        self.flowing.set()
+        self.closed = False
+        self.sockets: list[socket.socket] = []
+        self.listener = socket.create_server(("127.0.0.1", 0))
+        self.listener.settimeout(0.1)
+        self.url = make_conninfo(url, host="127.0.0.1", port=str(self.listener.getsockname()[1]))
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    def freeze(self) -> None:
+        self.flowing.clear()
+
+    def close(self) -> None:
+        self.closed = True
+        self.flowing.set()
+        for s in self.sockets:
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            s.close()
+        self.listener.close()
+
+    def _accept(self) -> None:
+        while not self.closed:
+            try:
+                client, _ = self.listener.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                return
+            self.sockets.append(client)
+            if not self.flowing.is_set():
+                continue  # held open, never answered
+            upstream = socket.create_connection(self.target)
+            self.sockets.append(upstream)
+            for src, dst in ((client, upstream), (upstream, client)):
+                threading.Thread(target=self._pipe, args=(src, dst), daemon=True).start()
+
+    def _pipe(self, src: socket.socket, dst: socket.socket) -> None:
+        try:
+            while data := src.recv(65536):
+                self.flowing.wait()
+                if self.closed:
+                    return
+                dst.sendall(data)
+        except OSError:
+            pass
 
 
 # Settings
@@ -147,6 +208,37 @@ def test_health_says_when_the_database_is_newer_than_the_code(migrated_url):
     (problem,) = response.json()["problems"]
     assert problem.startswith("The database schema is at version 999; this code expects ")
     assert problem.endswith("This code is older than the database; update it.")
+
+
+@pytest.mark.parametrize(
+    "path, error",
+    [
+        ("/health", None),
+        ("/parts", "The database took too long to answer."),
+        ("/stats", "The database took too long to answer."),
+    ],
+)
+def test_routes_answer_503_in_time_when_the_database_stops_answering(loaded_url, path, error):
+    proxy = FreezingProxy(loaded_url)
+    try:
+        with client_for(proxy.url, db_timeout=1, statement_timeout_ms=1000) as client:
+            # The pool now holds an open connection, which stops answering from here on.
+            assert client.get("/health").status_code == 200
+            proxy.freeze()
+            started = time.monotonic()
+            response = client.get(path)
+            took = time.monotonic() - started
+            proxy.close()
+    finally:
+        proxy.close()
+    assert response.status_code == 503
+    if error is None:
+        assert response.json()["database"] == "unreachable"
+        assert HEALTH_TIMEOUT_S - 0.5 < took < HEALTH_TIMEOUT_S + 1.5
+    else:
+        assert response.json() == {"error": error}
+        # The wait for a connection (1 s) plus the statement time limit (1 s).
+        assert 1.5 < took < 3.5
 
 
 def test_parts_answer_503_with_a_hint_before_migrations(db_url):

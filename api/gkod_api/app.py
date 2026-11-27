@@ -6,9 +6,11 @@ Read-only for now: health, the parts with filters, one part, and counts. Every a
 error is {"error": "<plain words>"}.
 """
 
+import asyncio
 import logging
+from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import asynccontextmanager
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeVar
 
 import psycopg
 from fastapi import FastAPI, Path, Query, Request, Response
@@ -25,12 +27,16 @@ from .models import Generator, Health, LabelCounts, Part, PartList, PartSummary,
 from .settings import Settings, get_settings
 
 log = logging.getLogger("uvicorn.error")
+T = TypeVar("T")
 
 MAX_BODY_BYTES = 64 * 1024
 MAX_QUERY_BYTES = 2048
 MAX_LIMIT = 200
-# /health answers within this many seconds even when the database is down, so healthchecks do not time out.
+# /health answers within this many seconds even when the database is down or has stopped answering, so
+# healthchecks do not time out.
 HEALTH_TIMEOUT_S = 2.0
+# How long shutting down waits for database work that was given up on to finish cancelling.
+STRAY_WAIT_S = 5.0
 
 SUMMARY_COLUMNS = (
     "id, run_id, part_index, family, title, request, compile_ok, checks_ok, split,"
@@ -81,6 +87,44 @@ class _BodyTooLarge(Exception):
     pass
 
 
+class DatabaseTimeout(Exception):
+    """The database did not answer within the time limit."""
+
+
+async def _within(app: FastAPI, seconds: float, work: Coroutine[Any, Any, T]) -> T:
+    """Runs `work` for at most `seconds`, then raises DatabaseTimeout.
+
+    The limits on the server side (statement_timeout) cannot help when the server has stopped answering, for
+    example when it is paused or the network path to it is gone, and the pool's own timeout only covers the
+    wait for a free connection. So the work runs as a task with a limit here. When the time is up the task is
+    cancelled but not waited for: psycopg may take up to ten more seconds to cancel the query and close the
+    connection, and the answer should not wait for that.
+    """
+    task = asyncio.ensure_future(work)
+    try:
+        done, _ = await asyncio.wait({task}, timeout=seconds)
+    except asyncio.CancelledError:
+        _give_up(app, task)
+        raise
+    if task in done:
+        return task.result()
+    _give_up(app, task)
+    raise DatabaseTimeout
+
+
+def _give_up(app: FastAPI, task: asyncio.Task) -> None:
+    task.cancel()
+    strays: set[asyncio.Task] = app.state.strays
+    strays.add(task)
+
+    def finished(t: asyncio.Task) -> None:
+        strays.discard(t)
+        if not t.cancelled():
+            t.exception()  # it finished just before it was cancelled; nobody waits for the result
+
+    task.add_done_callback(finished)
+
+
 async def _plain(send: Send, status: int, message: str) -> None:
     response = JSONResponse({"error": message}, status_code=status)
     await response({"type": "http"}, _no_receive, send)
@@ -99,11 +143,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.settings = s
         app.state.schema_expected = latest_version(s.migrations_dir)
         app.state.pool = make_pool(s)
+        app.state.strays = set()
         # Start even if the database is down: /health then says so, and the pool keeps trying.
         await app.state.pool.open(wait=False)
         try:
             yield
         finally:
+            if app.state.strays:
+                await asyncio.wait(set(app.state.strays), timeout=STRAY_WAIT_S)
             await app.state.pool.close()
 
     app = FastAPI(
@@ -118,9 +165,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-def _db(request: Request):
-    """A pooled connection, taken inside the route so that a bad request never waits for the database."""
-    return request.app.state.pool.connection()
+async def _read(request: Request, work: Callable[[psycopg.AsyncConnection], Awaitable[T]]) -> T:
+    """Runs work(conn) on a pooled connection. Called inside the route, so a bad request never waits for the
+    database. Gives up (DatabaseTimeout, a 503) after the wait for a connection plus the statement time limit."""
+    s: Settings = request.app.state.settings
+
+    async def run() -> T:
+        async with request.app.state.pool.connection() as conn:
+            return await work(conn)
+
+    return await _within(request.app, s.db_timeout + s.statement_timeout_ms / 1000, run())
 
 
 ERRORS: dict[int | str, dict[str, Any]] = {
@@ -149,17 +203,22 @@ def _add_routes(app: FastAPI) -> None:
         """The API is up; the database answers, has pgvector, and its schema is the one this code expects."""
         expected = request.app.state.schema_expected
         database, pgvector, version = "ok", None, None
-        try:
+
+        async def probe() -> tuple[str | None, int | None]:
             timeout = min(HEALTH_TIMEOUT_S, request.app.state.settings.db_timeout)
             async with request.app.state.pool.connection(timeout=timeout) as conn:
                 row = await (await conn.execute(
                     "SELECT (SELECT extversion FROM pg_extension WHERE extname = 'vector') AS pgvector,"
                     " to_regclass('schema_migrations') IS NOT NULL AS has_migrations"
                 )).fetchone()
-                pgvector = row["pgvector"]
-                if row["has_migrations"]:
-                    version = (await (await conn.execute("SELECT max(version) AS v FROM schema_migrations")).fetchone())["v"]
-        except (psycopg.Error, PoolTimeout):
+                if not row["has_migrations"]:
+                    return row["pgvector"], None
+                return row["pgvector"], (await (await conn.execute(
+                    "SELECT max(version) AS v FROM schema_migrations")).fetchone())["v"]
+
+        try:
+            pgvector, version = await _within(request.app, HEALTH_TIMEOUT_S, probe())
+        except (psycopg.Error, PoolTimeout, DatabaseTimeout):
             database = "unreachable"
         problems = []
         if database != "ok":
@@ -203,19 +262,25 @@ def _add_routes(app: FastAPI) -> None:
             clauses.append("split = %s")
             params.append(split)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        async with _db(request) as conn:
+
+        async def fetch(conn: psycopg.AsyncConnection) -> tuple[int, list[dict]]:
             total = (await (await conn.execute(f"SELECT count(*) AS n FROM parts{where}", params)).fetchone())["n"]
             rows = await (await conn.execute(
                 f"SELECT {SUMMARY_COLUMNS} FROM parts{where} ORDER BY id LIMIT %s OFFSET %s", [*params, limit, offset]
             )).fetchall()
+            return total, rows
+
+        total, rows = await _read(request, fetch)
         return PartList(items=[PartSummary(**_summary(r)) for r in rows], total=total, limit=limit, offset=offset)
 
     @app.get("/parts/{part_id}", response_model=Part,
              responses={404: {"model": Problem, "description": "No part has this id."}, **ERRORS})
     async def get_part(request: Request, part_id: Annotated[int, Path(ge=1, le=2**63 - 1)]) -> Part:
         """One part with its code, facts, tree and labels."""
-        async with _db(request) as conn:
-            row = await (await conn.execute(f"SELECT {PART_COLUMNS} FROM parts WHERE id = %s", (part_id,))).fetchone()
+        async def fetch(conn: psycopg.AsyncConnection) -> dict | None:
+            return await (await conn.execute(f"SELECT {PART_COLUMNS} FROM parts WHERE id = %s", (part_id,))).fetchone()
+
+        row = await _read(request, fetch)
         if row is None:
             raise HTTPException(404, f"No part has the id {part_id}.")
         return Part(**_summary(row), **{k: row[k] for k in ("seed", "code", "tree", "facts", "labels", "extra",
@@ -224,8 +289,7 @@ def _add_routes(app: FastAPI) -> None:
     @app.get("/stats", response_model=Stats, responses={503: ERRORS[503]})
     async def stats(request: Request) -> Stats:
         """Counts of parts by family, split and label, and the runs they came from."""
-        async with _db(request) as conn:
-            return await _stats(conn)
+        return await _read(request, _stats)
 
 
 async def _stats(conn: psycopg.AsyncConnection) -> Stats:
@@ -281,8 +345,10 @@ def _add_error_handlers(app: FastAPI) -> None:
         log.warning("database not reachable: %s", type(exc).__name__)
         return problem(503, "The parts database is not reachable right now.")
 
+    @app.exception_handler(DatabaseTimeout)
     @app.exception_handler(psycopg.errors.QueryCanceled)
     async def too_slow(request: Request, exc: Exception) -> JSONResponse:
+        log.warning("database too slow: %s", type(exc).__name__)
         return problem(503, "The database took too long to answer.")
 
     @app.exception_handler(psycopg.errors.UndefinedTable)
