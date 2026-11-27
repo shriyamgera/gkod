@@ -206,17 +206,17 @@ The last column counts a feature on every training family, which makes some feat
 
 **The test split stays closed** until the final run. `readSplit` in [src/splits/read.ts](src/splits/read.ts) refuses it unless it is called with `final: true`, and the benchmark must refuse to score it without `--final`, which only the final run passes. `check` reads its rows only to hash and count them.
 
-**Set v1,** made at commit `15974c9` with a clean tree, with 8 workers in 328 s and again with 5 workers in 445 s: all eight files byte-identical. 28 MB.
+**Set v1,** made at commit `c7c4186` with a clean tree, with 8 workers and again with 5 workers, both at once (1,793 s and 1,922 s; alone, 8 workers took 328 s at the first making): all eight files byte-identical. 28 MB. It was first made at `15974c9` and made again the same day, before any benchmark row was run (only smoke checks had read the dev split), after the last four fixed edit instructions were built from word pieces and the near-copy rule stopped looking at the family's name. Against the first making, with the commit and the parts files' sha256 put back, every tree, code and label is byte-identical; 15 training edit instructions and 1 test edit instruction changed (the test rows were compared by program and only the count read).
 
 | | train | dev | test |
 |---|---|---|---|
 | Parts | 6,000 | 100 + 100 + 100 | 100 + 100 + 100 |
 | Edit pairs | 3,000 | 100 | 100 |
 | Different trees (parts and both sides of edits) | 8,998 | 400 | 400 |
-| `create.jsonl` sha256 | `0457c63f…2f09` | `a6c2e9bf…157e` | `cef696df…aaac` |
-| `edit.jsonl` sha256 | `59116dc0…c0f8` | `0bb986c6…f14b` | `4d5eadf9…38a9` |
+| `create.jsonl` sha256 | `209a59ae…63a7` | `68407e57…5388` | `0399e040…5bc3` |
+| `edit.jsonl` sha256 | `a0d4fd57…bc96` | `0a2bcf9f…753e` | `5a610bba…0178` |
 
-`manifest.json` sha256 `9dcc31deddb1bb8644221682cc2004308c6d5700559286d3a18cf362cae048f6`; the full hashes are in [sets-v1.sha256](sets-v1.sha256). No tree is in two splits and none has a near-copy in another. Training parts by family: 323 (knob, tray) to 464 (cup). Training edits by kind: size 1,443, hole_d 212, move 158, count 299, scale 239, add 280, remove 369. Dev edits came from 36 tier 1, 32 tier 2 and 32 tier 3 parts; test edits from 37, 35 and 28.
+`manifest.json` sha256 `98f4cf5190c518e9605502f060bbcabe4f2eac7e34ea41c24ebde8f1c043bb5a`; the full hashes are in [sets-v1.sha256](sets-v1.sha256). No tree is in two splits and none has a near-copy in another. Training parts by family: 323 (knob, tray) to 464 (cup). Training edits by kind: size 1,443, hole_d 212, move 158, count 299, scale 239, add 280, remove 369. Dev edits came from 36 tier 1, 32 tier 2 and 32 tier 3 parts; test edits from 37, 35 and 28.
 
 **Training tokens, roughly** (characters / 3.5; day 8 measures with the real tokenizer), counting the site's system prompt, the words the site sends ([app/src/engine/prompts.ts](../app/src/engine/prompts.ts)) and the answer as one code block:
 
