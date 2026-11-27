@@ -12,7 +12,7 @@ No row is written by a language model: not the part, not its code, not its reque
 - **Code** is written by a serializer from small shape pieces of our own (cube, cylinder, square, circle, polygon, offset, linear_extrude, hull, union, difference, translate, rotate, mirror, for). No part is stored as a text template.
 - **Requests** are put together from short word lists and phrase pieces ([src/words.ts](src/words.ts), [src/phrases.ts](src/phrases.ts)) filled with the tree's own numbers. No whole sentence is written by hand.
 
-**Provenance.** Every row carries the generator's name, version and git commit, a `dirty` flag (set when the repo had uncommitted changes), the run seed, the part's own seed, its family and its full feature tree. `manifest.json` adds the sha256 of the OpenSCAD build and of every output file. Anyone with the repo can rebuild a row from its commit and seed.
+**Provenance.** Every row carries the generator's name, version and git commit, a `dirty` flag (set when the repo had uncommitted changes), the run seed, the part's own seed, its family, its full feature tree and the tree's sha256. `manifest.json` adds the sha256 of the OpenSCAD build and of every output file. Anyone with the repo can rebuild a row from its commit and seed.
 
 ## Command
 
@@ -20,7 +20,7 @@ No row is written by a language model: not the part, not its code, not its reque
 node datagen/bin/gkod-datagen.mjs --count 1000 --seed 1 --out data/parts/<name> [--workers 8]
 ```
 
-`--count` is the number of parts written. A tree that breaks a rule is skipped, logged in `skipped.jsonl`, and the next index is tried. The output folder must be inside `data/`, which git ignores. A folder that already holds a run is refused. Commit first, or the run is marked dirty.
+`--count` is the number of parts written. A tree that breaks a rule, or that is the same as a part made earlier in the run, is skipped, logged in `skipped.jsonl`, and the next index is tried. So every row is a different part. The output folder must be inside `data/`, which git ignores. A folder that already holds a run is refused. Commit first, or the run is marked dirty.
 
 ## How a part is made
 
@@ -36,13 +36,13 @@ node datagen/bin/gkod-datagen.mjs --count 1000 --seed 1 --out data/parts/<name> 
 | Family | Body | Features it can have |
 |---|---|---|
 | plate | flat plate, sharp, rounded or chamfered corners | holes, countersinks, a slot, a pocket, ribs, standoffs, a low rim or a notch |
-| bracket | L bracket | holes in the base and the upright, slots in the base, one or two gussets below the holes |
+| bracket | L bracket | holes in the base and the upright, slots in the base, one or two gussets below the holes; always at least one hole or slot |
 | channel | U channel or cable tray | holes or slots in the floor, inward lips |
 | tray | open box | dividers, floor holes, two mounting tabs |
 | spacer | round or hex spacer, sized around its screw | a flange with or without screw holes |
-| hook | wall hook, printed on its side | one or two screw holes, countersunk or not |
+| hook | wall hook, one outline with a cut front corner and a rounded inside corner, printed on its side; its reach is the full depth from the wall | one or two screw holes, countersunk or not; always at least one |
 | knob | knob, printed face down, sized around its shaft | grip notches, a flat on the shaft hole |
-| clip | cable or pipe clip, printed on its side | two screw holes through the pad |
+| clip | cable or pipe clip: a column with a round top on a flat base, printed on its side | two screw holes through the base |
 
 ## Files
 
@@ -50,7 +50,7 @@ node datagen/bin/gkod-datagen.mjs --count 1000 --seed 1 --out data/parts/<name> 
 |---|---|
 | `parts.jsonl` | One part per line, in index order. |
 | `skipped.jsonl` | Each skipped index, its family and every reason. |
-| `manifest.json` | Generator, seed, counts by family, skip reasons, pass rates, settings, the OpenSCAD build's sha256, and the rows, bytes and sha256 of `parts.jsonl` and `skipped.jsonl`. |
+| `manifest.json` | Generator, seed, counts by family, skip reasons, pass rates, the number of different trees with one sha256 for the whole set (of the sorted tree hashes), settings, the OpenSCAD build's sha256, and the rows, bytes and sha256 of `parts.jsonl` and `skipped.jsonl`. |
 | `timings.jsonl` | Compile and check time per part, kept apart because times change from run to run. |
 
 ## A row
@@ -61,11 +61,12 @@ A real row (part 13 of the seed 1 run below), with the line breaks moved for rea
 {
   "id": "s1-000013",
   "index": 13,
-  "generator": {"name": "gkod-datagen", "version": "0.1.0", "commit": "1c383ee10afbc2f8149024381b0be99d5382587c", "dirty": false},
+  "generator": {"name": "gkod-datagen", "version": "0.1.0", "commit": "3fecc1ab0d22a14dca6fa48265b0ecc5c2844acb", "dirty": false},
   "seed": 1,
   "part_seed": 3417133882,
   "family": "knob",
   "tree": {"family": "knob", "body": {"kind": "knob", "diameter": 31, "height": 13.5, "shaft": 4, "shaftDepth": 11.5, "chamfer": 1}, "features": [{"kind": "flat", "depth": 0.5}]},
+  "tree_sha256": "9fe7549a2d1d4d3c8840df29126fd1ecfd528f50ce0306c72d6c8a487ad1982b",
   "title": "Control knob",
   "request": "Print a control knob, 31mm in diameter and 13.5mm high, with a 4mm D-shaped shaft hole 11.5mm deep",
   "facts": [
@@ -92,6 +93,7 @@ A real row (part 13 of the seed 1 run below), with the line breaks moved for rea
 }
 ```
 
+- `tree_sha256`: the sha256 of the tree as JSON with every key sorted. The same part has the same hash in every run, so a split can keep one part out of two sets.
 - `labels.compile`: `ok`, `error`, `triangles`. `labels.mesh`: bounding box `size` and `min` (mm) and `volume` (mm³).
 - `labels.checks`: `ok`, and each check's `id` and `ok`, with the plain sentence when it fails.
 - `labels.params_ok`: the compiler's own list of sizes, read with the site's rules, is exactly the size block the generator wrote.
@@ -104,27 +106,30 @@ The random number generator is our own (mulberry32). Part `i` gets its own seed 
 
 ## Measured
 
-Seed 1, `--count 1000`, commit `1c383ee` with a clean tree, 8 workers on an M4 Mac (10 cores), run twice:
+The day 6 set is `data/parts/day6-seed1`: seed 1, `--count 1000`, commit `3fecc1a` with a clean tree, made with 8 workers on an M4 Mac (10 cores) and made again with 3 workers.
 
 | | |
 |---|---|
-| Parts | 1,000 (7 indices skipped: holes, ribs and notches too close together 5, a screw head against a rim 2) |
+| Parts | 1,000 (7 indices skipped: holes, ribs and notches too close together 5, a screw head against a rim 2; no repeated part) |
 | Compiled | 100% |
 | Passed all print checks | 100% (solid 100%, fits the bed 100%, flat base 100%, overhang 100%) |
 | Size block matches the compiler (`params_ok`) | 100% |
 | Stated overall sizes match the mesh (`facts_ok`) | 100% |
 | By family | plate 110, bracket 121, channel 124, tray 133, spacer 127, hook 126, knob 124, clip 135 |
-| Features per part | none 318, one 482, two 180, three 20 |
-| Triangles | 12 to 3,128 (median 476) |
-| Size | x 7 to 198, y 6.5 to 160, z 2 to 100 mm |
-| Code | 19 to 77 lines (median 42) |
-| Requests | 17 to 228 characters, 3 to 50 words (median 21); all 1,000 different; 112 different two-word openings, the most common ("I need") in 9.4% |
+| Features per part | none 284, one 510, two 186, three 20 |
+| Triangles | 12 to 3,128 (median 472) |
+| Size | x 7 to 198, y 7 to 160, z 2 to 100 mm |
+| Code | 18 to 76 lines (median 42) |
+| Requests | 17 to 228 characters, 3 to 50 words (median 21); all 1,000 different; 135 different openings, the most common ("I need") in 9.5%. An opening is the first two words, lowercased, with punctuation taken off. |
 | Facts per request | 2 to 12 (median 5) |
-| Time | 25.3 s and 28.5 s for the whole run; compile 58 ms per part (median), check 0.3 ms |
-| `parts.jsonl` sha256 | `212bbc2a2e34a344e40d04725e3ee4820e649d346cb2ca8c7675c048d7a55b67`, both runs and a third with 3 workers |
+| Different parts | 1,000 tree hashes and 1,000 STL hashes |
+| Time | 25.1 s with 8 workers and 47.7 s with 3 for the whole run; compile 59 ms per part (median), check 0.4 ms |
+| `parts.jsonl` sha256 | `6c3abc282d94d016f1421c412c6e626a9150d44376e205deef372a5ea0807ac8`; both runs gave byte-identical `parts.jsonl`, `skipped.jsonl` and `manifest.json` |
 
-What these numbers do not show: every part passes because the rules are strict and the shapes are simple (boxes and cylinders, no angled or curved features beyond hull and offset). Some features are rare (in 1,000 parts: 5 pockets, 9 rib sets, 9 standoff sets, 11 notches, 12 rims), and a third of the parts have no features at all.
+A script also read every row: each title's hole count matches the tree, each hook's stated reach is its mesh depth, every bracket and hook has a hole or slot, and no row breaks a wording rule from the tests.
+
+What these numbers do not show: every part passes because the rules are strict and the shapes are simple (boxes and cylinders, no angled or curved features beyond hull and offset). Some features are rare (in 1,000 parts: 5 pockets, 9 rib sets, 9 standoff sets, 11 notches, 12 rims), and more than a quarter of the parts have no features at all. Plain spacers have only a few sizes, so two runs with different seeds can share a part; use `tree_sha256` to keep any part out of two splits.
 
 ## Tests
 
-`npm test` covers the random number generator, the expression and code printer, the rules, the slider ranges, each family's valid-tree rate, the size block format (read the way the customizer reads it), one part per family through the real compiler at its default sizes and at both ends of every slider, the request facts against the tree, the wording rules, and the byte-identical end-to-end run with different worker counts.
+`npm test` covers the random number generator, the expression and code printer, the rules, the slider ranges, each family's valid-tree rate, a fixing on every bracket and hook, the size block format (read the way the customizer reads it), one part per family through the real compiler at its default sizes and at both ends of every slider, the request facts against the tree, the title's hole count, the wording rules on two seeds, the tree hash, the byte-identical end-to-end run with different worker counts, and the refusal to start when the OpenSCAD build is missing.
