@@ -262,8 +262,9 @@ the split it is read from.
     as a second column that is labelled as such and is not the score;
   - stated hole counts (keys ending in `hole_count`, joined by `slot_count` when needed) are checked with the mesh's
     genus, its number of through holes. They are measured only when the reference part is one closed body whose genus
-    is exactly the stated total, so the genus is known to count those holes and nothing else, and only when the
-    answer is one closed body too;
+    is exactly the stated total, so the genus is known to count those holes and nothing else. The answer's count is the
+    genus of all its closed surfaces added up, so a second piece brings its own holes and a hidden hollow brings none;
+    an answer that is not closed fails the count, since the reference showed it can be counted;
   - every other fact (diameters, spacings, wall thickness, flags) is unmeasured until a measurer exists.
 
   A prompt meets the request when it compiles and every measured fact passes. With no part every measurable fact fails.
@@ -318,10 +319,11 @@ show how often an answer also lies as the reference is drawn. Every prompt, test
 generator.
 
 `pytest ml/bench` covers the scorer on hand-made meshes (blocks of unit cubes with 0 to 4 through holes, two pieces, a
-hidden hollow, open and flipped faces) and on hand-written code through the real compiler (full marks for the reference,
-a wrong size and a missing hole, the right part stood up (it meets the request and overlaps 1, and fails only the strict
-columns), no code, broken code, a slider end that breaks the part, an edit, a timeout tried again), the extractor cases,
-the intervals and paired tests, the data loader and its hash and split checks, the few-shot rule, a whole row on a small
-hand-made set, resuming after a stop or after errors, a resumed row with other settings, few-shot turns, the comparison,
-the closed test split in every command, and the Gemini and Claude Code adapters against recorded replies (no real
-calls). With `GKOD_BENCH_LOCAL=1` it also loads the local model and checks that greedy answers repeat exactly.
+hidden hollow, open and flipped faces, holes added up over pieces) and on hand-written code through the real compiler
+(full marks for the reference, a wrong size and a missing hole, missing holes behind a hidden hollow, the right part
+stood up (it meets the request and overlaps 1, and fails only the strict columns), no code, broken code, a slider end
+that breaks the part, an edit, a timeout tried again), the extractor cases, the intervals and paired tests, the data
+loader and its hash and split checks, the few-shot rule, a whole row on a small hand-made set, resuming after a stop or
+after errors, a resumed row with other settings, few-shot turns, the comparison, the closed test split in every command,
+and the Gemini and Claude Code adapters against recorded replies (no real calls). With `GKOD_BENCH_LOCAL=1` it also
+loads the local model and checks that greedy answers repeat exactly.

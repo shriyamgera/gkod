@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from shapes import box, plate_with_holes
+from shapes import box, hollow_cube, plate_with_holes
 
 from gkod_bench.gkod import Gkod
 from gkod_bench.mesh import measure
@@ -98,11 +98,18 @@ def test_hole_count_unmeasured_when_the_genus_cannot_count_it():
     # blind holes or a bore: the reference genus is not the stated count
     planned = plan_facts([fact("hole_count", 3, "count")], measure(plate_with_holes(1)))
     assert planned[0]["how"] is None and "not the stated total" in planned[0]["reason"]
-    # an answer in two pieces has no genus
-    planned = plan_facts([fact("hole_count", 1, "count")], measure(plate_with_holes(1)))
-    two = measure(np.concatenate([plate_with_holes(1), box(1, 1, 1, offset=(50, 0, 0))]))
-    result = check_facts(planned, two)[0]
-    assert result["status"] == "unmeasured" and "not one closed body" in result["reason"]
+
+
+def test_extra_pieces_hollows_and_open_surfaces_cannot_hide_holes():
+    planned = plan_facts([fact("hole_count", 2, "count")], measure(plate_with_holes(2)))
+    # the holes of every piece are added up; a hidden hollow adds none
+    two = measure(np.concatenate([plate_with_holes(2), box(1, 1, 1, offset=(50, 0, 0))]))
+    assert check_facts(planned, two)[0]["status"] == "pass" and check_facts(planned, two)[0]["got_genus"] == 2
+    hollow = check_facts(planned, measure(hollow_cube()))[0]
+    assert hollow["status"] == "fail" and hollow["got_genus"] == 0
+    # a surface that is not closed fails: the reference showed the holes can be counted, and a part must be closed
+    open_part = check_facts(planned, measure(plate_with_holes(2)[:-1]))[0]
+    assert open_part["status"] == "fail" and "not closed" in open_part["reason"]
 
 
 def test_no_mesh_fails_every_measurable_fact():
@@ -266,6 +273,20 @@ def test_no_code_and_broken_code(gkod):
     assert s["extract"]["ok"] and not s["compiles"] and s["compile"]["error"]
     s = score_answer(gkod, CREATE_ROW, "create", None)
     assert s["extract"]["problem"] == "no-answer" and not s["compiles"]
+
+
+@needs_compiler
+def test_a_hidden_hollow_does_not_hide_missing_holes(gkod):
+    hollow = PLATE.replace("for (x = [15, width - 15]) translate([x, depth / 2, -1]) cylinder(d = hole_d, h = thickness + 2);", "translate([25, 10, 1]) cube([5, 5, 2]);")
+    s = score_answer(gkod, CREATE_ROW, "create", f"```openscad\n{hollow}```", slider_ends=False)
+    assert s["compiles"] and s["checks_pass"] and s["mesh"]["shells"] == 2
+    got = by_key(s["facts"])
+    assert got["hole_count"]["status"] == "fail" and got["hole_count"]["got_genus"] == 0
+    assert s["meets_request"] is False
+    # the holes and a hollow: the holes are counted
+    both = PLATE.replace("cylinder(d = hole_d, h = thickness + 2);", "cylinder(d = hole_d, h = thickness + 2);\n  translate([25, 10, 1]) cube([5, 5, 2]);")
+    s = score_answer(gkod, CREATE_ROW, "create", f"```openscad\n{both}```", slider_ends=False)
+    assert s["mesh"]["shells"] == 2 and by_key(s["facts"])["hole_count"]["status"] == "pass" and s["meets_request"] is True
 
 
 @needs_compiler

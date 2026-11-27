@@ -50,12 +50,15 @@ def test_ring_has_one_hole():
 def test_two_pieces_have_no_genus():
     two = np.concatenate([box(1, 1, 1), box(1, 1, 1, offset=(5, 0, 0))])
     info = measure(two)
-    assert info.closed and info.shells == 2 and info.genus is None
+    assert info.closed and info.shells == 2 and info.genus is None and info.holes == 0
+    # the holes of every piece are added up
+    assert measure(np.concatenate([plate_with_holes(2), ring() + np.array([20.0, 0.0, 0.0])])).holes == 3
 
 
 def test_hollow_body_is_two_surfaces():
     info = measure(hollow_cube())
-    assert info.closed and info.shells == 2 and info.genus is None
+    # the bubble's inside surface has no holes of its own
+    assert info.closed and info.shells == 2 and info.genus is None and info.holes == 0
     assert math.isclose(info.volume, 26.0)
 
 
@@ -65,7 +68,7 @@ def test_open_and_flipped_meshes_are_not_closed():
     flipped = tri.copy()
     flipped[0] = flipped[0][[0, 2, 1]]
     info = measure(flipped)
-    assert not info.closed and info.genus is None
+    assert not info.closed and info.genus is None and info.holes is None
     assert measure(np.zeros((0, 3, 3))).triangles == 0
 
 

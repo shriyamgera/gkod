@@ -8,9 +8,11 @@ What counts as measured:
   box's three sides in the one order that fits the most of them, since no prompt says which side is x. The axes the
   reference part is drawn with (a hook or clip lies on its side) are kept as a second, stricter result.
 - Stated hole counts (keys ending in hole_count, and slot_count with them when needed) are checked with the mesh's
-  genus: the number of through holes of one closed body. They are measured only when the reference part is one
-  closed body whose genus is exactly the stated total, so the genus is known to count those holes and nothing else,
-  and only when the answer is one closed body too; otherwise they are marked unmeasured, with the reason.
+  genus: the number of through holes. They are measured only when the reference part is one closed body whose genus
+  is exactly the stated total, so the genus is known to count those holes and nothing else; otherwise they are
+  marked unmeasured, with the reason. The answer's holes are the genus of all its closed surfaces added up, so a
+  second piece or a hidden hollow cannot hide missing holes; an answer that is not closed fails them, since a part
+  must be closed to print and the reference showed the holes can be counted.
 - Every other fact (hole diameters, spacings, flags, wall thickness, ...) is unmeasured until a measurer exists.
 """
 
@@ -117,12 +119,14 @@ def check_facts(planned: list[dict], answer: MeshInfo | None) -> list[dict]:
             strict = [answer.size[i] for i in AXES[p["axis"]]]
             r["strict"] = {"got": [round(g, 3) for g in strict], "status": "pass" if _size_ok(strict, p["value"]) else "fail"}
         elif how == "holes":
-            if answer.genus is None:
-                r.update(status="unmeasured", reason="the answer is not one closed body, so its genus does not count holes")
+            r["expected_genus"] = p["expected_genus"]
+            if not answer.closed:
+                r.update(status="fail", reason="the answer is not closed, so its holes cannot be counted")
+            elif answer.holes is None:
+                r.update(status="fail", reason="the answer's surfaces touch at a corner or an edge, so its holes cannot be counted")
             else:
-                r["got_genus"] = answer.genus
-                r["expected_genus"] = p["expected_genus"]
-                r["status"] = "pass" if answer.genus == p["expected_genus"] else "fail"
+                r["got_genus"] = answer.holes
+                r["status"] = "pass" if answer.holes == p["expected_genus"] else "fail"
         out.append(r)
     return out
 

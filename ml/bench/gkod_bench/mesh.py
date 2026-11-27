@@ -2,7 +2,8 @@
 
 The genus of one closed body is its number of through holes (tunnels): a plate with four holes has genus 4. It is
 worked out from the Euler characteristic, V - E + F = 2 - 2g, after joining corners closer than 0.0001 mm, the same
-tolerance the print checks use.
+tolerance the print checks use. `holes` adds up the genus of every closed surface of the mesh: a second piece brings its
+own holes, and the inside surface of a hidden hollow (a closed bubble) brings none, so neither can hide holes.
 """
 
 from __future__ import annotations
@@ -26,6 +27,8 @@ class MeshInfo:
     shells: int
     # set only for one closed piece
     genus: int | None
+    # the genus of every surface added up, set when the whole mesh is closed
+    holes: int | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -80,11 +83,20 @@ def measure(triangles: np.ndarray) -> MeshInfo:
     used = np.unique(faces)
     labels = _labels(undirected, count)
     shells = int(len(np.unique(labels[used])))
-    genus = None
-    if closed and shells == 1:
-        euler = len(used) - len(undirected) + len(faces)
-        if euler % 2 == 0 and euler <= 2:
-            genus = (2 - euler) // 2
+    genus = holes = None
+    if closed:
+        # the Euler characteristic of each surface, from its own corners, edges and faces
+        ids = np.unique(labels[used])
+        index = np.searchsorted(ids, labels)
+        v = np.bincount(index[used], minlength=len(ids))
+        e = np.bincount(index[undirected[:, 0]], minlength=len(ids))
+        f = np.bincount(index[faces[:, 0]], minlength=len(ids))
+        euler = v - e + f
+        if np.all(euler % 2 == 0) and np.all(euler <= 2):
+            per_surface = (2 - euler) // 2
+            holes = int(per_surface.sum())
+            if shells == 1:
+                genus = int(per_surface[0])
     return MeshInfo(
         triangles=len(tri),
         min=tuple(float(x) for x in low),
@@ -93,4 +105,5 @@ def measure(triangles: np.ndarray) -> MeshInfo:
         closed=closed,
         shells=shells,
         genus=genus,
+        holes=holes,
     )
