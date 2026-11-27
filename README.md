@@ -90,7 +90,7 @@ GKod returns **OpenSCAD code with named sizes**. Saying "make it 10 mm wider" ch
 
 ## The fine-tuned model
 
-- **No model-written training examples.** A seeded generator builds every training part: it picks the features and sizes, writes the code, compiles it, and keeps only parts that pass the print checks. The request text for each part is put together by the same program.
+- **No model-written training examples.** A seeded generator builds every training part: it picks the features and sizes, writes the code, compiles it and runs the print checks on it. The request text for each part is put together by the same program, from short word lists. Every row records the generator commit and seed. How it works is in [datagen/](datagen/README.md).
 - **Training runs on a MacBook** (M4, 16 GB) with LoRA.
 - **Results will be measured, not claimed.** The same held-out prompts go to the untrained model, the fine-tuned model and Gemini, scored by code: does it compile, does it pass the print checks, are the sizes right. The numbers will be published here, including the ones that are not flattering.
 

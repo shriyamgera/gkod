@@ -1,0 +1,22 @@
+{
+  "name": "@gkod/datagen",
+  "private": true,
+  "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "bin": {
+    "gkod-datagen": "bin/gkod-datagen.mjs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@gkod/checks": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.10",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.2"
+  }
+}
