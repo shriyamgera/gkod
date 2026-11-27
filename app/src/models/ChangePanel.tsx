@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { type EngineProblem, engineSettings, gemini, keyStore, makePart } from '../engine';
-import { KeyPanel } from '../engine-ui/KeyPanel';
-import { otherModel } from '../engine-ui/rules';
+import {
+  currentEngine,
+  type EngineId,
+  type EngineProblem,
+  engineReady,
+  ENGINES,
+  engineSettings,
+  forgetTurnedDown,
+  makePart,
+  needsCredential,
+} from '../engine';
+import { CredentialPanel } from '../engine-ui/CredentialPanel';
+import { CLAUDE_SLOW_NOTE, otherModel } from '../engine-ui/rules';
 import { type Shown, shownOf } from '../part/liveCompile';
 import { WarningIcon } from '../part/LiveStatus';
 import { CANCEL_MESSAGE, compile, CRASH_MESSAGE, LOAD_MESSAGE } from '../scad/client';
@@ -12,25 +22,30 @@ import { modelName, versionLabel } from './names';
 // failures of the compiler itself, which get no repair request
 const BROWSER_FAILURES = [CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE];
 
-export type Changed = { code: string; shown: Shown; model: string; label: string };
+// session: the Claude Code session that made the change, kept on the part
+export type Changed = { code: string; shown: Shown; model: string; label: string; session?: string };
 
-type Failure = { problem: EngineProblem | 'compile'; message: string; model: string };
+type Failure = { problem: EngineProblem | 'compile'; message: string; model: string; engine: EngineId };
+type KeyAsk = { engine: EngineId; message?: string };
 
 type Props = {
   // the code of the version on screen, with any slider values written into it
   currentCode: () => string;
   onChanged: (changed: Changed) => number;
   onBusy: (busy: boolean) => void;
+  // the Claude Code session that last worked on this part, continued when Claude Code makes the change
+  session?: string;
 };
 
 // Sends a typed change and the current code to the engine. The new code only becomes a version once it
 // compiles; until then, and on any failure, the version on screen stays as it is.
-export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
+export function ChangePanel({ currentCode, onChanged, onBusy, session }: Props) {
   const [text, setText] = useState('');
   const [stage, setStage] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [keyAsk, setKeyAsk] = useState<{ message?: string } | null>(null);
+  const [keyAsk, setKeyAsk] = useState<KeyAsk | null>(null);
+  const [slow, setSlow] = useState(false);
   const asked = useRef('');
   const running = useRef<AbortController | null>(null);
   const field = useRef<HTMLInputElement>(null);
@@ -57,14 +72,15 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
   function submit() {
     const instruction = instructionOrNote();
     if (!instruction) return;
-    if (keyStore.get()) void run(instruction);
-    else askForKey();
+    const { id } = currentEngine();
+    if (engineReady(id)) void run(instruction);
+    else askForKey(id);
   }
 
-  function askForKey(message?: string) {
+  function askForKey(engine: EngineId, message?: string) {
     setFailure(null);
     setNote('');
-    setKeyAsk(message ? { message } : {});
+    setKeyAsk(message ? { engine, message } : { engine });
   }
 
   // The field may have changed while the key panel was open, so it is read again.
@@ -81,15 +97,19 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
     field.current?.focus();
   }
 
-  async function run(instruction: string, model = engineSettings.model()) {
+  async function run(instruction: string, chosenModel?: string) {
     running.current?.abort();
     const controller = new AbortController();
     running.current = controller;
     asked.current = instruction;
+    const engine = currentEngine();
+    const model = chosenModel ?? engineSettings.model(engine.id);
+    const isClaude = engine.id === 'claude-code';
     setKeyAsk(null);
     setFailure(null);
     setNote('');
-    setStage('Writing the change');
+    setSlow(isClaude);
+    setStage(isClaude ? 'Asking Claude Code on this Mac' : 'Writing the change');
     onBusy(true);
 
     let compiles = 0;
@@ -104,29 +124,38 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
     };
 
     const request = { kind: 'edit' as const, instruction, code: currentCode() };
-    const result = await makePart(gemini, request, { model, signal: controller.signal, compileFn });
+    const onProgress = (step: string) => {
+      if (running.current === controller) setStage(step);
+    };
+    // Claude Code continues the session that made the part, so it knows how the part came about
+    const resume = isClaude ? session : undefined;
+    const result = await makePart(engine, request, { model, signal: controller.signal, compileFn, onProgress, session: resume });
     if (running.current !== controller) return;
     running.current = null;
     setStage(null);
+    setSlow(false);
     onBusy(false);
 
     if (result.ok) {
       const label = versionLabel(instruction);
-      const v = onChanged({ code: result.code, shown: shownOf(result.result), model: result.model, label });
+      const v = onChanged({ code: result.code, shown: shownOf(result.result), model: result.model, label, session: result.session });
       setText('');
       const seconds = (result.ms / 1000).toFixed(1);
       // a no-break space keeps the number and its unit on one line
-      setNote(`Version ${v} ready. ${modelName(result.model, gemini.models)} took ${seconds}\u00a0s.`);
+      const same = resume && result.session === resume ? ' in the same session' : '';
+      setNote(`Version ${v} ready. ${modelName(result.model, engine.models)} took ${seconds}\u00a0s${same}.`);
       return;
     }
     if (result.problem === 'cancelled') {
       setNote('Stopped. The part is as it was.');
-    } else if (result.problem === 'no-key' || result.problem === 'bad-key') {
-      // a key Google turned down is not kept, so it is not sent again
-      if (result.problem === 'bad-key') keyStore.forget();
-      askForKey(result.problem === 'bad-key' ? result.message : undefined);
+    } else if (needsCredential(result.problem)) {
+      // a key or code that was turned down is not kept, so it is not sent again
+      forgetTurnedDown(result.problem);
+      const turnedDown = result.problem === 'bad-key' || result.problem === 'bad-pairing';
+      askForKey(engine.id, turnedDown ? result.message : undefined);
     } else {
-      setFailure({ problem: result.problem, message: result.message, model: result.model ?? model });
+      forgetTurnedDown(result.problem);
+      setFailure({ problem: result.problem, message: result.message, model: result.model ?? model, engine: engine.id });
     }
   }
 
@@ -139,13 +168,13 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
   function tryAgain(model?: string) {
     // the problem box is about to go, so focus moves to the field first
     field.current?.focus();
-    if (model) engineSettings.setModel(model);
+    if (model) engineSettings.setModel(model, failure?.engine);
     if (asked.current) void run(asked.current, model);
   }
 
   const busy = stage !== null;
   // A limit is per model, so another may still work. Busy is only reported once every model was tried.
-  const other = failure?.problem === 'rate-limit' ? otherModel(gemini.models, failure.model) : undefined;
+  const other = failure?.problem === 'rate-limit' ? otherModel(ENGINES[failure.engine].models, failure.model) : undefined;
 
   return (
     <ChangeBox value={text} onChange={setText} onSubmit={submit} busy={busy} inputRef={field}>
@@ -166,24 +195,15 @@ export function ChangePanel({ currentCode, onChanged, onBusy }: Props) {
           </button>
         )}
       </div>
+      {stage && slow && <p className="muted make-slow">{CLAUDE_SLOW_NOTE}</p>}
 
-      {keyAsk && (
-        <section className="key-inline" aria-label="Gemini key">
-          <KeyPanel
-            title="GKod uses your own free Gemini key"
-            message={keyAsk.message}
-            autoFocus
-            onKeySet={keySet}
-            onCancel={cancelKey}
-          />
-        </section>
-      )}
+      {keyAsk && <CredentialPanel engine={keyAsk.engine} message={keyAsk.message} onSet={keySet} onCancel={cancelKey} />}
 
       {failure && (
         <div className="make-problem" role="alert">
           <h2>
             <WarningIcon />
-            {failure.problem === 'busy' ? 'Gemini is busy' : 'Could not change the part'}
+            {failure.problem === 'busy' ? `${ENGINES[failure.engine].label} is busy` : 'Could not change the part'}
           </h2>
           <p>{failure.message}</p>
           <p className="muted">The part is as it was.</p>

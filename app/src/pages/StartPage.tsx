@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { type EngineProblem, type EngineRequest, engineSettings, gemini, type ImageInput, keyStore, makePart } from '../engine';
-import { KeyPanel } from '../engine-ui/KeyPanel';
+import {
+  currentEngine,
+  type EngineId,
+  type EngineProblem,
+  engineReady,
+  type EngineRequest,
+  ENGINES,
+  engineSettings,
+  forgetTurnedDown,
+  type ImageInput,
+  makePart,
+  needsCredential,
+} from '../engine';
+import { CredentialPanel } from '../engine-ui/CredentialPanel';
 import { PromptBox } from '../engine-ui/PromptBox';
-import { chips, otherModel, requestText, titleFromRequest } from '../engine-ui/rules';
+import { chips, CLAUDE_SLOW_NOTE, otherModel, requestText, titleFromRequest } from '../engine-ui/rules';
 import { countSizes, examples } from '../examples';
 import { compiledModels } from '../models/compiled';
 import { modelStore } from '../models/store';
@@ -16,14 +28,17 @@ import { showExamplesIfAsked } from '../shell/Header';
 const BROWSER_FAILURES = [CANCEL_MESSAGE, CRASH_MESSAGE, LOAD_MESSAGE];
 
 type Pending = { request: EngineRequest; title: string; text: string };
-type Failure = { problem: EngineProblem | 'compile'; message: string; model: string };
+type Failure = { problem: EngineProblem | 'compile'; message: string; model: string; engine: EngineId };
+type KeyAsk = { engine: EngineId; message?: string };
 
 export function StartPage() {
   const [prompt, setPrompt] = useState('');
   const [image, setImage] = useState<ImageInput | null>(null);
   const [readingPhoto, setReadingPhoto] = useState(false);
-  const [keyAsk, setKeyAsk] = useState<{ message?: string } | null>(null);
+  const [keyAsk, setKeyAsk] = useState<KeyAsk | null>(null);
   const [stage, setStage] = useState<string | null>(null);
+  // Claude Code takes a minute or two, which the status line says
+  const [slow, setSlow] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [note, setNote] = useState('');
   const running = useRef<AbortController | null>(null);
@@ -63,14 +78,15 @@ export function StartPage() {
   function make() {
     const job = jobOrNote();
     if (!job) return;
-    if (keyStore.get()) void run(job);
-    else askForKey();
+    const { id } = currentEngine();
+    if (engineReady(id)) void run(job);
+    else askForKey(id);
   }
 
-  function askForKey(message?: string) {
+  function askForKey(engine: EngineId, message?: string) {
     setFailure(null);
     setNote('');
-    setKeyAsk(message ? { message } : {});
+    setKeyAsk(message ? { engine, message } : { engine });
   }
 
   // The prompt or picture may have changed while the key panel was open, so the request is read again.
@@ -85,14 +101,18 @@ export function StartPage() {
     makeButton.current?.focus();
   }
 
-  async function run(job: Pending, model = engineSettings.model()) {
+  async function run(job: Pending, chosenModel?: string) {
     running.current?.abort();
     const controller = new AbortController();
     running.current = controller;
+    const engine = currentEngine();
+    const model = chosenModel ?? engineSettings.model(engine.id);
+    const isClaude = engine.id === 'claude-code';
     setKeyAsk(null);
     setFailure(null);
     setNote('');
-    setStage('Writing the code');
+    setSlow(isClaude);
+    setStage(isClaude ? 'Asking Claude Code on this Mac' : 'Writing the code');
     makeButton.current?.focus();
 
     let compiles = 0;
@@ -106,10 +126,15 @@ export function StartPage() {
       return result;
     };
 
-    const result = await makePart(gemini, job.request, { model, signal: controller.signal, compileFn });
+    // steps that arrive after Stop or a newer request are not shown
+    const onProgress = (step: string) => {
+      if (running.current === controller) setStage(step);
+    };
+    const result = await makePart(engine, job.request, { model, signal: controller.signal, compileFn, onProgress });
     if (running.current !== controller) return;
     running.current = null;
     setStage(null);
+    setSlow(false);
 
     if (result.ok) {
       compiledModels.set(result.code, shownOf(result.result));
@@ -119,18 +144,21 @@ export function StartPage() {
         code: result.code,
         label: 'First version',
         model: result.model,
+        session: result.session,
       });
       window.location.hash = links.model(saved.id);
       return;
     }
     if (result.problem === 'cancelled') {
       setNote('Stopped.');
-    } else if (result.problem === 'no-key' || result.problem === 'bad-key') {
-      // a key Google turned down is not kept, so it is not sent again
-      if (result.problem === 'bad-key') keyStore.forget();
-      askForKey(result.problem === 'bad-key' ? result.message : undefined);
+    } else if (needsCredential(result.problem)) {
+      // a key or code that was turned down is not kept, so it is not sent again
+      forgetTurnedDown(result.problem);
+      const turnedDown = result.problem === 'bad-key' || result.problem === 'bad-pairing';
+      askForKey(engine.id, turnedDown ? result.message : undefined);
     } else {
-      setFailure({ problem: result.problem, message: result.message, model: result.model ?? model });
+      forgetTurnedDown(result.problem);
+      setFailure({ problem: result.problem, message: result.message, model: result.model ?? model, engine: engine.id });
     }
   }
 
@@ -141,7 +169,7 @@ export function StartPage() {
   }
 
   function tryOther(modelId: string) {
-    engineSettings.setModel(modelId);
+    engineSettings.setModel(modelId, failure?.engine);
     const job = jobOrNote();
     if (job) void run(job, modelId);
   }
@@ -157,7 +185,7 @@ export function StartPage() {
 
   const busy = stage !== null;
   // A limit is per model, so another may still work. Busy is only reported once every model was tried.
-  const other = failure?.problem === 'rate-limit' ? otherModel(gemini.models, failure.model) : undefined;
+  const other = failure?.problem === 'rate-limit' ? otherModel(ENGINES[failure.engine].models, failure.model) : undefined;
 
   return (
     <div className="start">
@@ -178,11 +206,7 @@ export function StartPage() {
           buttonRef={makeButton}
         />
 
-        {keyAsk && (
-          <section className="key-inline" aria-label="Gemini key">
-            <KeyPanel title="GKod uses your own free Gemini key" message={keyAsk.message} autoFocus onKeySet={keySet} onCancel={cancelKey} />
-          </section>
-        )}
+        {keyAsk && <CredentialPanel engine={keyAsk.engine} message={keyAsk.message} onSet={keySet} onCancel={cancelKey} />}
 
         <div className={stage || note ? 'make-status has-text' : 'make-status'}>
           <p role="status">
@@ -201,6 +225,7 @@ export function StartPage() {
             </button>
           )}
         </div>
+        {stage && slow && <p className="muted make-slow">{CLAUDE_SLOW_NOTE}</p>}
 
         {failure && (
           <div className="make-problem" role="alert">
@@ -209,7 +234,7 @@ export function StartPage() {
                 <path d="M10 1.5 19 18H1z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
                 <path d="M10 7.5v5M10 14.5v2" stroke="currentColor" strokeWidth="1.8" />
               </svg>
-              {failure.problem === 'busy' ? 'Gemini is busy' : 'Could not make the part'}
+              {failure.problem === 'busy' ? `${ENGINES[failure.engine].label} is busy` : 'Could not make the part'}
             </h2>
             <p>{failure.message}</p>
             <div className="make-problem-actions">

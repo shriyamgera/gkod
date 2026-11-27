@@ -1,11 +1,25 @@
-import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useSyncExternalStore } from 'react';
-import { engineSettings, gemini, keyStore } from '../engine';
+import { type KeyboardEvent, type MouseEvent, type RefObject, useEffect, useId, useRef } from 'react';
+import {
+  bridgeStatus,
+  type BridgeState,
+  ENGINE_CHOICES,
+  engineReady,
+  ENGINES,
+  type EngineId,
+  engineSettings,
+  useBridgeStatus,
+  useEngineChoice,
+  useEngineModel,
+} from '../engine';
 import { KeyPanel } from './KeyPanel';
+import { PairingPanel } from './PairingPanel';
+import { bridgeProblem } from './rules';
 import './engine-ui.css';
 
 type Props = { open: boolean; onClose: () => void };
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="radio"]), input[type="radio"]:checked';
+const CODE_FIELD = '.key-panel input:not([type="checkbox"])';
 
 export function EngineDialog({ open, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -19,9 +33,11 @@ export function EngineDialog({ open, onClose }: Props) {
     if (open && !element.open) {
       opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       element.showModal();
-      // with no key yet the field is what the visitor came for; otherwise the title is read first
-      const field = element.querySelector<HTMLInputElement>('input[type="password"]');
-      if (!keyStore.get() && field) field.focus();
+      // on this computer's own pages, or once found before, the bridge is looked for at once
+      if (bridgeStatus.mayLookOnItsOwn() && bridgeStatus.snapshot().status !== 'checking') void bridgeStatus.check();
+      // with no key or code yet the field is what the visitor came for; otherwise the title is read first
+      const field = element.querySelector<HTMLInputElement>(CODE_FIELD);
+      if (!engineReady(engineSettings.engine()) && field) field.focus();
       else heading.current?.focus();
     } else if (!open && element.open) {
       element.close();
@@ -77,21 +93,129 @@ export function EngineDialog({ open, onClose }: Props) {
               Close
             </button>
           </div>
-          <KeyPanel title="GKod uses your own free Gemini key" titleAs="h3" />
-          <ModelMenu />
+          <EngineChoice dialog={dialog} />
         </div>
       )}
     </dialog>
   );
 }
 
-function ModelMenu() {
-  const chosen = useSyncExternalStore(engineSettings.subscribe, engineSettings.model);
+function EngineChoice({ dialog }: { dialog: RefObject<HTMLDialogElement | null> }) {
+  const engine = useEngineChoice();
+  const bridge = useBridgeStatus();
+  const id = useId();
+  // Claude Code is offered once the bridge answers on this computer (or while it is the engine in use)
+  const shown = ENGINE_CHOICES.filter((choice) => choice.id === 'gemini' || bridge.status === 'found' || choice.id === engine);
+
+  // picking an engine that still needs a key or a code goes straight to its field, once that field is on the page
+  const focusField = useRef(false);
+  useEffect(() => {
+    if (!focusField.current) return;
+    focusField.current = false;
+    dialog.current?.querySelector<HTMLInputElement>(CODE_FIELD)?.focus();
+  }, [engine, dialog]);
+
+  function choose(next: EngineId) {
+    focusField.current = !engineReady(next);
+    engineSettings.setEngine(next);
+  }
+
+  return (
+    <>
+      {shown.length > 1 && (
+        <fieldset className="model-menu engine-menu">
+          <legend>Engine</legend>
+          {shown.map((choice) => (
+            <div className="model-option" key={choice.id}>
+              <input
+                type="radio"
+                id={`${id}-${choice.id}`}
+                name={`${id}-engine`}
+                value={choice.id}
+                checked={engine === choice.id}
+                onChange={() => choose(choice.id)}
+                aria-describedby={`${id}-${choice.id}-note`}
+              />
+              <label htmlFor={`${id}-${choice.id}`}>{choice.label}</label>
+              <p id={`${id}-${choice.id}-note`} className="muted model-note">
+                {choice.id === 'gemini'
+                  ? 'Your own free key, sent only to Google.'
+                  : 'Your own Claude Code, through the GKod bridge running on this Mac.'}
+              </p>
+            </div>
+          ))}
+        </fieldset>
+      )}
+      <BridgeLine bridge={bridge} engine={engine} />
+      {engine === 'claude-code' ? (
+        <PairingPanel title="Pair with the bridge on this Mac" titleAs="h3" />
+      ) : (
+        <KeyPanel title="GKod uses your own free Gemini key" titleAs="h3" />
+      )}
+      <ModelMenu engine={engine} />
+      <BridgeLook bridge={bridge} />
+    </>
+  );
+}
+
+// What is known about the bridge.
+function BridgeLine({ bridge, engine }: { bridge: BridgeState; engine: EngineId }) {
+  // when the visitor pressed "Look for", the button below says it is looking instead
+  if (bridge.status === 'checking' && bridgeStatus.mayLookOnItsOwn()) {
+    return (
+      <p role="status" className="muted bridge-line">
+        Looking for the GKod bridge on this computer…
+      </p>
+    );
+  }
+  if (bridge.status === 'found') {
+    const { health } = bridge;
+    if (engine !== 'claude-code') return <p role="status" className="visually-hidden">GKod bridge found on this computer</p>;
+    const problem = bridgeProblem(health);
+    return (
+      <p role="status" className={problem ? 'key-message bridge-line' : 'muted bridge-line'}>
+        {problem ?? `Bridge found: Claude Code ${health.claudeVersion ?? ''}${health.busy ? ', busy with another part' : ''}.`}
+      </p>
+    );
+  }
+  return null;
+}
+
+// On the public site, a quiet button at the end to look for the bridge; the page never looks on its own there.
+// Visitors never see it: only the owner, who opens the site with ?bridge (see the README), or once found before.
+function BridgeLook({ bridge }: { bridge: BridgeState }) {
+  if (bridge.status === 'found') return null;
+  if (!bridgeStatus.mayOffer()) return null;
+  if (bridgeStatus.mayLookOnItsOwn() && bridge.status !== 'absent') return null;
+  const checking = bridge.status === 'checking';
+  return (
+    <div className="bridge-look">
+      <button
+        type="button"
+        className="eu-quiet"
+        aria-disabled={checking ? true : undefined}
+        onClick={checking ? undefined : () => void bridgeStatus.check()}
+      >
+        Look for Claude Code on this Mac
+      </button>
+      <p role="status" className="muted">
+        {checking
+          ? 'Looking for the GKod bridge on this computer…'
+          : bridge.status === 'absent'
+            ? 'No GKod bridge answered on this computer. It only runs on the owner’s own Mac.'
+            : 'Only with the GKod bridge running on this computer. Your browser may ask to let this page reach apps on this device.'}
+      </p>
+    </div>
+  );
+}
+
+function ModelMenu({ engine }: { engine: EngineId }) {
+  const chosen = useEngineModel(engine);
   const id = useId();
   return (
     <fieldset className="model-menu">
       <legend>Model</legend>
-      {gemini.models.map((model) => (
+      {ENGINES[engine].models.map((model) => (
         <div className="model-option" key={model.id}>
           <input
             type="radio"
@@ -99,7 +223,7 @@ function ModelMenu() {
             name={`${id}-model`}
             value={model.id}
             checked={chosen === model.id}
-            onChange={() => engineSettings.setModel(model.id)}
+            onChange={() => engineSettings.setModel(model.id, engine)}
             aria-describedby={model.note ? `${id}-${model.id}-note` : undefined}
           />
           <label htmlFor={`${id}-${model.id}`}>
@@ -113,7 +237,11 @@ function ModelMenu() {
           )}
         </div>
       ))}
-      <p className="muted model-fallback">If the chosen model is busy, the next one on the list is tried.</p>
+      <p className="muted model-fallback">
+        {engine === 'gemini'
+          ? 'If the chosen model is busy, the next one on the list is tried.'
+          : 'Uses your own Claude plan. Answers are checked here like any other.'}
+      </p>
     </fieldset>
   );
 }

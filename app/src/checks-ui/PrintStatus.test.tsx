@@ -68,9 +68,21 @@ describe('PrintStatus', () => {
   });
 
   it('asks for the key in place when there is none', () => {
-    const html = render({ keyAsk: {} });
+    const html = render({ keyAsk: { engine: 'gemini' } });
     expect(html).toContain('aria-label="Gemini key"');
     expect(text(html)).toContain('Fix it for me uses your own free Gemini key');
+  });
+
+  it('asks for the pairing code instead when Claude Code is the engine', () => {
+    const html = render({ keyAsk: { engine: 'claude-code' } });
+    expect(html).toContain('aria-label="Pairing code"');
+    expect(text(html)).toContain('Pair with the bridge on this Mac');
+    expect(html).not.toContain('Gemini key');
+  });
+
+  it('names the engine that was busy', () => {
+    const html = render({ failure: { problem: 'busy', message: 'Claude Code is already working on another part.', engineLabel: 'Claude Code' } });
+    expect(text(html)).toContain('Claude Code is busy');
   });
 
   it('names a failure, says the part is unchanged and offers to try again', () => {

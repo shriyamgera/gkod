@@ -75,12 +75,13 @@ function PartScreen({ example }: { example: Example }) {
     fixer.start({
       instruction: fixRequest(report),
       code: start,
-      keep: ({ code, shown: made, model }) => {
+      keep: ({ code, shown: made, model, session }) => {
         const saved = modelStore.create({
           title: `${example.name} (fixed)`,
           request: `${example.name} example`,
           code: start,
           label: 'From the example',
+          session,
         });
         if (startShown) compiledModels.set(start, startShown);
         compiledModels.set(code, made);

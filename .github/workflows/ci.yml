@@ -84,12 +84,19 @@ jobs:
           cache: pip
           cache-dependency-path: |
             mcp/requirements-dev.txt
+            bridge/requirements-dev.txt
             ml/requirements-dev.txt
 
       - name: Test the MCP server
         run: |
           python -m pip install -r mcp/requirements-dev.txt -e mcp
           python -m pytest -q mcp
+
+      # The bridge's tests use a fake claude command, so no Claude Code login or plan is needed here.
+      - name: Test the Claude Code bridge
+        run: |
+          python -m pip install -r bridge/requirements-dev.txt -e bridge
+          python -m pytest -q bridge
 
       # The benchmark harness: the scorer on hand-made meshes and code, the extractor, the intervals, resuming a row
       # and the closed test split. The frozen sets are not in the repo and mlx runs only on Apple chips, so the tests

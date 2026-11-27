@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gkod-bridge"
+version = "0.1.0"
+description = "Lets the GKod site use Claude Code on the owner's own Mac"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.12"
+dependencies = ["fastapi==0.165.0", "uvicorn==0.54.0"]
+
+[tool.setuptools]
+packages = ["gkod_bridge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["real: runs the real claude command (set GKOD_REAL_CLAUDE=1)"]

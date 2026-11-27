@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 export const STORAGE_KEY = 'gkod.geminiKey';
+export const PAIRING_STORAGE_KEY = 'gkod.bridgePairing';
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
@@ -16,7 +17,8 @@ function attempt<T>(action: () => T, fallback: T): T {
 }
 
 // The key lives in memory. Only when the visitor ticks "remember" is it also written to storage.
-export function createKeyStore(getStorage: () => StorageLike | null) {
+// The same store keeps the Claude Code bridge's pairing code, under its own storage key.
+export function createKeyStore(getStorage: () => StorageLike | null, storageKey = STORAGE_KEY) {
   const listeners = new Set<() => void>();
   let snapshot: Snapshot | null = null;
 
@@ -24,7 +26,7 @@ export function createKeyStore(getStorage: () => StorageLike | null) {
 
   function current(): Snapshot {
     if (!snapshot) {
-      const saved = attempt(() => storage()?.getItem(STORAGE_KEY) ?? null, null);
+      const saved = attempt(() => storage()?.getItem(storageKey) ?? null, null);
       snapshot = saved ? { key: saved, remembered: true } : { key: null, remembered: false };
     }
     return snapshot;
@@ -36,7 +38,7 @@ export function createKeyStore(getStorage: () => StorageLike | null) {
   }
 
   function forget() {
-    attempt(() => storage()?.removeItem(STORAGE_KEY), undefined);
+    attempt(() => storage()?.removeItem(storageKey), undefined);
     update({ key: null, remembered: false });
   }
 
@@ -47,11 +49,11 @@ export function createKeyStore(getStorage: () => StorageLike | null) {
     if (remember) {
       remembered = attempt(() => {
         const target = storage();
-        target?.setItem(STORAGE_KEY, clean);
+        target?.setItem(storageKey, clean);
         return target !== null;
       }, false);
     } else {
-      attempt(() => storage()?.removeItem(STORAGE_KEY), undefined);
+      attempt(() => storage()?.removeItem(storageKey), undefined);
     }
     update({ key: clean, remembered });
   }
@@ -71,8 +73,26 @@ export function createKeyStore(getStorage: () => StorageLike | null) {
   };
 }
 
-export const keyStore = createKeyStore(() => (typeof window === 'undefined' ? null : window.localStorage));
+const local = () => (typeof window === 'undefined' ? null : window.localStorage);
+const tab = () => (typeof window === 'undefined' ? null : window.sessionStorage);
+
+export const keyStore = createKeyStore(local);
+
+// The pairing code is never saved on the device. Every page on the same web address shares localStorage and passes
+// the bridge's Origin check: all of the account's GitHub Pages sites, or any project served on the same localhost
+// port. So "remember" keeps it in this tab's own storage only, through reloads, until the tab is closed. A code an
+// earlier version saved on the device is taken out.
+export function createPairingStore(getTab: () => StorageLike | null, getShared: () => StorageLike | null) {
+  attempt(() => getShared()?.removeItem(PAIRING_STORAGE_KEY), undefined);
+  return createKeyStore(getTab, PAIRING_STORAGE_KEY);
+}
+
+export const pairingStore = createPairingStore(tab, local);
 
 export function useGeminiKey(): { key: string | null; remembered: boolean } {
   return useSyncExternalStore(keyStore.subscribe, keyStore.snapshot, keyStore.snapshot);
+}
+
+export function usePairingCode(): { key: string | null; remembered: boolean } {
+  return useSyncExternalStore(pairingStore.subscribe, pairingStore.snapshot, pairingStore.snapshot);
 }

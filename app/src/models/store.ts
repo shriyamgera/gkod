@@ -5,10 +5,14 @@ export type ModelVersion = { v: number; code: string; label: string; at: number;
 
 // current is the v of the version on screen. Versions are never dropped: a change made while an older
 // version is shown is added at the end, so undo and redo simply step through the list.
-export type SavedModel = { id: string; title: string; request: string; versions: ModelVersion[]; current: number };
+// session: the latest Claude Code session that worked on the part, so the next change with Claude Code continues it
+export type SavedModel = { id: string; title: string; request: string; versions: ModelVersion[]; current: number; session?: string };
 
-export type NewModel = { title: string; request: string; code: string; label: string; model?: string };
-export type NewVersion = { code: string; label: string; model?: string };
+export type NewModel = { title: string; request: string; code: string; label: string; model?: string; session?: string };
+export type NewVersion = { code: string; label: string; model?: string; session?: string };
+
+const SESSION = /^[0-9a-f-]{36}$/i;
+const sessionOf = (value: unknown) => (isText(value) && SESSION.test(value) ? { session: value } : {});
 
 export const STORAGE_KEY = 'gkod.models';
 const MAX_MODELS = 30;
@@ -56,7 +60,7 @@ function readModel(value: unknown): SavedModel | null {
   const versions = m.versions.map(readVersion);
   if (versions.length === 0 || versions.some((version, i) => !version || version.v !== i + 1)) return null;
   const current = typeof m.current === 'number' && m.current >= 1 && m.current <= versions.length ? m.current : versions.length;
-  return { id: m.id, title: m.title, request: m.request, versions: versions as ModelVersion[], current };
+  return { id: m.id, title: m.title, request: m.request, versions: versions as ModelVersion[], current, ...sessionOf(m.session) };
 }
 
 // Parts made in this tab. They are kept in memory and copied to sessionStorage, so a reload keeps them
@@ -94,20 +98,20 @@ export function createModelStore({ getStorage, now = Date.now, makeId = randomId
     return all().find((model) => model.id === id);
   }
 
-  function create({ title, request, code, label, model }: NewModel): SavedModel {
+  function create({ title, request, code, label, model, session }: NewModel): SavedModel {
     let id = makeId();
     while (get(id)) id = makeId();
     const first: ModelVersion = { v: 1, code, label, at: now(), ...(model ? { model } : {}) };
-    const saved: SavedModel = { id, title, request, versions: [first], current: 1 };
+    const saved: SavedModel = { id, title, request, versions: [first], current: 1, ...sessionOf(session) };
     commit([saved, ...all()].slice(0, MAX_MODELS));
     return saved;
   }
 
-  function addVersion(id: string, { code, label, model }: NewVersion): SavedModel | undefined {
+  function addVersion(id: string, { code, label, model, session }: NewVersion): SavedModel | undefined {
     return replace(id, (saved) => {
       const v = saved.versions.length + 1;
       const version: ModelVersion = { v, code, label, at: now(), ...(model ? { model } : {}) };
-      return { ...saved, versions: [...saved.versions, version], current: v };
+      return { ...saved, versions: [...saved.versions, version], current: v, ...sessionOf(session) };
     });
   }
 

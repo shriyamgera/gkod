@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bridgeProblem,
   chips,
   isSubmitKey,
   keyHint,
   keyProblem,
   otherModel,
   NOT_REMEMBERED,
+  NOT_REMEMBERED_CODE,
+  pairingProblem,
+  pairingRememberMessage,
   PHOTO_ONLY_REQUEST,
   rememberMessage,
   requestText,
@@ -136,5 +140,46 @@ describe('rememberMessage', () => {
   it('says what a click on the box did', () => {
     expect(rememberMessage('box', true, true)).toBe('Key remembered on this device');
     expect(rememberMessage('box', false, false)).toBe('Key kept for this tab only');
+  });
+});
+
+describe('pairingProblem', () => {
+  it('accepts a code in any case, with or without dashes and spaces', () => {
+    expect(pairingProblem('ABCD-EFGH-JKMN')).toBeNull();
+    expect(pairingProblem(' abcd efgh jkmn ')).toBeNull();
+    expect(pairingProblem('ABCDEFGHJKMN')).toBeNull();
+  });
+
+  it('says what is wrong with anything else', () => {
+    expect(pairingProblem('')).toBe('Type the pairing code first.');
+    expect(pairingProblem('ABCD-EFGH')).toContain('12 letters and digits');
+    expect(pairingProblem('ABCD-EFGH-JKM0')).toContain('not a pairing code');
+  });
+});
+
+describe('pairingRememberMessage', () => {
+  it('never says the code is saved on the device', () => {
+    expect(pairingRememberMessage('new-code', true, true)).toBe('Code set and kept until you close this tab');
+    expect(pairingRememberMessage('new-code', false, false)).toBe('Code set until the page reloads');
+    expect(pairingRememberMessage('box', true, true)).toBe('Code kept until you close this tab');
+    expect(pairingRememberMessage('box', true, false)).toBe(NOT_REMEMBERED_CODE);
+    for (const change of ['new-code', 'box'] as const) {
+      for (const remembered of [true, false]) expect(pairingRememberMessage(change, true, remembered)).not.toContain('device');
+    }
+  });
+});
+
+describe('bridgeProblem', () => {
+  const ready = { claudeFound: true, claudeVersion: '2.1.276', loggedIn: true, toolsFound: true, busy: false };
+
+  it('is nothing when the bridge can make parts', () => {
+    expect(bridgeProblem(ready)).toBeNull();
+    expect(bridgeProblem({ ...ready, loggedIn: null, toolsFound: null })).toBeNull();
+  });
+
+  it('says what is missing, the most basic first', () => {
+    expect(bridgeProblem({ ...ready, claudeFound: false, toolsFound: false })).toContain('cannot find Claude Code');
+    expect(bridgeProblem({ ...ready, loggedIn: false })).toContain('not logged in');
+    expect(bridgeProblem({ ...ready, toolsFound: false })).toContain('GKod’s tools');
   });
 });

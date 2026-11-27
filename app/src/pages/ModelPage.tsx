@@ -106,10 +106,10 @@ function ModelScreen({ model }: { model: SavedModel }) {
   }
 
   // A typed change starts from the version on screen, with the slider values written in.
-  function changed({ code, shown: made, model: by, label }: Changed): number {
+  function changed({ code, shown: made, model: by, label, session }: Changed): number {
     fixer.clear();
     compiledModels.set(code, made);
-    const next = modelStore.addVersion(id, { code, label, model: by });
+    const next = modelStore.addVersion(id, { code, label, model: by, session });
     setValues({});
     return next?.current ?? version.v;
   }
@@ -122,9 +122,10 @@ function ModelScreen({ model }: { model: SavedModel }) {
     fixer.start({
       instruction: fixRequest(report),
       code: withValues(version.code, values),
-      keep: ({ code, shown: made, model: by }) => {
+      session: model.session,
+      keep: ({ code, shown: made, model: by, session }) => {
         compiledModels.set(code, made);
-        const next = modelStore.addVersion(id, { code, label: fixLabel(report, made.checks), model: by });
+        const next = modelStore.addVersion(id, { code, label: fixLabel(report, made.checks), model: by, session });
         setValues({});
         return fixedNote(next?.current ?? from, from, report, made.checks);
       },
@@ -172,7 +173,12 @@ function ModelScreen({ model }: { model: SavedModel }) {
             live={liveLabel}
             mark={viewerMark(report, supports)}
           />
-          <ChangePanel currentCode={() => withValues(version.code, values)} onChanged={changed} onBusy={setChanging} />
+          <ChangePanel
+            currentCode={() => withValues(version.code, values)}
+            onChanged={changed}
+            onBusy={setChanging}
+            session={model.session}
+          />
         </section>
 
         <aside className="part-side" aria-label="Print status, changes, sizes and code">

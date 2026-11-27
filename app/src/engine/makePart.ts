@@ -5,11 +5,15 @@ import type { Engine, EngineProblem, EngineRequest } from './types';
 
 type Compiled = Extract<CompileResult, { ok: true }>;
 
+// session: the Claude Code session that wrote the code, kept on the part so a later change continues it
 export type MakeResult =
-  | { ok: true; code: string; result: Compiled; model: string; attempts: number; ms: number }
+  | { ok: true; code: string; result: Compiled; model: string; attempts: number; ms: number; session?: string; assumptions?: string }
   | { ok: false; message: string; problem: EngineProblem | 'compile'; code?: string; compileError?: string; model?: string };
 
-export const COMPILE_FAILED = 'The code from Gemini would not compile, even after one fix. Try again, or say it another way.';
+export const compileFailed = (label: string) =>
+  `The code from ${label} would not compile, even after one fix. Try again, or say it another way.`;
+
+export const COMPILE_FAILED = compileFailed('Gemini');
 
 const cancelled: MakeResult = { ok: false, problem: 'cancelled', message: MESSAGES.cancelled };
 
@@ -30,22 +34,45 @@ function errorForRepair(error: string): string {
 // These come from the browser, not the code, so a repair would not help.
 const notTheCode = (error: string) => error === LOAD_MESSAGE || error === CRASH_MESSAGE;
 
-type Options = { model?: string; signal?: AbortSignal; compileFn?: typeof compile };
+type Options = {
+  model?: string;
+  signal?: AbortSignal;
+  compileFn?: typeof compile;
+  // Claude Code: the session to continue, and plain steps while it works
+  session?: string;
+  onProgress?: (step: string) => void;
+};
+
+// Only the fields an answer has, so a Gemini result looks exactly as it did before.
+const extras = (answer: { session?: string; assumptions?: string }) => ({
+  ...(answer.session ? { session: answer.session } : {}),
+  ...(answer.assumptions ? { assumptions: answer.assumptions } : {}),
+});
 
 // Asks the engine for code and compiles it. If it does not compile, the error goes back once for a fix.
 export async function makePart(engine: Engine, req: EngineRequest, opts: Options = {}): Promise<MakeResult> {
-  const { signal } = opts;
+  const { signal, onProgress } = opts;
   const compileFn = opts.compileFn ?? compile;
   const began = performance.now();
   const elapsed = () => Math.round(performance.now() - began);
+  const runOpts = (model: string | undefined, session: string | undefined) => ({
+    model,
+    signal,
+    ...(session ? { session } : {}),
+    ...(onProgress ? { onProgress } : {}),
+  });
 
-  const first = await engine.run(req, { model: opts.model, signal });
+  const first = await engine.run(req, runOpts(opts.model, opts.session));
   let code: string;
   let error: string;
   let model = opts.model;
+  // a repair continues the session that wrote the code
+  const session = first.session ?? opts.session;
   if (first.ok) {
     const compiled = await compileFn(first.code, {}, { signal });
-    if (compiled.ok) return { ok: true, code: first.code, result: compiled, model: first.model, attempts: 1, ms: elapsed() };
+    if (compiled.ok) {
+      return { ok: true, code: first.code, result: compiled, model: first.model, attempts: 1, ms: elapsed(), ...extras(first) };
+    }
     if (signal?.aborted || compiled.error === CANCEL_MESSAGE) return cancelled;
     if (notTheCode(compiled.error)) {
       return { ok: false, problem: 'compile', message: compiled.error, code: first.code, compileError: compiled.error };
@@ -64,7 +91,7 @@ export async function makePart(engine: Engine, req: EngineRequest, opts: Options
 
   // the repair goes to the model that wrote the code, so a busy first choice is not asked again
   const repair: EngineRequest = { kind: 'repair', code, error: errorForRepair(error), request: requestText(req) };
-  const second = await engine.run(repair, { model, signal });
+  const second = await engine.run(repair, runOpts(model, session));
   if (!second.ok) {
     const blocked = second.problem === 'blocked';
     return {
@@ -77,8 +104,10 @@ export async function makePart(engine: Engine, req: EngineRequest, opts: Options
     };
   }
   const compiled = await compileFn(second.code, {}, { signal });
-  if (compiled.ok) return { ok: true, code: second.code, result: compiled, model: second.model, attempts: 2, ms: elapsed() };
+  if (compiled.ok) {
+    return { ok: true, code: second.code, result: compiled, model: second.model, attempts: 2, ms: elapsed(), ...extras(second) };
+  }
   if (signal?.aborted || compiled.error === CANCEL_MESSAGE) return cancelled;
-  const message = notTheCode(compiled.error) ? compiled.error : COMPILE_FAILED;
+  const message = notTheCode(compiled.error) ? compiled.error : compileFailed(engine.label);
   return { ok: false, problem: 'compile', message, code: second.code, compileError: compiled.error };
 }

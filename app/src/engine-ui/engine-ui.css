@@ -367,3 +367,26 @@
   margin-top: 6px;
   font-size: 14px;
 }
+
+/* Claude Code on the owner's Mac */
+
+.bridge-line {
+  font-size: 15px;
+}
+
+.bridge-look {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-top: 18px;
+  border-top: var(--rule-soft);
+}
+
+.bridge-look p {
+  font-size: 14px;
+}
+
+.make-slow {
+  font-size: 14px;
+}

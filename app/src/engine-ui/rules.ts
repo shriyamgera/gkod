@@ -1,3 +1,5 @@
+import type { BridgeHealth } from '../engine';
+
 export const chips = ['Phone stand', 'Wall hook with two screw holes', 'Cable clip'];
 
 export const PHOTO_ONLY_REQUEST = 'The part in this picture';
@@ -58,4 +60,38 @@ export function rememberMessage(change: 'new-key' | 'box', asked: boolean, remem
   if (asked && !remembered) return change === 'new-key' ? `Key set. ${NOT_REMEMBERED}` : NOT_REMEMBERED;
   if (change === 'new-key') return remembered ? 'Key set and remembered on this device' : 'Key set for this tab';
   return remembered ? 'Key remembered on this device' : 'Key kept for this tab only';
+}
+
+// The bridge's codes use these letters and digits only (no 0, O, 1, I or L), in three groups of four.
+const PAIRING_LETTERS = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{12}$/;
+
+// Returns a plain message when the typed text cannot be a pairing code, else null.
+export function pairingProblem(input: string): string | null {
+  const plain = input.toUpperCase().replace(/[\s-]/g, '');
+  if (!plain) return 'Type the pairing code first.';
+  if (plain.length !== 12) return 'A pairing code has 12 letters and digits, like ABCD-EFGH-JKMN.';
+  if (!PAIRING_LETTERS.test(plain)) return 'This is not a pairing code. Copy it again from the bridge’s terminal.';
+  return null;
+}
+
+export const NOT_REMEMBERED_CODE = 'This browser would not let the code be kept, so it lasts until the page reloads.';
+
+// The pairing code is never saved on the device; "keep" holds it in this tab until the tab is closed.
+export function pairingRememberMessage(change: 'new-code' | 'box', asked: boolean, remembered: boolean): string {
+  if (asked && !remembered) return change === 'new-code' ? `Code set. ${NOT_REMEMBERED_CODE}` : NOT_REMEMBERED_CODE;
+  if (change === 'new-code') return remembered ? 'Code set and kept until you close this tab' : 'Code set until the page reloads';
+  return remembered ? 'Code kept until you close this tab' : 'Code kept until the page reloads';
+}
+
+// What the status line says while Claude Code works, under the step it is on.
+export const CLAUDE_SLOW_NOTE = 'Claude Code tests the part with GKod’s tools before it answers, so this can take a minute or two.';
+
+// What stops the bridge from making a part, in plain words, or null.
+export function bridgeProblem(health: BridgeHealth): string | null {
+  if (!health.claudeFound) return 'The bridge cannot find Claude Code on this Mac.';
+  if (health.loggedIn === false) return 'Claude Code is not logged in on this Mac. Run claude in a terminal and log in.';
+  if (health.toolsFound === false) {
+    return 'The bridge cannot find GKod’s tools on this Mac, so Claude Code could not test the part. Set up mcp/ (see mcp/README.md) and restart the bridge.';
+  }
+  return null;
 }
