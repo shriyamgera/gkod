@@ -80,12 +80,14 @@ def find_claude(chosen: str | None = None) -> str | None:
     return None
 
 
-def mcp_config(mcp_python: Path) -> str:
-    server = {"type": "stdio", "command": str(mcp_python), "args": ["-m", "gkod_mcp"]}
+def mcp_config(mcp_python: Path, out_dir: Path) -> str:
+    # GKOD_OUT keeps the job's code, STL files and pictures in its own folder, deleted with it, never shared with
+    # other jobs or left in the repository's .gkod-out
+    server = {"type": "stdio", "command": str(mcp_python), "args": ["-m", "gkod_mcp"], "env": {"GKOD_OUT": str(out_dir)}}
     return json.dumps({"mcpServers": {MCP_SERVER_NAME: server}})
 
 
-def build_command(claude: str, mcp_python: Path, model: str | None, resume: str | None) -> list[str]:
+def build_command(claude: str, mcp_python: Path, out_dir: Path, model: str | None, resume: str | None) -> list[str]:
     command = [
         claude,
         "-p",
@@ -101,7 +103,7 @@ def build_command(claude: str, mcp_python: Path, model: str | None, resume: str 
         "",
         "--strict-mcp-config",
         "--mcp-config",
-        mcp_config(mcp_python),
+        mcp_config(mcp_python, out_dir),
         "--tools",
         "",
         "--allowedTools",

@@ -69,6 +69,8 @@ def test_claude_is_started_headless_with_only_the_gkod_tools(bridge):
     assert list(servers) == ["gkod"]
     assert servers["gkod"]["command"] == str(bridge.settings.mcp_python)
     assert servers["gkod"]["args"] == ["-m", "gkod_mcp"]
+    # the tools write the job's code, STL files and pictures into the job's own folder
+    assert servers["gkod"]["env"] == {"GKOD_OUT": str(Path(call["cwd"]) / "out")}
     prompt = value("--system-prompt")
     assert "220 x 220 x 250 mm" in prompt and "compile_part" in prompt and "at most 4" in prompt
     assert "--resume" not in argv
@@ -107,6 +109,9 @@ def test_an_edit_continues_the_session_in_its_own_folder(bridge):
     argv = edit_call["argv"]
     assert argv[argv.index("--resume") + 1] == session
     assert edit_call["cwd"] == create_call["cwd"]
+    # the same session keeps its own files, in its own folder
+    out = [json.loads(c["argv"][c["argv"].index("--mcp-config") + 1])["mcpServers"]["gkod"]["env"]["GKOD_OUT"] for c in (create_call, edit_call)]
+    assert out[0] == out[1] == str(Path(create_call["cwd"]) / "out")
     text = json.loads(edit_call["stdin"])["message"]["content"][0]["text"]
     assert "Change it like this: make it 30 mm long" in text
     assert PART.strip() in text

@@ -53,6 +53,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 
 - `--tools ""` switches off every built-in tool (no shell, files, web or agents), and the allow-list holds only GKod's five MCP tools. `dontAsk` refuses anything else without asking.
 - `--setting-sources ""` loads none of the owner's settings files, so their memory, CLAUDE.md files, hooks and plugins stay out. The owner's normal login still works. (`--bare` would also skip them, but it only accepts an API key, not a Claude plan login.)
+- The MCP server is started with `GKOD_OUT` set to the job folder's `out/`, so the code, STL files and pictures it makes stay in that job's folder, apart from other jobs, and are deleted with it. Nothing goes to the repository's `.gkod-out`.
 - The request goes in on stdin as one stream-json message. A picture goes in as an image block in that message, so no file tool is needed.
 - The system prompt is in [gkod_bridge/prompts.py](gkod_bridge/prompts.py): the site's own code rules (a test keeps them the same as `app/src/engine/prompts.ts`), the Kobra 2 Neo's 220 x 220 x 250 mm build space, and how to test: compile, check, look at the picture, fix, at most 4 rounds. The answer ends with one OpenSCAD code block and one "Assumptions:" line.
 - An edit sends `session_id`, and the job runs `--resume` in the folder that session was made in, so the same Claude Code session continues. Only a session the bridge made itself (one listed in its `sessions.json`) is continued; any other id starts a new session, so a page can never continue another of the owner's Claude Code sessions. If the session is gone, a new one starts (the edit holds the whole current code, so nothing is lost) and the answer says `resumed: false`. Job folders older than 7 days are deleted when the bridge starts.
@@ -68,7 +69,7 @@ The answer is a stream of Server-Sent Events:
 
 ## Privacy and training
 
-The request, the code and any picture go only to the owner's own Claude Code, under the owner's own plan. The bridge keeps no copy beyond the job folder; Claude Code keeps its session as it does for any session. Claude Code's output is shown to the owner only. It is never used to train the GKod model: the training data comes only from GKod's own seeded generator.
+The request, the code and any picture go only to the owner's own Claude Code, under the owner's own plan. The bridge keeps no copy beyond the job folder (the request goes in on stdin, and the tools' files go in the folder's `out/`); Claude Code keeps its session as it does for any session. Claude Code's output is shown to the owner only. It is never used to train the GKod model: the training data comes only from GKod's own seeded generator.
 
 ## Tests
 

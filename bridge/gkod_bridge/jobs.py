@@ -223,7 +223,7 @@ class Job:
         )
 
     async def _once(self, claude: str, folder: Path, resume: str | None) -> Answer | Failure:
-        command = build_command(claude, self.settings.mcp_python, self.req.model, resume)
+        command = build_command(claude, self.settings.mcp_python, folder / "out", self.req.model, resume)
         try:
             proc = await asyncio.create_subprocess_exec(
                 *command,
