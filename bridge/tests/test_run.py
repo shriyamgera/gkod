@@ -113,13 +113,28 @@ def test_an_edit_continues_the_session_in_its_own_folder(bridge):
 
 
 def test_a_lost_session_starts_a_new_one(bridge):
+    run(bridge, CREATE)
     bridge.use({"lines": good_lines(), "on_resume": {"stderr": f"No conversation found with session ID: {SESSION}", "exit": 1}})
     events = run(bridge, {"kind": "edit", "instruction": "make it 30 mm long", "code": PART, "session_id": SESSION})
     assert "Starting a new session" in steps(events)
     event, final = last(events)
     assert event == "final" and final["resumed"] is False
-    resumed, fresh = bridge.fake.calls()
+    _, resumed, fresh = bridge.fake.calls()
     assert "--resume" in resumed["argv"] and "--resume" not in fresh["argv"]
+    assert fresh["cwd"] != resumed["cwd"]
+
+
+def test_a_session_the_bridge_did_not_make_is_never_resumed(bridge):
+    # a well-formed id that is not in the bridge's own sessions.json, such as another Claude Code session
+    other = "abcdefab-cdef-4abc-8def-abcdefabcdef"
+    events = run(bridge, {"kind": "edit", "instruction": "make it 30 mm long", "code": PART, "session_id": other})
+    assert steps(events)[0] == "Starting a new session"
+    event, final = last(events)
+    assert event == "final" and final["resumed"] is False
+    (call,) = bridge.fake.calls()
+    assert "--resume" not in call["argv"]
+    assert other not in " ".join(call["argv"])
+    assert Path(call["cwd"]).resolve().parent == bridge.settings.work_root.resolve()
 
 
 def test_a_picture_goes_in_as_an_image_block(bridge):

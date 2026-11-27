@@ -187,7 +187,13 @@ class Job:
             return
         sessions = self.runner.sessions
         resume = self.req.session_id
-        folder = (sessions.folder(resume) if resume else None) or new_folder(self.settings.work_root)
+        # Only a session this bridge made (one in its own sessions.json) is continued, never another of the
+        # owner's Claude Code sessions. Any other id gets a new session, as when the session is gone.
+        known = sessions.folder(resume) if resume else None
+        if resume and not known:
+            self.emit("progress", {"step": "Starting a new session"})
+            resume = None
+        folder = known or new_folder(self.settings.work_root)
         outcome = await self._once(claude, folder, resume)
         resumed = bool(resume)
         if isinstance(outcome, Failure) and outcome.session_gone and resume:
