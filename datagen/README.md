@@ -43,6 +43,26 @@ node datagen/bin/gkod-datagen.mjs --count 1000 --seed 1 --out data/parts/<name> 
 | hook | wall hook, one outline with a cut front corner and a rounded inside corner, printed on its side; its reach is the full depth from the wall | one or two screw holes, countersunk or not; always at least one |
 | knob | knob, printed face down, sized around its shaft | grip notches, a flat on the shaft hole |
 | clip | cable or pipe clip: a column with a round top on a flat base, printed on its side | two screw holes through the base |
+| washer | thin round spacer, 1 to 2.5 mm thick, around an M3 to M10 clearance hole | a slot from the hole to the edge, so it slides on from the side |
+| shelf | wide L bracket: the base is the shelf, the upright the back | two or three screw holes across the back, clear of the gussets; a gusset at each end |
+| tool_holder | wide L bracket: the base is a shelf for tools | a row of 3 to 8 tool holes of 6 to 12 mm in the shelf, two screw holes in the back, a gusset at each end |
+| slot_plate | flat plate, sharp, rounded or chamfered corners | two slots, one near each end, front to back or side to side; a hole in the middle |
+| divider | thin plate, 2 to 3 mm | a finger notch in the top edge, or a narrow slot halfway down so two dividers cross |
+| coaster | disc, or a square plate with rounded or chamfered corners | a low rim (always on a round one) |
+| enclosure | open box | four standoffs on the floor for a circuit board, two mounting tabs |
+| foot | round foot, wide end down, narrowing to its top, no taller than three quarters of its base | a screw hole down the middle, countersunk where it fits |
+| grommet | tube sized to the desk hole it fits | a flange, sometimes with three or four screw holes |
+| cup | round, hexagonal or octagonal cup; the wall is measured across a flat | holes in the bottom |
+| comb | plate with 3 to 10 round-ended cable slots in its front edge | screw holes in the strip behind the slots |
+| saddle | pipe strap with a foot on each side, printed on its side | a screw hole through each foot, countersunk or not |
+| handle | drawer pull: a bar on two posts at a usual hole spacing (64 to 160 mm), printed on its side, with screw holes into the posts from behind | finger grooves under the bar |
+| corner_plate | flat L with two equal arms and a rounded inside corner | the same holes in each arm |
+| bit_holder | block sized to its sockets | two to four rows of hex sockets for 6.35 mm bits |
+| battery_holder | block sized to its sockets | two to four rows of round sockets for AAA, AA, 18650 or C cells |
+
+Each family is a preset over the shared bodies and features, with its own size ranges and chances, in [src/families](src/families). The order of the list decides which family a seed picks, so new families go at the end. None has moving parts, threads or text. The newer families brought new bodies (disc, saddle, handle, foot, sleeve, cup, comb and corner) and new features (a washer's side slot as wide as its hole, finger grooves, sockets, and standoffs on a box floor); a fixed tree of each is compiled and checked in the tests.
+
+Each new family was made alone, 200 parts with seed 7 through the same steps as a run, and every part compiled, passed every print check and had a matching size block and matching stated sizes; three of each were drawn with the overhangs marked and read beside their requests. Then the command made mixed runs at commit `929f887` with a clean tree, seed 7: 5,000 parts, all passing every label, and 6,000 parts (205 to 293 for each new family), all passing except 20 that hit the 10 second limit in three bursts while the Mac stalled (one compile took 17.7 minutes by the clock); compiled again from their saved code, those 20 passed too.
 
 ## Files
 
