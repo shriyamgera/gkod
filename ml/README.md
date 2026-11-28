@@ -133,21 +133,21 @@ rows, no generator changes.
 
 | Setting | Run 1 |
 |---|---|
-| Rows | v1 train only. Weights at full size: 300 creates per family (4,500) and 1,200 edits toward the weak kinds (add 280, remove 330, count 260, scale 160, size 100, move 40, hole size 30). `--rows` scales them. |
+| Rows | v1 train only. Weights at full size: 300 creates per family (4,500) and 1,200 edits toward the weak kinds (add 280, remove 330, count 260, scale 160, size 100, move 40, hole size 30). Run 1 takes 5,600 rows (`[rows] count`, from the probe below), one pass; `--rows` overrides it. |
 | LoRA | rank 16, scale 20, dropout 0.05, on all 7 projections of the last 16 of the 28 blocks |
 | Optimizer | Adam, learning rate 2e-5 (scale x rate = 4e-4), linear warmup over 5% of the steps from 1e-6, cosine decay to 2e-6 at the last step |
-| Batch | 8 rows a step (an optimizer update): batch size x gradient accumulation; the probe sets the batch size |
+| Batch | 8 rows a step (an optimizer update): batch size 1 x gradient accumulation 8 (the probe below picked batch 1) |
 | Loss | on the answer and its end token only (`mask_prompt`) |
 | Length | at most 2,048 tokens a row; longer rows are refused when the rows are built, never cut |
-| Checkpoints | every 50 steps (400 rows), all kept; the validation loss at the same steps, over all 100 validation rows |
-| Gradient checkpointing | on (the probe decides) |
+| Checkpoints | every 50 steps (400 rows), all kept: 14 in run 1 (steps 50 to 700); the validation loss at the same steps and at step 0, over all 100 validation rows |
+| Gradient checkpointing | on (without it one 2,000-token row peaked at 11.3 GB in the probe) |
 | Seed | 0 |
 
 ### Building the rows
 
 ```sh
 DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/train/build_rows.py \
-  --config ml/configs/run1-insurance.toml --rows 5700 --batch-size 1 --out data/train-rows/run1-insurance
+  --config ml/configs/run1-insurance.toml --out data/train-rows/run1-insurance
 ```
 
 [train/build_rows.py](train/build_rows.py) reads `data/sets/v1/train` only (checked against
@@ -170,7 +170,10 @@ failed or missing label, has a tree whose hash is in dev, shares 4 lines in a ro
 the CPU, exactly as mlx-lm's `ChatDataset` counts it). Any path under a test split folder is refused before it is
 opened; a test checks that a whole build opens nothing there.
 
-Selection: each group (a family, or an edit kind) takes its share of `--rows` (rounded down to whole steps) by
+The row count is the config's `[rows] count` (5,600 for run 1) unless `--rows N` is given, and the batch size is the
+config's `batch_size` unless `--batch-size` is given.
+
+Selection: each group (a family, or an edit kind) takes its share of the row count (rounded down to whole steps) by
 weight, its rows in the order of sha256(id + "sft-v1"). So a smaller run is the start of every group of a bigger one:
 `--rows 2850` is the first half of every group. A group with too few rows gives all it has and the shortfall is
 reported.
@@ -178,9 +181,11 @@ reported.
 Order: rows are sorted by length, cut into batches of `--batch-size`, and the batches put in a seeded order. The
 batch size the trainer uses must be the one the rows were built for (it checks). Same inputs, same bytes.
 
-Measured on 28 Nov: the whole build takes 13 s. All 9,000 v1 train rows pass every check. `--rows 5700` gives 5,688
-rows (rounded to 5,696, then `add` is 4 rows short and 4 rows come off `remove` to keep whole steps): 4,497 creates
-and 1,191 edits, 5,047,956 tokens, of which 2,081,706 are answer tokens; the longest row has 2,003 tokens. The 100
+Measured on 28 Nov: the whole build takes 13 s. All 9,000 v1 train rows pass every check. Run 1's 5,600 rows need
+no group to fall short: 4,423 creates (295 or 294 per family) and 1,177 edits (add 275, remove 324, count 255, scale
+157, size 98, move 39, hole size 29), 4,971,290 tokens (887.7 a row), of which 2,049,093 are answer tokens; the
+longest row has 2,003 tokens. (The plan's full size, `--rows 5700`, gives 5,688 rows, because `add` runs 4 rows short
+and 4 more come off `remove` to keep whole steps.) The 100
 validation rows have 91,304 tokens. Two builds in a row gave byte-identical `train.jsonl`, `valid.jsonl` and
 `meta.json` (the meta also names the builder's commit, so it changes when the code does).
 
@@ -229,8 +234,12 @@ It writes to `--out` (git-ignored under `adapters/`):
 | `run.json` | the plan, the schedule, the same run as a stock mlx-lm config, the sha256 of train.jsonl, valid.jsonl, meta.json and the base weights, the config files, the trainable weight count, the git commit and versions of each start and resume, and the status |
 
 - **Size.** Each checkpoint holds 10,551,296 float32 LoRA weights, about 42.2 MB (worked out from the model's
-  config; a test checks the formula against real LoRA layers). Run 1 with `--rows 5700` (5,688 rows) has 711 steps
-  and 15 checkpoints, about 0.63 GB, plus two optimizer files of about 84 MB.
+  config; a test checks the formula against real LoRA layers; the saved files are 42,229,570 bytes). Run 1 (5,600
+  rows) has 700 steps and 14 checkpoints, about 0.59 GB, plus two optimizer files of about 84 MB.
+- **Memory.** After every forward pass (training and validation) the trainer hands MLX's cached buffers back
+  (`mx.clear_cache()`), as mlx-lm's own trainer does by default. Without it MLX keeps a buffer for every padded width
+  it has seen and the wired limit lets them stay wired: in the first probe the untrained validation pass reached about
+  12 GB wired and 4.8 GB of swap before it was stopped.
 - **Resume.** night-run passes `--resume-from` the newest checkpoint after a crash. The trainer loads its weights
   and optimizer state, skips the batches already trained and carries on the schedule. Dropout draws a fresh key per
   batch from the seed and the batch number, so a resumed run ends where an unbroken one does (a test checks this on a
@@ -255,8 +264,70 @@ adapter, and the memory cap. With the model's real tokenizer (on the Mac) it che
 byte-for-byte the benchmark's local-engine prompt and that the answer tokens start the loss. These tests never load
 the model's weights or use the GPU; the ones that need mlx, the tokenizer or macOS skip elsewhere.
 
-Not measured yet: training speed and memory on this model (the probe does that, and sets `--rows` and the batch size
-from it).
+### The probe (28 Nov)
+
+Measured on this Mac: M4 MacBook Air (no fan), 16 GB, on mains power, nothing else heavy running, mlx 0.32.4 and
+mlx-lm 0.32.2, read from `train.py`'s own log. Probe and smoke files went to `results/smoke/` (git-ignored).
+
+The probe file had 40 run 1 rows: the 8 longest first (1,970 to 2,003 tokens, one step, the memory worst case), then
+32 ordinary rows (883 tokens on average; run 1's average is 888). Speed is counted by the clock: every real token of
+the rows (prompt and answer, not padding) divided by the step's wall time. mlx-lm's own trainer prints answer tokens
+only (with the prompt masked that is about 41% of them), so its number would read about 0.41 of these. Peak is MLX's
+own count (`mx.get_peak_memory`); the cap was 9 GB.
+
+| Setup | Peak | 8 longest rows | 32 ordinary rows | 100 validation rows |
+|---|---|---|---|---|
+| batch 1, no checkpointing, 16 layers | 11.26 GB, over the cap (12.9 GB wired, swap grew 0.6 GB) | 247 tokens/s | not run (stopped at the cap) | 141 s |
+| batch 2, checkpointing, 16 layers | 7.23 GB | 201 tokens/s | 216 tokens/s (0.12 passes/s, 0.25 rows/s) | 178 s |
+| **batch 1, checkpointing, 16 layers (picked)** | **5.55 GB** | **262 tokens/s** | **227 tokens/s (0.26 passes/s = rows/s)** | not run (8 rows: 14 s) |
+| batch 1, checkpointing, all 28 layers | 5.75 GB | 134 tokens/s | 137 tokens/s | not run (8 rows: 17 s) |
+
+- Picked: batch 1 with gradient checkpointing on the last 16 layers. It had the lowest peak and was at least as fast
+  as batch 2, which pads its pairs and validated more slowly. All 28 layers (18.5M LoRA weights) was about 40% slower
+  here and stays out of run 1.
+- Tokens/s = passes/s x batch x tokens per row: 0.257 x 1 x 883 = 227.
+- Each setup ran only 5 steps, so these numbers include compiling each new padded width, and the Mac warmed up from
+  one setup to the next. The smoke run below is the longer measure.
+- The first try of the first setup found a trainer bug: MLX's buffer cache was never cleared, and the untrained
+  validation pass alone reached about 12 GB wired and 4.8 GB of swap before it was stopped. Fixed before any number
+  above was taken (see "Memory" above).
+
+**Smoke run.** Run 1's settings on 480 rows (`build_rows.py --rows 480`, so the first rows of each of run 1's
+groups), 60 steps, checkpoints at 20, 40 and 60, under night-run exactly as run 1 will run (caffeinate, `--keep-all`,
+`--resume-args`). 40 min 34 s in all.
+
+- Speed: 240.5 tokens/s over the 60 steps (234, 238 and 250 in each third), 29.5 s a step, 0.27 rows/s; answer tokens
+  alone 98.7/s. It did not slow down from the first step to the last (35 minutes).
+- Peak 5.52 GB; swap did not grow.
+- Validation (100 rows): 145 s untrained, then 177, 176 and 162 s.
+- Losses fell: validation 0.713, 0.123, 0.073, 0.064 at steps 0, 20, 40, 60; training loss 0.332, 0.106, 0.072 over
+  the steps up to each checkpoint.
+- The checkpoints load in the benchmark's local engine. The curve code (`run_curve`, called with a 5-prompt subset of
+  dev-curve: one per tier and a second edit, results under `results/smoke/`) scored all three: right part 1, 1 and 2
+  of 5, compiles 3, 4 and 4 of 5, no answer at the token limit. This checks the pipeline. It is not a result and not
+  a dev look (PICK_RULE.md).
+
+**Run 1's size,** from the smoke run's speed:
+
+| | |
+|---|---|
+| Rows | 5,600 (4,971,290 tokens), one pass |
+| Steps | 700 of 8 rows; warmup 35 |
+| Checkpoints | every 50 steps: 14, so 15 points on the learning curve with step 0 |
+| Validation | at steps 0, 50, ..., 700: 15 times, about 170 s each, about 43 minutes |
+| Training | 4,971,290 tokens at 240.5 tokens/s: 5.7 hours |
+| In all | about 6.5 hours (6.25 to 6.6 at the fastest and slowest thirds of the smoke run's speed) |
+
+The rows are built (`data/train-rows/run1-insurance`, builder commit `72d335e`, `train.jsonl` sha256
+`1946902d…ab4f`) and `train.py --dry-run` gives the plan above. Not started yet. To start it (Mac plugged in, lid
+open, browser closed, nothing else on the GPU):
+
+```sh
+DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/scripts/night-run.py --name run1-insurance \
+  --checkpoints adapters/run1-insurance --keep-all --resume-args '--resume-from {checkpoint}' -- \
+  ml/.venv/bin/python ml/train/train.py --config ml/configs/run1-insurance.toml \
+  --data data/train-rows/run1-insurance --out adapters/run1-insurance
+```
 
 ## Learning curve
 
@@ -272,9 +343,10 @@ It loads the model on the GPU, so it runs after training, never beside it: it re
 `running` (`--even-if-running` only if the trainer was killed). Under night-run it carries on after a crash:
 `ml/scripts/night-run.py --name curve-run1 -- ml/.venv/bin/python -m gkod_bench curve --run adapters/run1-insurance`.
 
-**How long (worked out, not measured):** 50 prompts at about 15 to 19 s each (answers of about 400 tokens at the
-29 tokens/s measured above, about 15% slower with an unfused adapter, plus scoring) is 12 to 16 minutes a checkpoint,
-so run 1's 15 checkpoints take about 3 to 4 hours. Step 0 costs nothing (below).
+**How long:** in the smoke run (15 answers, 3 checkpoints, one prompt at a time) the trained model wrote 27.3 tokens/s
+per answer with its adapter (25.5 by the clock with the prompt read), answers averaged 390 tokens and none hit the
+limit: 15.3 s an answer plus about 1 s of scoring. So 50 prompts take about 14 minutes a checkpoint, and run 1's 14
+checkpoints about 3.2 hours, if its answers are about as long. Step 0 costs nothing (below).
 
 ### dev-curve
 
@@ -355,7 +427,7 @@ gained with none lost (p = 0.03) to call a gain real. Read both next to the plot
 
 mlx-lm 0.32.2 has batched generation: `batch_generate` and `BatchGenerator` in `mlx_lm/generate.py` (read in the
 installed package). `curve --batch N` and `run --batch N` make the local engine answer the next N prompts at once.
-Nothing has been measured with it on the GPU yet. It keeps the plain path's rules: the prompt tokens by
+It keeps the plain path's rules: the prompt tokens by
 `stream_generate`'s rule, the greedy sampler, the model's stop tokens, the same token limit (a stop token is counted
 in the token count, as `stream_generate` counts it), and the text put together by the same streaming detokenizer. A
 temperature with batches is refused. The batch size goes into the row's settings and its name (`-b8`), so batched and
@@ -376,10 +448,21 @@ one-at-a-time answers never mix and a row cannot change mode when resumed.
 - On the CPU only, a tiny random Qwen2 model (not the real weights) with the real tokenizer gives the same text, token
   counts and endings both ways (a test). That checks the plumbing, not the real model on the GPU.
 
-To test it on the real model (the probe's job): score some checkpoints plainly and again with `--batch 8`, then
-`gkod_bench same-answers dev-curve-run1-insurance-s0000050 dev-curve-run1-insurance-s0000050-b8` (how many answers
-are the same text, and where the others first differ) and `gkod_bench compare` on the same two rows (the scores).
-Curve numbers in any write-up come from the plain rows, and full-dev rows for picking always use the plain path.
+**Measured on the real model (28 Nov, smoke run):** the 5 smoke prompts at each of its 3 checkpoints, once one at a
+time and once in batches of 5, compared with `same_answers`:
+
+| | One at a time | Batches of 5 |
+|---|---|---|
+| Answer time, 15 answers | 230 s | 91 s |
+| Tokens/s by the clock | 25.5 | 64.4 (2.5 times faster) |
+| Peak memory | 3.94 GB | 4.57 GB |
+| Same text as one at a time | | 6 of 15 (1, 3 and 2 of 5 at steps 20, 40, 60) |
+
+In the other 9 answers the text first differs at character 92 to 791. The scores happened to match here (the same
+right parts and compiles at every checkpoint), but 15 answers say little. So batched answers are not the same answers:
+curve numbers in any write-up come from the plain rows, and full-dev rows for picking always use the plain path. A
+batched row is for a quick look only, and its name says so (`-b5`). To check again on other rows: `gkod_bench
+same-answers ROW ROW-b8` and `gkod_bench compare` on the same two rows.
 
 ## Tonight: baseline rows on the dev set
 
