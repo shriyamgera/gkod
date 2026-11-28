@@ -26,7 +26,10 @@ def test_a_row_writes_one_record_per_prompt_and_a_summary(fake):
     summary = run_row(engine, "ref", "dev", **fake)
     assert summary["complete"] and summary["done"] == 4 and summary["missing"] == 0
     o = summary["overall"]
-    assert o["compiles"]["rate"] == 1.0 and o["checks_pass"]["rate"] == 1.0 and o["meets_request"]["rate"] == 1.0
+    assert o["compiles"]["rate"] == 1.0 and o["checks_pass"]["rate"] == 1.0 and o["stated_sizes_match"]["rate"] == 1.0
+    assert o["right_part"]["rate"] == 1.0 and o["right_part"]["failed"] == {}
+    # a run only reads a saved ceiling; summarize works it out
+    assert "rate" not in o["guess_ceiling"]
     assert o["iou"]["mean"] == pytest.approx(1.0)
     assert set(summary["tiers"]) == {"t1", "t2", "t3", "edit"}
     assert summary["tiers"]["edit"]["edit_sizes_ok"]["rate"] == 1.0
@@ -142,6 +145,36 @@ def test_summarize_again_from_the_records(fake):
     (raw_dir(fake["results"], "again", "dev") / "d-1.json").unlink()
     summary = summarize_row("again", "dev", results=fake["results"], sets_dir=fake["sets_dir"], hashes=fake["hashes"])
     assert summary["done"] == 3 and summary["missing"] == 1
+
+
+def test_summarize_works_out_the_guess_ceiling_and_later_runs_read_it(fake):
+    run_row(ScriptedEngine(echo_reference), "ceil", "dev", **fake)
+    summary = summarize_row("ceil", "dev", results=fake["results"], sets_dir=fake["sets_dir"], hashes=fake["hashes"])
+    c = summary["overall"]["guess_ceiling"]
+    # the 3 create prompts; their unstated thickness is train's median, so every guess is the reference
+    assert (c["k"], c["n"]) == (3, 3) and (c["right_part_on_these"]["k"], c["right_part_on_these"]["n"]) == (3, 3)
+    assert summary["tiers"]["t2"]["guess_ceiling"]["n"] == 1 and "guess_ceiling" not in summary["tiers"]["edit"]
+    assert (fake["results"] / "ceiling" / "dev.json").exists()
+    later = run_row(ScriptedEngine(echo_reference), "later", "dev", **fake)
+    assert later["overall"]["guess_ceiling"]["n"] == 3
+
+
+def test_old_records_still_summarize_and_rescore(fake):
+    """Records written before 28 Nov have meets_request and no stated_sizes_match or right_part."""
+    run_row(ScriptedEngine(echo_reference), "old", "dev", **fake)
+    folder = raw_dir(fake["results"], "old", "dev")
+    for path in folder.glob("*.json"):
+        record = json.loads(path.read_text())
+        for key in ("stated_sizes_match", "stated_sizes_match_strict", "right_part", "right_part_failed"):
+            record["scores"].pop(key)
+        path.write_text(json.dumps(record))
+    summary = summarize_row("old", "dev", results=fake["results"], sets_dir=fake["sets_dir"], hashes=fake["hashes"])
+    o = summary["overall"]
+    assert o["right_part"]["k"] == 4 and o["stated_sizes_match"]["k"] == 4
+    # rescoring writes the new keys from the saved answers, without the engine
+    rescore_row("old", "dev", results=fake["results"], sets_dir=fake["sets_dir"], hashes=fake["hashes"], log=lambda line: None)
+    for record in read_records(fake["results"], "old", "dev"):
+        assert record["scores"]["right_part"] is True and record["scores"]["stated_sizes_match"] is True and "rescored" in record
 
 
 def test_the_test_split_is_refused_before_anything_runs(fake):

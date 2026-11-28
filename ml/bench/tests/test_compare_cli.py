@@ -25,12 +25,15 @@ def test_wrong_answers_score_lower_and_compare_pairs_them(fake):
     bad = ScriptedEngine(lambda m: "```openscad\ncube([10, 10, 4]);\n```" if m.user.startswith("Make") else "I would rather not.")
     summary = run_row(bad, "bad", "dev", **fake)
     o = summary["overall"]
-    assert o["compiles"]["k"] == 3 and o["meets_request"]["k"] == 0 and o["no_code"] == {"no-code": 1}
+    assert o["compiles"]["k"] == 3 and o["stated_sizes_match"]["k"] == 0 and o["no_code"] == {"no-code": 1}
+    assert o["right_part"]["k"] == 0
     result = compare_rows("good", "bad", "dev", results=fake["results"])
     assert result["prompts"]["both"] == 4
-    assert result["overall"]["meets_request"]["only_a"] == 4 and result["overall"]["meets_request"]["only_b"] == 0
+    assert result["overall"]["stated_sizes_match"]["only_a"] == 4 and result["overall"]["stated_sizes_match"]["only_b"] == 0
+    assert result["overall"]["right_part"]["only_a"] == 4 and result["overall"]["right_part"]["rate_b"] == 0
     assert result["overall"]["iou"]["diff"] > 0.5
-    assert "meets_request" in table(result)
+    printed = table(result)
+    assert "right_part" in printed and "stated_sizes_match" in printed and "meets_request" not in printed
     assert (fake["results"] / "compare" / "good__vs__bad" / "dev.json").exists()
 
 

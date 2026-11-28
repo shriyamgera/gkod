@@ -1,27 +1,73 @@
-"""Rates with 95% Wilson intervals, per tier and overall, from the saved per-prompt records."""
+"""Rates with 95% Wilson intervals, per tier and overall, from the saved per-prompt records.
+
+The headline is right_part (see score.right_part), worked out again here from each record's saved measurements, so
+records scored before it existed count too. Next to it, for create prompts, the guess ceiling (see ceiling.py)."""
 
 from __future__ import annotations
 
 from collections import Counter
 
+from gkod_bench.ceiling import share
+from gkod_bench.score import RIGHT_PART_GATES, RIGHT_PART_IOU, right_part, stated_of, stated_strict_of
 from gkod_bench.stats import mean_ci, median, rate
 
 TIER_ORDER = ("t1", "t2", "t3", "edit")
+CEILING_NOTE = (
+    "create prompts only: the share whose reference, made again with every size the request leaves out at its train "
+    "median, still reaches the right-part overlap; not a hard limit, a better guesser can beat it"
+)
 
 
-def _group(records: list[dict]) -> dict:
+def _right(records: list[dict]) -> dict:
+    verdicts = [right_part(r["scores"]) for r in records]
+    failed = Counter(g for v in verdicts for g in v["failed"])
+    return {
+        **rate(sum(v["ok"] for v in verdicts), len(verdicts)),
+        "iou_threshold": RIGHT_PART_IOU,
+        # each answer that is not right counts once under every check it missed; no part counts only as compiles
+        "failed": {g: failed[g] for g in RIGHT_PART_GATES if failed[g]},
+    }
+
+
+def _ceiling(records: list[dict], ceiling: dict | None) -> dict | None:
+    creates = [r for r in records if r["task"] == "create"]
+    if not creates:
+        return None
+    if ceiling is None:
+        return {"note": "not worked out for this split yet: run gkod_bench summarize"}
+    got = share(ceiling, [r["id"] for r in creates])
+    known = [r for r in creates if r["id"] in ceiling["prompts"]]
+    return {
+        **rate(got["k"], got["n"]),
+        "iou_threshold": RIGHT_PART_IOU,
+        "right_part_on_these": rate(sum(right_part(r["scores"])["ok"] for r in known), len(known)),
+        # prompts with a size train has no guess for (a tier 3 family's own name): the ceiling kept the true value
+        "kept_a_true_value": got["kept_a_true_value"],
+        "note": CEILING_NOTE,
+    }
+
+
+def _group(records: list[dict], ceiling: dict | None = None) -> dict:
     n = len(records)
     s = [r["scores"] for r in records]
     compiled = [x for x in s if x["compiles"]]
     out: dict = {"prompts": n}
+    out["right_part"] = _right(records)
+    guessed = _ceiling(records, ceiling)
+    if guessed is not None:
+        out["guess_ceiling"] = guessed
     out["compiles"] = rate(sum(x["compiles"] for x in s), n)
     out["checks_pass"] = rate(sum(x["checks_pass"] for x in s), n)
-    judged = [x["meets_request"] for x in s if x["meets_request"] is not None]
-    out["meets_request"] = {**rate(sum(judged), len(judged)), "prompts_with_nothing_measured": n - len(judged)}
-    strict = [x["meets_request_strict"] for x in s if x.get("meets_request_strict") is not None]
-    out["meets_request_strict_axes"] = {
+    judged = [v for v in (stated_of(x) for x in s) if v is not None]
+    out["stated_sizes_match"] = {
+        **rate(sum(judged), len(judged)),
+        "prompts_with_nothing_measured": n - len(judged),
+        "note": "every measured stated fact (overall sizes, hole counts) passes; loose: a solid block of the right size passes for a tray",
+    }
+    strict = [v for v in (stated_strict_of(x) for x in s) if v is not None]
+    out["stated_sizes_match_strict_axes"] = {
         **rate(sum(strict), len(strict)),
-        "note": "overall sizes on the axes the reference part is drawn with, which no prompt states; the score is meets_request",
+        "note": "overall sizes on the axes the reference part is drawn with, which no prompt states; a column, not a score",
     }
     facts = [f for x in s for f in x["facts"]]
     # a holes_total fact is added by the scorer when one genus measures several stated counts; it is not stated
@@ -76,9 +122,9 @@ def _group(records: list[dict]) -> dict:
     return out
 
 
-def summarize(records: list[dict], expected: list[dict], config: dict) -> dict:
+def summarize(records: list[dict], expected: list[dict], config: dict, ceiling: dict | None = None) -> dict:
     """`records` are every saved record of the row and split; `expected` the prompts the split holds (id, tier,
-    family) after any tier filter."""
+    family) after any tier filter; `ceiling` the split's saved guess ceiling, if it has one."""
     by_id = {r["id"]: r for r in records}
     done = [by_id[e["id"]] for e in expected if e["id"] in by_id and by_id[e["id"]]["status"] == "done"]
     errors = [by_id[e["id"]] for e in expected if e["id"] in by_id and by_id[e["id"]]["status"] == "error"]
@@ -93,7 +139,7 @@ def summarize(records: list[dict], expected: list[dict], config: dict) -> dict:
         "engine_errors": len(errors),
         "engine_failures_scored": sum(1 for r in done if r.get("engine_error")),
         "complete": not missing,
-        "overall": _group(done) if done else None,
+        "overall": _group(done, ceiling) if done else None,
         "tiers": {},
         "t3_families": {},
         "dates": sorted({(r["engine_meta"].get("date") or r["at"])[:10] for r in done}),
@@ -102,9 +148,9 @@ def summarize(records: list[dict], expected: list[dict], config: dict) -> dict:
     for tier in TIER_ORDER:
         group = [r for r in done if r["tier"] == tier]
         if group:
-            out["tiers"][tier] = _group(group)
+            out["tiers"][tier] = _group(group, ceiling)
     for family in sorted({r["family"] for r in done if r["tier"] == "t3"}):
-        out["t3_families"][family] = _group([r for r in done if r["tier"] == "t3" and r["family"] == family])
+        out["t3_families"][family] = _group([r for r in done if r["tier"] == "t3" and r["family"] == family], ceiling)
     if not out["complete"]:
         out["note"] = f"{len(missing)} of {len(expected)} prompts have no scored answer yet; the rates cover the {len(done)} done."
     return out

@@ -21,7 +21,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from gkod_bench import __version__
+from gkod_bench import __version__, ceiling
 from gkod_bench.data import Item, check_open, fewshot, load_split
 from gkod_bench.engines.base import Engine
 from gkod_bench.gkod import Gkod
@@ -130,7 +130,9 @@ def expected_of(items: list[Item]) -> list[dict]:
 
 
 def write_summary(results: Path, row: str, split: str, items: list[Item], config: dict, files: dict) -> dict:
-    summary = summarize(_current(read_records(results, row, split), files), expected_of(items), config)
+    # the split's guess ceiling, if it has been worked out (summarize and rescore do it once per split)
+    saved = ceiling.load(results, split, files)
+    summary = summarize(_current(read_records(results, row, split), files), expected_of(items), config, saved)
     write_json(row_dir(results, row, split) / "summary.json", summary)
     return summary
 
@@ -244,12 +246,13 @@ def _line(n: int, total: int, item: Item, s: dict, seconds: float) -> str:
     extra = f" sizes {yes(s['edit']['sizes_ok'])}" if "edit" in s else ""
     return (
         f"[{n}/{total}] {item.id} {item.tier} {item.family}: compiles {yes(s['compiles'])}, checks {yes(s['checks_pass'])}, "
-        f"meets {yes(s['meets_request'])}, iou {s['iou']:.2f}{extra} ({seconds:.1f} s)"
+        f"sizes match {yes(s['stated_sizes_match'])}, iou {s['iou']:.2f}{extra}, right part {yes(s['right_part'])} ({seconds:.1f} s)"
     )
 
 
 def summarize_row(row: str, split: str, *, final: bool = False, results: Path = RESULTS, sets_dir: Path = SETS, hashes: Path = SETS_HASHES) -> dict:
-    """The summary again from the saved records, with no engine calls."""
+    """The summary again from the saved records, with no engine calls. The split's guess ceiling is worked out first if
+    it has none yet (one compile or two per create prompt, once per split)."""
     check_open(split, final)
     config_path = row_dir(results, row, split) / "run.json"
     if not config_path.exists():
@@ -257,6 +260,7 @@ def summarize_row(row: str, split: str, *, final: bool = False, results: Path = 
     config = json.loads(config_path.read_text())
     items, files = load_split(split, final, sets_dir, hashes)
     _check_same_files(config, files)
+    ceiling.ensure(results, split, items, files, sets_dir=sets_dir, hashes=hashes)
     if config.get("tiers"):
         items = [i for i in items if i.tier in config["tiers"]]
     return write_summary(results, row, split, items, config, files)

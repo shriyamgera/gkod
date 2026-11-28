@@ -8,16 +8,19 @@ from pathlib import Path
 from gkod_bench.data import check_open
 from gkod_bench.paths import RESULTS
 from gkod_bench.run import read_records, write_json
+from gkod_bench.score import right_part, stated_of, stated_strict_of
 from gkod_bench.stats import paired_means, paired_rates
 from gkod_bench.summary import TIER_ORDER
 
 BOOLEAN = {
+    # the headline, worked out from each record's measurements, so older records count too
+    "right_part": lambda s: right_part(s)["ok"],
     "compiles": lambda s: s["compiles"],
     "checks_pass": lambda s: s["checks_pass"],
-    # a prompt with nothing measured counts as not met here, the same on both sides
-    "meets_request": lambda s: s["meets_request"] is True,
+    # a prompt with nothing measured counts as not matched here, the same on both sides
+    "stated_sizes_match": lambda s: stated_of(s) is True,
     # the stricter column: overall sizes on the axes the reference part is drawn with
-    "meets_request_strict_axes": lambda s: s.get("meets_request_strict") is True,
+    "stated_sizes_match_strict_axes": lambda s: stated_strict_of(s) is True,
 }
 
 
@@ -67,11 +70,11 @@ def table(result: dict) -> str:
             continue
         low, high = r["ci95"]
         lines.append(
-            f"  {name:14} A {r['rate_a']:.1%}  B {r['rate_b']:.1%}  A-B {r['diff']:+.1%} [{low:+.1%}, {high:+.1%}]  "
+            f"  {name:18} A {r['rate_a']:.1%}  B {r['rate_b']:.1%}  A-B {r['diff']:+.1%} [{low:+.1%}, {high:+.1%}]  "
             f"only A {r['only_a']}, only B {r['only_b']}, p {r['mcnemar_p']:.3g}"
         )
     r = block.get("iou")
     if r and r.get("diff") is not None:
         ci = f"[{r['ci95'][0]:+.3f}, {r['ci95'][1]:+.3f}]" if r["ci95"] else ""
-        lines.append(f"  {'iou':14} A {r['mean_a']:.3f}  B {r['mean_b']:.3f}  A-B {r['diff']:+.3f} {ci}  sign p {r['sign_p']:.3g}")
+        lines.append(f"  {'iou':18} A {r['mean_a']:.3f}  B {r['mean_b']:.3f}  A-B {r['diff']:+.3f} {ci}  sign p {r['sign_p']:.3g}")
     return "\n".join(lines)
