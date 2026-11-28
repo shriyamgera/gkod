@@ -62,7 +62,7 @@ def _group(records: list[dict], ceiling: dict | None = None) -> dict:
     out["stated_sizes_match"] = {
         **rate(sum(judged), len(judged)),
         "prompts_with_nothing_measured": n - len(judged),
-        "note": "every measured stated fact (overall sizes, hole counts) passes; loose: a solid block of the right size passes for a tray",
+        "note": "every measured stated fact (overall sizes, hole counts, and for creates the stated sizes read from the answer's named sizes) passes; loose: a solid block of the right size passes for a tray",
     }
     strict = [v for v in (stated_strict_of(x) for x in s) if v is not None]
     out["stated_sizes_match_strict_axes"] = {
@@ -74,7 +74,7 @@ def _group(records: list[dict], ceiling: dict | None = None) -> dict:
     stated = [f for f in facts if "of" not in f]
     measured = [f for f in facts if f["status"] != "unmeasured"]
     by_how = {}
-    for how in ("size", "holes"):
+    for how in ("size", "holes", "code"):
         fs = [f for f in measured if f["how"] == how]
         by_how[how] = rate(sum(f["status"] == "pass" for f in fs), len(fs))
     sized = [f for f in measured if f["how"] == "size" and "strict" in f]

@@ -19,13 +19,22 @@ What counts as measured:
   marked unmeasured, with the reason. The answer's holes are the genus of all its closed surfaces added up, so a
   second piece or a hidden hollow cannot hide missing holes; an answer that is not closed fails them, since a part
   must be closed to print and the reference showed the holes can be counted.
-- Every other fact (hole diameters, spacings, flags, wall thickness, ...) is unmeasured until a measurer exists.
+- For a create, every other stated size in mm (a hole diameter, a slot width, a floor or a lip, a spacing) that is a
+  named size of the reference part is read from the answer's code: the answer's named sizes, as the compiler lists them
+  for the site's sliders. The answer passes when its named size of that name has the stated value (within
+  CODE_TOLERANCE_MM), or, when it has no size of that name, when another of its named sizes has that value (for a
+  diameter, a radius size with half of it). This reads the code, not the mesh: a size that is hard-coded, or named and
+  then not used as named, is not seen. It is there because the overlap cannot see such sizes: a 3.5 mm hole drawn 2.8
+  mm, or a 1.8 mm floor drawn 1.4 mm, still overlaps the reference by 0.99 or more. Edits leave it to the size block.
+- Every other fact (flags such as countersunk or rounded corners, sizes of an edit) is unmeasured until a measurer
+  exists.
 """
 
 from __future__ import annotations
 
 import itertools
 import math
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -53,6 +62,12 @@ RIGHT_PART_IOU = 0.99
 RIGHT_PART_GATES = ("compiles", "checks", "facts", "shape", "pieces", "holes", "sizes")
 # edit values are written with a few decimals; scaled sizes are exact to 1e-6 in code B
 VALUE_TOLERANCE = 1e-3
+# a stated size read from the answer's named sizes: requests state sizes to 0.1 mm at most, and the value is in the
+# request's words, so the code should have that very number; this allows for rounding only
+CODE_TOLERANCE_MM = 0.05
+# names of a diameter, and of a radius that can stand for one at half its value
+DIAMETER_NAME = re.compile(r"(^|_)(d|dia|diameter)$")
+RADIUS_NAME = re.compile(r"(^|_)(r|rad|radius)$")
 MAX_SLIDERS = 30
 REFERENCE_TRIES = 3
 AXES = {"x": (0,), "y": (1,), "z": (2,), "xy": (0, 1)}
@@ -64,12 +79,17 @@ def _counts(facts: list[dict], suffix: str) -> list[dict]:
     return [f for f in facts if f.get("unit") == "count" and f["key"].endswith(suffix)]
 
 
-def plan_facts(facts: list[dict], reference: MeshInfo | None) -> list[dict]:
-    """How each stated fact will be measured, decided from the request and the reference part alone."""
+def plan_facts(facts: list[dict], reference: MeshInfo | None, reference_params: list[dict] | None = None) -> list[dict]:
+    """How each stated fact will be measured, decided from the request and the reference part alone.
+    `reference_params` (the reference's named sizes, given for creates) lets a stated size in mm that is one of them be
+    read from the answer's code."""
     planned = [{**f, "how": None, "reason": "no measurer for this fact yet"} for f in facts]
+    named = {p["name"] for p in reference_params or [] if isinstance(p.get("value"), int | float)}
     for p in planned:
         if p.get("axis") in AXES and p.get("unit") == "mm":
             p["how"], p["reason"] = "size", None
+        elif p.get("unit") == "mm" and not p.get("axis") and p["key"] in named:
+            p["how"], p["reason"] = "code", None
     holes = _counts(facts, "hole_count")
     groups = [holes, holes + _counts(facts, "slot_count")]
     keys_in_play = {f["key"] for f in groups[1]}
@@ -119,10 +139,34 @@ def orient(planned: list[dict], size: tuple[float, float, float]) -> tuple[int, 
     return best
 
 
-def check_facts(planned: list[dict], answer: MeshInfo | None) -> list[dict]:
+def _number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def read_named_size(key: str, value: float, answer_params: list[dict]) -> dict:
+    """A stated size read from the answer's named sizes (see the module notes): the size of the same name when there is
+    one, else any size with that value, else, for a diameter, a radius size with half of it."""
+    sizes = [p for p in answer_params if _number(p.get("value"))]
+    if not sizes:
+        return {"status": "fail", "reason": "the answer has no named sizes"}
+    same = next((p for p in sizes if p["name"] == key), None)
+    if same is not None:
+        ok = abs(same["value"] - value) <= CODE_TOLERANCE_MM
+        return {"status": "pass" if ok else "fail", "got": same["value"], "matched": key}
+    by_value = sorted((p for p in sizes if abs(p["value"] - value) <= CODE_TOLERANCE_MM), key=lambda p: (abs(p["value"] - value), p["name"]))
+    if by_value:
+        return {"status": "pass", "got": by_value[0]["value"], "matched": by_value[0]["name"]}
+    if DIAMETER_NAME.search(key):
+        radii = sorted((p for p in sizes if RADIUS_NAME.search(p["name"]) and abs(2 * p["value"] - value) <= CODE_TOLERANCE_MM), key=lambda p: (abs(2 * p["value"] - value), p["name"]))
+        if radii:
+            return {"status": "pass", "got": radii[0]["value"], "matched": radii[0]["name"], "as_radius": True}
+    return {"status": "fail", "reason": f"no named size {key} and none with the value {value:g}"}
+
+
+def check_facts(planned: list[dict], answer: MeshInfo | None, answer_params: list[dict] | None = None) -> list[dict]:
     """pass, fail or unmeasured for each fact. With no mesh every measurable fact fails: there is no part. An overall
     size is checked on the side of the answer's box that `orient` matched to its axis; `strict` keeps the result on
-    the stated axis itself."""
+    the stated axis itself. A size read from code is checked on `answer_params`, the answer's named sizes."""
     order = orient(planned, answer.size) if answer is not None else ORDERS[0]
     out = []
     for p in planned:
@@ -154,6 +198,8 @@ def check_facts(planned: list[dict], answer: MeshInfo | None) -> list[dict]:
             else:
                 r["got_genus"] = answer.holes
                 r["status"] = "pass" if answer.holes == p["expected_genus"] else "fail"
+        elif how == "code":
+            r.update(read_named_size(p["key"], p["value"], answer_params or []))
         out.append(r)
     return out
 
@@ -356,8 +402,9 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
         scores["mesh"] = info.as_dict() if info else None
 
         stated = row["facts"]["stated"] if task == "edit" else row["facts"]
-        planned = plan_facts(stated, ref_info)
-        facts = check_facts(planned, info)
+        # stated sizes are read from the code for creates only; an edit's sizes are the size block's job
+        planned = plan_facts(stated, ref_info, ref.get("params") if task == "create" else None)
+        facts = check_facts(planned, info, compiled.get("params") if ok else None)
         scores["facts"] = facts
         scores["facts_measured"] = sum(f["status"] != "unmeasured" for f in facts)
         scores["facts_passed"] = sum(f["status"] == "pass" for f in facts)

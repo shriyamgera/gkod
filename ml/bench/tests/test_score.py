@@ -54,6 +54,39 @@ def test_overall_sizes_within_half_a_millimetre():
     assert got["wall"]["status"] == "unmeasured"
 
 
+def test_stated_sizes_of_a_create_are_read_from_the_named_sizes():
+    facts = [fact("width", 60, axis="x"), fact("hole_d", 3.5), fact("floor_thickness", 1.8), fact("lip_width", 2), fact("rounded_corners", 1, "flag")]
+    ref_params = [{"name": "width", "value": 60}, {"name": "hole_d", "value": 3.5}, {"name": "floor_thickness", "value": 1.8}]
+    planned = by_key(plan_facts(facts, measure(box(60, 30, 4)), ref_params))
+    assert planned["width"]["how"] == "size" and planned["hole_d"]["how"] == "code" and planned["floor_thickness"]["how"] == "code"
+    # a stated size the reference has no named size for, and a flag, stay unmeasured; without the reference's sizes
+    # (an edit) nothing is read from code
+    assert planned["lip_width"]["how"] is None and planned["rounded_corners"]["how"] is None
+    assert all(p["how"] != "code" for p in plan_facts(facts, measure(box(60, 30, 4))))
+
+    def read(params):
+        return by_key(check_facts(list(planned.values()), measure(box(60, 30, 4)), params))
+
+    got = read([{"name": "width", "value": 60}, {"name": "hole_d", "value": 3.5}, {"name": "floor_thickness", "value": 1.82}])
+    assert got["hole_d"]["status"] == "pass" and got["floor_thickness"]["status"] == "pass"
+    # the size of the same name decides, even when another size happens to have the value
+    got = read([{"name": "hole_d", "value": 2.8}, {"name": "slot", "value": 3.5}, {"name": "floor_thickness", "value": 1.4}])
+    assert got["hole_d"]["status"] == "fail" and got["hole_d"]["got"] == 2.8
+    assert got["floor_thickness"]["status"] == "fail"
+    # other names: matched by value, and a diameter by a radius of half the value
+    got = read([{"name": "screw_d", "value": 3.5}, {"name": "base_t", "value": 1.8}])
+    assert got["hole_d"] == {**got["hole_d"], "status": "pass", "matched": "screw_d"} and got["floor_thickness"]["matched"] == "base_t"
+    got = read([{"name": "hole_r", "value": 1.75}, {"name": "floor", "value": 1.8}])
+    assert got["hole_d"]["status"] == "pass" and got["hole_d"]["as_radius"] is True
+    # a radius does not stand for a size that is not a diameter
+    assert read([{"name": "floor_r", "value": 0.9}])["floor_thickness"]["status"] == "fail"
+    # sizes written as plain numbers in the code are not named sizes, so they cannot be read
+    got = read([])
+    assert got["hole_d"]["status"] == "fail" and got["hole_d"]["reason"] == "the answer has no named sizes"
+    # no part: every measurable fact fails
+    assert by_key(check_facts(list(planned.values()), None))["hole_d"]["status"] == "fail"
+
+
 def test_overall_sizes_fit_whichever_way_the_part_lies():
     # a hook drawn on its side: width on z, reach on x, back plate on y; the answer stands it up
     facts = [fact("width", 27, axis="z"), fact("reach", 42, axis="x"), fact("back_height", 107, axis="y")]
@@ -363,7 +396,9 @@ def test_the_reference_itself_scores_full_marks(gkod):
     assert s["extract"]["ok"] and s["compiles"] and s["checks_pass"]
     assert s["checks"] == {"closed": True, "fits-bed": True, "flat-base": True, "overhang": True}
     assert s["mesh"]["genus"] == 2 and s["reference"]["mesh"]["genus"] == 2
-    assert s["facts_measured"] == 4 and s["facts_passed"] == 4 and s["facts_unmeasured"] == 1
+    # the four on the mesh, and the stated hole diameter read from the named sizes
+    assert s["facts_measured"] == 5 and s["facts_passed"] == 5 and s["facts_unmeasured"] == 0
+    assert by_key(s["facts"])["hole_d"] == {"key": "hole_d", "value": 5, "unit": "mm", "how": "code", "status": "pass", "got": 5, "matched": "hole_d"}
     assert s["stated_sizes_match"] is True and s["stated_sizes_match_strict"] is True and s["size_orientation"] == "xyz"
     # the old keys stay in new records as copies
     assert s["meets_request"] is True and s["meets_request_strict"] is True
@@ -558,3 +593,18 @@ def test_a_coarser_circle_setting_is_not_marked_down_on_a_thin_wall(gkod):
     hexagon = CUP.replace("cylinder(d = diameter, h = height);", "cylinder(d = diameter, h = height, $fn = 6);")
     s = score_answer(gkod, CUP_ROW, "create", f"```openscad\n{hexagon}```", slider_ends=False)
     assert s["iou"] < 0.9 and s["right_part"] is False
+
+
+@needs_compiler
+def test_a_stated_hole_size_that_is_wrong_is_not_the_right_part(gkod):
+    # 4 mm holes where 5 mm were asked: the overlap is still above 0.99 (the holes are a small share of the plate),
+    # so only the named size read from the code catches it
+    smaller = PLATE.replace("hole_d = 5;", "hole_d = 4;")
+    s = score_answer(gkod, CREATE_ROW, "create", f"```openscad\n{smaller}```", slider_ends=False)
+    assert s["iou"] >= RIGHT_PART_IOU and s["mesh"]["holes"] == 2
+    assert by_key(s["facts"])["hole_d"]["status"] == "fail"
+    assert s["right_part"] is False and s["right_part_failed"] == ["facts"]
+    # the same part with the hole given by its radius is right
+    radius = PLATE.replace("// Hole diameter (mm)\nhole_d = 5; // [3:0.5:8]", "// Hole radius (mm)\nhole_r = 2.5; // [1.5:0.25:4]").replace("cylinder(d = hole_d,", "cylinder(r = hole_r,")
+    s = score_answer(gkod, CREATE_ROW, "create", f"```openscad\n{radius}```", slider_ends=False)
+    assert by_key(s["facts"])["hole_d"]["matched"] == "hole_r" and s["right_part"] is True
