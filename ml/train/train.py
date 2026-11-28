@@ -23,8 +23,9 @@ What it writes to --out:
 - `0000050_optimizer.safetensors`: the optimizer state at that checkpoint, for resuming; only the last two are kept.
 - `train_log.jsonl`: one line per step (train loss, learning rate, tokens, seconds, peak memory), per validation (all
   the validation rows) and per save. `val_loss.jsonl` has the validation losses in the form night-run reads.
-- `run.json`: the plan, the sha256 of the training files and of the base weights, the config files, the git commit,
-  the versions, and each start and resume.
+- `run.json`: the plan, the sha256 of the training files and of the base weights, the config files, and for each
+  start and resume the git commit, the sha256 of every file in ml/train and ml/configs (with the diff when they had
+  uncommitted changes, which needs --allow-dirty) and the versions (mlx, mlx-lm, transformers, tokenizers, jinja2).
 
 --resume-from CHECKPOINT carries on from that checkpoint's step: the same rows in the same order, the optimizer state
 and the learning-rate schedule where they were. Dropout draws a fresh key per batch from the seed and the batch
@@ -305,8 +306,13 @@ def batch_order(rows: int, batch_size: int, epochs: int, seed: int) -> list[list
 
 
 def make_batch(seqs: list[tuple[list[int], int]], max_seq_length: int):
-    """A padded batch the way mlx-lm 0.32.2's iterate_batches makes one: width one more than the next multiple of
-    32, at most max_seq_length, and per row (prompt tokens, length) for the loss mask."""
+    """A padded batch the way mlx-lm 0.32.2's iterate_batches makes one (width one more than the next multiple of 32,
+    at most max_seq_length), and per row the span of target positions the loss is taken on: (prompt tokens, length - 1).
+
+    mlx-lm's default_loss keeps the targets at positions from the first number up to and including the second. Its own
+    iterate_batches gives (prompt tokens, length), which keeps one more target: the padding token after the row's last
+    token. Ending the span at length - 1 takes the loss on the answer, <|im_end|> and the newline after it, and nothing
+    else, so the loss's token count is the answer tokens the rows were built with."""
     import numpy as np
 
     lengths = [min(len(tokens), max_seq_length) for tokens, _ in seqs]
@@ -314,7 +320,7 @@ def make_batch(seqs: list[tuple[list[int], int]], max_seq_length: int):
     arr = np.zeros((len(seqs), width), np.int32)
     for j, (tokens, _) in enumerate(seqs):
         arr[j, : lengths[j]] = tokens[: lengths[j]]
-    spans = np.array([[offset, length] for (_, offset), length in zip(seqs, lengths)], np.int32)
+    spans = np.array([[offset, length - 1] for (_, offset), length in zip(seqs, lengths)], np.int32)
     return arr, spans
 
 
@@ -349,13 +355,51 @@ def tokenize(rows: list[dict], detail: list, tokenizer) -> list[tuple[list[int],
     return out
 
 
+CODE_PATHS = ("ml/train", "ml/configs")
+
+
 def git_commit() -> str:
     try:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True, timeout=10).stdout.strip()
-        dirty = subprocess.run(["git", "status", "--porcelain", "--", "ml/train", "ml/configs"], cwd=REPO, capture_output=True, text=True, timeout=10).stdout.strip()
+        dirty = uncommitted()
     except (OSError, subprocess.SubprocessError):
         return "unknown"
     return f"{head}{' (uncommitted changes in ml/train or ml/configs)' if dirty else ''}" if head else "unknown"
+
+
+def uncommitted() -> str:
+    """git's list of uncommitted changes in the trainer's code and configs (empty when there are none)."""
+    return subprocess.run(["git", "status", "--porcelain", "--", *CODE_PATHS], cwd=REPO, capture_output=True, text=True, timeout=10).stdout.strip()
+
+
+def code_record(dirty: bool) -> dict:
+    """The sha256 of every file of the trainer's code and configs, and, when they have uncommitted changes, the diff,
+    so a run record always says which code trained it."""
+    files = {}
+    for folder in CODE_PATHS:
+        for path in sorted((REPO / folder).rglob("*")):
+            if path.is_file() and path.suffix in (".py", ".toml") and "__pycache__" not in path.parts:
+                files[str(path.relative_to(REPO))] = sha256_file(path)
+    record: dict = {"files_sha256": files}
+    if dirty:
+        try:
+            record["diff"] = subprocess.run(["git", "diff", "HEAD", "--", *CODE_PATHS], cwd=REPO, capture_output=True, text=True, timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            record["diff"] = None
+    return record
+
+
+def package_versions() -> dict:
+    """The versions of the packages that tokenize the rows and render the chat template, beside mlx's."""
+    from importlib import metadata
+
+    out = {}
+    for name in ("transformers", "tokenizers", "jinja2", "numpy"):
+        try:
+            out[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            out[name] = None
+    return out
 
 
 # The run folder
@@ -513,10 +557,17 @@ def run_training(
 
     import mlx_lm
 
-    versions = {"python": sys.version.split()[0], "mlx": mx.__version__, "mlx_lm": mlx_lm.__version__, "platform": platform.platform(), "device": device}
+    versions = {"python": sys.version.split()[0], "mlx": mx.__version__, "mlx_lm": mlx_lm.__version__, **package_versions(), "platform": platform.platform(), "device": device}
     record = folder.read_run()
     data_record = {"dir": display(Path(data_dir)), **shas, "rows": len(train_rows), "valid_rows": len(valid_rows), "name": meta.get("name")}
-    segment = {"started": datetime.now().isoformat(timespec="seconds"), "from_step": start, "git_commit": git_commit(), "versions": versions}
+    commit = git_commit()
+    segment = {
+        "started": datetime.now().isoformat(timespec="seconds"),
+        "from_step": start,
+        "git_commit": commit,
+        "code": code_record("uncommitted changes" in commit),
+        "versions": versions,
+    }
     if start:
         if not record:
             raise PlanError(f"{display(folder.run_path)} is missing, so there is nothing to check a resume against")
@@ -683,7 +734,7 @@ def run_training(
             free_cache()
             loss_sum += loss.item() * toks.item()
             answer_tokens += int(toks.item())
-            all_tokens += int(spans[:, 1].sum())
+            all_tokens += sum(min(len(tokens), plan.max_seq_length) for tokens, _ in seqs)
             padded_tokens += int(arr.size)
             if not do_update:
                 continue
@@ -754,6 +805,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--max-steps", type=int, help="stop after this many steps (for the probe; the schedule stays the full run's)")
     p.add_argument("--resume-from", type=Path, help="a checkpoint in --out to carry on from (night-run fills it in)")
     p.add_argument("--device", choices=("gpu", "cpu"), default="gpu", help=argparse.SUPPRESS)
+    p.add_argument("--allow-dirty", action="store_true", help="train even with uncommitted changes in ml/train or ml/configs (the diff goes into run.json)")
     p.add_argument("--dry-run", action="store_true", help="print the plan and stop, without loading the model")
     p.add_argument("--print-mlx-config", action="store_true", help="print the same run as a stock mlx_lm.lora config (JSON) and stop")
     p.add_argument("--adapter-folder", type=int, metavar="STEP", help="make at/<STEP>/ in --out, a folder that loads that checkpoint")
@@ -811,6 +863,11 @@ def main(argv: list[str] | None = None) -> int:
         print(describe(plan, repo_path(plan.model)), flush=True)
         if args.dry_run:
             return 0
+        if not args.allow_dirty and (changes := uncommitted()):
+            raise PlanError(
+                "ml/train or ml/configs has uncommitted changes, so run.json could not say which code trained the run:\n"
+                f"{changes}\nCommit them, or pass --allow-dirty (the diff and every file's sha256 then go into run.json)."
+            )
         run_training(plan, data_dir, out, resume_from=resume, config_files=config.get("files"), device=args.device, max_steps=args.max_steps, echo=lambda s: print(s, flush=True))
     except PlanError as err:
         sys.stderr.write(f"train: {err}\n")

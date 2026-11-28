@@ -137,9 +137,54 @@ def test_batches_are_padded_like_mlx_lm():
     arr, spans = tr.make_batch([([5] * 40, 10), ([7] * 3, 1)], 2048)
     assert arr.shape == (2, 65)
     assert list(arr[0, :40]) == [5] * 40 and arr[0, 40:].sum() == 0
-    assert spans.tolist() == [[10, 40], [1, 3]]
+    assert spans.tolist() == [[10, 39], [1, 2]]
     arr, spans = tr.make_batch([([1] * 2050, 100)], 2048)
-    assert arr.shape == (1, 2048) and spans.tolist() == [[100, 2048]]
+    assert arr.shape == (1, 2048) and spans.tolist() == [[100, 2047]]
+
+
+def test_the_loss_is_on_the_answer_and_its_end_and_never_on_padding():
+    # mlx-lm 0.32.2's default_loss, in numpy: targets are tokens 1..width-1, and the target at position t is kept when
+    # spans[:, 0] <= t <= spans[:, 1]
+    import numpy as np
+
+    rows = [(list(range(100, 140)), 10), (list(range(200, 203)), 1), (list(range(300, 333)), 20)]
+    arr, spans = tr.make_batch(rows, 2048)
+    steps = np.arange(1, arr.shape[1])
+    mask = (steps >= spans[:, 0:1]) & (steps <= spans[:, 1:])
+    for j, (tokens, offset) in enumerate(rows):
+        kept = arr[j, 1:][mask[j]].tolist()
+        # every answer token, through the row's last one (<|im_end|> and the newline in a real row), and no pad
+        assert kept == tokens[offset:]
+        assert int(mask[j].sum()) == len(tokens) - offset
+
+
+def test_a_real_run_refuses_uncommitted_trainer_code_unless_allowed(tmp_path, capsys, monkeypatch):
+    data = tf.make_data(tmp_path / "rows", tf.FakeTokenizer(every=1, vocab=97), train_rows=16, batch_size=2)
+    config = tmp_path / "tiny.toml"
+    config.write_text(
+        '[model]\npath = "tiny"\n[lora]\nnum_layers = 2\nrank = 4\nscale = 2.0\ndropout = 0.0\n'
+        '[train]\noptimizer = "adam"\nlearning_rate = 1e-3\nwarmup_fraction = 0.25\nwarmup_init = 0.0\ndecay_to = 0.1\n'
+        "effective_batch = 4\nbatch_size = 2\nmax_seq_length = 256\nsave_every = 2\neval_every = 1\n"
+    )
+    args = ["--config", str(config), "--data", str(data), "--out", str(tmp_path / "run")]
+    started = []
+    monkeypatch.setattr(tr, "run_training", lambda *a, **kw: started.append(kw) or {})
+    monkeypatch.setattr(tr, "uncommitted", lambda: " M ml/train/train.py")
+    assert tr.main(args) == 2 and not started
+    assert "uncommitted changes" in capsys.readouterr().err
+    # a dry run still prints the plan, and --allow-dirty trains (the diff then goes into run.json)
+    assert tr.main([*args, "--dry-run"]) == 0
+    assert tr.main([*args, "--allow-dirty"]) == 0 and len(started) == 1
+    monkeypatch.setattr(tr, "uncommitted", lambda: "")
+    assert tr.main(args) == 0 and len(started) == 2
+
+
+def test_the_code_record_names_every_trainer_file():
+    record = tr.code_record(dirty=False)
+    assert "ml/train/train.py" in record["files_sha256"] and "ml/configs/run1-insurance.toml" in record["files_sha256"]
+    assert record["files_sha256"]["ml/train/train.py"] == tr.sha256_file(tr.ML / "train" / "train.py")
+    assert "diff" not in record and "diff" in tr.code_record(dirty=True)
+    assert set(tr.package_versions()) == {"transformers", "tokenizers", "jinja2", "numpy"}
 
 
 # The run folder
@@ -245,6 +290,7 @@ def test_training_keeps_every_checkpoint_and_logs_every_step(tmp_path, mlx_cpu):
     assert run["data"]["train.jsonl"] == tr.sha256_file(data / "train.jsonl")
     assert run["plan"] == plan.to_dict() and run["segments"][0]["from_step"] == 0
     assert run["segments"][0]["git_commit"] and run["segments"][0]["versions"]["mlx_lm"]
+    assert "transformers" in run["segments"][0]["versions"] and "ml/train/train.py" in run["segments"][0]["code"]["files_sha256"]
     config = json.loads((out / "adapter_config.json").read_text())
     assert config["num_layers"] == 2 and config["lora_parameters"] == {"rank": 4, "scale": 2.0, "dropout": 0.1}
     # the size worked out from a model's config is the count of real LoRA weights
