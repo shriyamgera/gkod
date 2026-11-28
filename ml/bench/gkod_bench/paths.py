@@ -10,3 +10,5 @@ RESULTS = REPO / "results"
 ENV_FILE = REPO / ".env"
 MCP_PYTHON = REPO / "mcp" / ".venv" / "bin" / "python"
 LOCAL_MODEL = REPO / "ml" / "models" / "qwen2.5-coder-1.5b-instruct"
+# fixed dev subsets (lists of prompt ids), for learning curves
+SUBSETS = REPO / "ml" / "bench" / "subsets"

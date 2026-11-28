@@ -5,9 +5,11 @@ Written on 28 Nov 2026, before any training run. The rule below does not change 
 
 ## Sets
 
-- **dev-curve:** the first 50 dev prompts in the benchmark's fixed order (sorted by the sha256 of the id, the order
-  `gkod_bench run --split dev --limit 50` takes). The same 50 for every checkpoint of every run. Used only for
-  learning curves.
+- **dev-curve:** the 50 dev prompts listed in `ml/bench/subsets/dev-curve.json` with the dev files' sha256, picked by
+  the seeded rule written there and in `ml/README.md` ("Learning curve"): 13 tier 1, 12 tier 2, 12 tier 3 and 13
+  edits, spread over families and edit kinds. The same 50 for every checkpoint of every run. Used only for learning
+  curves. (Changed on 28 Nov, before any dev look: the first 50 in the benchmark's order, the rule first written here,
+  had only 5 tier 2 prompts.)
 - **full dev:** all 400 dev prompts (300 create, 100 edit). Used for picking.
 - **test:** closed until the end (see below).
 - The validation loss (100 train rows) and the everyday requests are reported. They never pick anything.
@@ -62,7 +64,8 @@ The validation loss never picks a checkpoint. night-run's `best.json` is only a 
 
 - The learning curve of a run is its dev-curve score at every checkpoint, with intervals, next to its validation
   loss. The saturation point is the earliest checkpoint that no later checkpoint beats by a real margin. It describes
-  the run; it does not pick.
+  the run; it does not pick. `gkod_bench curve` writes it, and next to it a second reading (the interval rule in
+  `ml/README.md`), which does not pick either.
 - Data-size runs (for example 1,000, 2,000, 4,000 and 8,000 rows) are scored on dev-curve. One goes to full dev only
   as a candidate, inside the limits above.
 

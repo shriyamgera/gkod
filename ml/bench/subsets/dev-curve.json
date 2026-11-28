@@ -1,0 +1,132 @@
+{
+ "name": "dev-curve",
+ "split": "dev",
+ "rule_version": 1,
+ "seed": "dev-curve-v1",
+ "rule": "Each tier gets a quarter of the 50: t1 13, t2 12, t3 12, edit 13 (12 splits the 4 and 3 families of tiers 2 and 3 evenly). Inside a tier the prompts are sorted by group, then by sha256('dev-curve-v1:' + id); the group is the family for t1, t2 and t3, and (edit kind, tier of the part edited, family) for edits. Of the n prompts of a tier, the ones at places floor((i + 0.5) * n / quota), i = 0 .. quota - 1, are taken, so every group gets its share of the quota rounded down or up.",
+ "quotas": {
+  "t1": 13,
+  "t2": 12,
+  "t3": 12,
+  "edit": 13
+ },
+ "files": {
+  "dev/create.jsonl": "68407e5748a00e031693b861a1d02bb936f832e8ec376d66a726e61152fa5388",
+  "dev/edit.jsonl": "0a2bcf9f14ee69d0c9d73a6ad8e85f30dce1b545589e82383da412158ed4753e"
+ },
+ "ids": [
+  "s203-000863",
+  "s203-000674",
+  "e204-000002",
+  "s201-000141",
+  "e204-000079",
+  "e204-000003",
+  "e204-000027",
+  "s203-000919",
+  "s203-000865",
+  "s202-001807",
+  "s202-000203",
+  "s201-000379",
+  "s201-000153",
+  "s202-003544",
+  "e204-000005",
+  "s203-000589",
+  "e204-000030",
+  "e204-000013",
+  "s202-001688",
+  "e204-000072",
+  "s201-000028",
+  "e204-000017",
+  "s201-000101",
+  "s201-000105",
+  "s201-000098",
+  "s203-000481",
+  "e204-000029",
+  "s202-022166",
+  "s201-000025",
+  "s203-001085",
+  "s201-000065",
+  "s202-008306",
+  "s202-000483",
+  "s201-000052",
+  "s202-008205",
+  "s202-004535",
+  "e204-000091",
+  "s203-000708",
+  "s202-008338",
+  "e204-000074",
+  "s202-021203",
+  "s201-000285",
+  "e204-000083",
+  "s203-000904",
+  "s201-000077",
+  "s203-000210",
+  "s203-000587",
+  "s203-000795",
+  "s202-010306",
+  "s201-000069"
+ ],
+ "spread": {
+  "t1": {
+   "prompts": 13,
+   "families": {
+    "battery_holder": 1,
+    "bit_holder": 1,
+    "channel": 1,
+    "clip": 1,
+    "cup": 1,
+    "divider": 1,
+    "grommet": 1,
+    "hook": 1,
+    "plate": 1,
+    "shelf": 1,
+    "spacer": 1,
+    "tool_holder": 1,
+    "tray": 1
+   }
+  },
+  "t2": {
+   "prompts": 12,
+   "families": {
+    "bracket": 3,
+    "channel": 3,
+    "plate": 3,
+    "tray": 3
+   }
+  },
+  "t3": {
+   "prompts": 12,
+   "families": {
+    "coaster": 4,
+    "comb": 4,
+    "corner_plate": 4
+   }
+  },
+  "edit": {
+   "prompts": 13,
+   "families": {
+    "bracket": 1,
+    "clip": 1,
+    "comb": 3,
+    "corner_plate": 1,
+    "divider": 2,
+    "plate": 3,
+    "shelf": 1,
+    "tray": 1
+   },
+   "kinds": {
+    "add": 1,
+    "count": 2,
+    "hole_d": 1,
+    "remove": 3,
+    "scale": 1,
+    "size": 5
+   },
+   "tier_of_part": {
+    "t1": 5,
+    "t2": 4,
+    "t3": 4
+   }
+  }
+ }
+}

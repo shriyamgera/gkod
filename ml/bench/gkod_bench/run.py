@@ -28,6 +28,7 @@ from gkod_bench.gkod import Gkod
 from gkod_bench.paths import REPO, RESULTS, SETS, SETS_HASHES
 from gkod_bench.prompts import build
 from gkod_bench.score import score_answer
+from gkod_bench.subsets import Subset
 from gkod_bench.summary import summarize
 
 # settings that may differ between the stages of one row
@@ -99,7 +100,7 @@ def _check_same_row(path: Path, config: dict) -> None:
     if not path.exists():
         return
     before = json.loads(path.read_text())
-    for key in ("engine", "shots", "system_sha256", "tiers", "data", "scoring"):
+    for key in ("engine", "shots", "system_sha256", "tiers", "subset", "data", "scoring"):
         a, b = before.get(key), config.get(key)
         if key == "engine":
             a, b = _comparable(a), _comparable(b)
@@ -146,6 +147,7 @@ def run_row(
     shots: int = 0,
     limit: int | None = None,
     tiers: tuple[str, ...] | None = None,
+    subset: Subset | None = None,
     results: Path = RESULTS,
     sets_dir: Path = SETS,
     hashes: Path = SETS_HASHES,
@@ -154,6 +156,7 @@ def run_row(
     max_errors: int = 3,
     log: Callable[[str], None] = say,
 ) -> dict:
+    """`subset` (a fixed list of dev prompt ids, see subsets.py) runs only those prompts; the row keeps the list."""
     check_open(split, final)
     if shots not in (0, 3):
         raise ValueError("Rows are zero-shot or use the 3 fixed examples.")
@@ -162,6 +165,8 @@ def run_row(
     items, files = load_split(split, final, sets_dir, hashes)
     if tiers:
         items = [i for i in items if i.tier in tiers]
+    if subset is not None:
+        items = subset.pick(items, split, files)
     shot_rows, shot_record = {}, None
     if shots:
         shot_record = {}
@@ -185,6 +190,7 @@ def run_row(
             "shots": shot_record,
             "system_sha256": any_messages.record()["system_sha256"],
             "tiers": list(tiers) if tiers else None,
+            "subset": subset.record() if subset is not None else None,
             "data": {"dir": str(sets_dir.relative_to(REPO)) if sets_dir.is_relative_to(REPO) else str(sets_dir), "files": files},
             "scoring": {"printer": gkod.printer, "size_tolerance_mm": 0.5, "slider_ends": slider_ends, "compile_limit_s": 10},
             "harness": harness_source(),
@@ -263,6 +269,9 @@ def summarize_row(row: str, split: str, *, final: bool = False, results: Path = 
     ceiling.ensure(results, split, items, files, sets_dir=sets_dir, hashes=hashes)
     if config.get("tiers"):
         items = [i for i in items if i.tier in config["tiers"]]
+    if config.get("subset"):
+        ids = set(config["subset"]["ids"])
+        items = [i for i in items if i.id in ids]
     return write_summary(results, row, split, items, config, files)
 
 
