@@ -146,16 +146,21 @@ def headline(summary: dict) -> str:
         if r["rate"] is None:
             return "n/a"
         return f"{r['rate']:.1%} [{r['ci95'][0]:.1%}, {r['ci95'][1]:.1%}]"
+    def ceiling(g: dict) -> str:
+        c = g.get("guess_ceiling")
+        return f", guess ceiling {pct(c)} of creates" if c and "rate" in c else ""
+
     lines = [
         head,
+        f"  right part    {pct(o['right_part'])}{ceiling(o)}",
         f"  compiles      {pct(o['compiles'])}",
         f"  print checks  {pct(o['checks_pass'])}",
-        f"  meets request {pct(o['meets_request'])} ({o['meets_request']['prompts_with_nothing_measured']} with nothing measured)",
+        f"  stated sizes  {pct(o['stated_sizes_match'])} match ({o['stated_sizes_match']['prompts_with_nothing_measured']} with nothing measured)",
         f"  iou           {o['iou']['mean']:.3f} mean",
     ]
     for tier, g in summary["tiers"].items():
         extra = f", sizes kept {pct(g['edit_sizes_ok'])}" if "edit_sizes_ok" in g else ""
-        lines.append(f"  {tier:5} compiles {pct(g['compiles'])}, meets {pct(g['meets_request'])}{extra}")
+        lines.append(f"  {tier:5} right part {pct(g['right_part'])}{ceiling(g)}, compiles {pct(g['compiles'])}, stated sizes match {pct(g['stated_sizes_match'])}{extra}")
     return "\n".join(lines)
 
 

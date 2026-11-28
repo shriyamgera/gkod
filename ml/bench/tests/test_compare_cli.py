@@ -37,6 +37,22 @@ def test_wrong_answers_score_lower_and_compare_pairs_them(fake):
     assert (fake["results"] / "compare" / "good__vs__bad" / "dev.json").exists()
 
 
+def test_the_printed_headline(fake):
+    summary = run_row(ScriptedEngine(echo_reference), "shown", "dev", **fake)
+    text = cli.headline(summary)
+    assert "right part    100.0%" in text and "stated sizes  100.0% [" in text and "meets" not in text
+    assert "t1    right part 100.0%" in text and "sizes kept 100.0%" in text
+    # with the split's ceiling saved, it sits next to right part
+    text = cli.headline(cli_summarize(fake, "shown"))
+    assert "guess ceiling 100.0% [" in text
+
+
+def cli_summarize(fake, row):
+    from gkod_bench.run import summarize_row
+
+    return summarize_row(row, "dev", results=fake["results"], sets_dir=fake["sets_dir"], hashes=fake["hashes"])
+
+
 def test_closed_test_split_in_compare_and_the_command(fake, monkeypatch):
     with pytest.raises(SplitClosed):
         compare_rows("a", "b", "test", results=fake["results"])
