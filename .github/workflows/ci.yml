@@ -14,7 +14,9 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # the benchmark tests took about 1 minute on main and 3 to 5 on day 8 (learning-curve tests, two more compiles per
+    # scored answer), on top of the site's tests, the browser tests and slicing for every printer
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
