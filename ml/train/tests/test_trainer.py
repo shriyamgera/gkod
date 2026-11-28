@@ -306,6 +306,19 @@ def test_the_memory_cap_stops_the_run(tmp_path, mlx_cpu):
     assert json.loads((tmp_path / "run" / "run.json").read_text())["status"] == "stopped: memory cap"
 
 
+def test_the_buffer_cache_is_cleared_after_every_forward_pass(tmp_path, mlx_cpu, monkeypatch):
+    # as mlx-lm's own trainer does; without it the real model wired about 12 GB in its first validation pass
+    data = tf.make_data(tmp_path / "rows", tf.FakeTokenizer(every=1, vocab=97))
+    plan = tiny_plan(data)
+    cleared = []
+    monkeypatch.setattr(mlx_cpu, "get_cache_memory", lambda: 1)
+    monkeypatch.setattr(mlx_cpu, "clear_cache", lambda: cleared.append(1))
+    train_tiny(plan, data, tmp_path / "run")
+    valid_rows = json.loads((data / "meta.json").read_text())["valid"]["rows"]
+    valid_passes = math.ceil(valid_rows / plan.batch_size) * len(plan.eval_steps())
+    assert len(cleared) == plan.iters + valid_passes
+
+
 WRAPPER = """
 import json, sys
 from pathlib import Path

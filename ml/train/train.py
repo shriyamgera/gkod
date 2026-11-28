@@ -619,6 +619,14 @@ def run_training(
             grad = None
         return loss, toks, grad
 
+    def free_cache() -> None:
+        """Hand MLX's cached buffers back after every forward pass, as mlx-lm's own trainer does (its
+        clear_cache_threshold is 0 by default). Without it MLX keeps a buffer for every padded width it has seen, the
+        wired limit lets them all stay wired, and the Mac swaps: on 28 Nov the first validation pass on the real model
+        reached about 12 GB wired and 4.8 GB of swap before it was stopped."""
+        if mx.get_cache_memory() > 0:
+            mx.clear_cache()
+
     def validate(step: int) -> float:
         began = time.perf_counter()
         model.eval()
@@ -627,6 +635,7 @@ def run_training(
             arr, spans = make_batch(valid_tok[k : k + plan.batch_size], plan.max_seq_length)
             loss, toks = default_loss(model, mx.array(arr), mx.array(spans))
             mx.eval(loss, toks)
+            free_cache()
             total += loss.item() * toks.item()
             tokens += int(toks.item())
         model.train()
@@ -671,6 +680,7 @@ def run_training(
             mx.random.seed(plan.seed * 1_000_003 + it)
             loss, toks, grad = step_fn((mx.array(arr), mx.array(spans)), grad, do_update)
             mx.eval(state, loss, toks, grad)
+            free_cache()
             loss_sum += loss.item() * toks.item()
             answer_tokens += int(toks.item())
             all_tokens += int(spans[:, 1].sum())
