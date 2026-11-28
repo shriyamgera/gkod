@@ -14,7 +14,8 @@
   training run, --resume-args adds arguments on a restart, with {checkpoint} and {step} filled in from the newest
   checkpoint in --checkpoints.
 - For a training run, --checkpoints keeps only the last two step checkpoints and the one with the lowest validation
-  loss (see ml/train/checkpoints.py); the rest are deleted at every disk check and at the end.
+  loss (see ml/train/checkpoints.py); the rest are deleted at every disk check and at the end. With --keep-all every
+  checkpoint is kept (for a learning curve) and best.json still names the lowest validation loss.
 - It refuses to start on battery unless --allow-battery is given.
 
 Exit codes: 0 finished, 1 still failing after the restarts, 2 could not start, 3 stopped for low disk, 130 stopped by
@@ -60,6 +61,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--grace", type=float, default=120.0, help="seconds between SIGTERM and SIGKILL (120)")
     p.add_argument("--checkpoints", type=Path, help="training checkpoint folder to prune and resume from")
     p.add_argument("--keep-last", type=int, default=2, help="step checkpoints kept besides the best (2)")
+    p.add_argument("--keep-all", action="store_true", help="keep every step checkpoint (for a learning curve)")
     p.add_argument("--resume-args", default="", help="arguments added on a restart, e.g. '--resume-adapter-file {checkpoint}'")
     p.add_argument("--allow-battery", action="store_true", help="start even when the Mac is on battery")
     p.add_argument("--fresh", action="store_true", help="start over instead of resuming an earlier run of this name")
@@ -71,6 +73,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         p.error("give the command after --")
     if not NAME.match(args.name):
         p.error("--name may use letters, digits, '.', '_' and '-' only")
+    if args.keep_all and not args.checkpoints:
+        p.error("--keep-all needs --checkpoints")
     return args
 
 
@@ -242,7 +246,7 @@ class Run:
     def prune(self) -> None:
         folder = self.args.checkpoints
         self.losses.update(read_loss_file(folder))
-        result = prune(folder, self.losses, keep_last=self.args.keep_last)
+        result = prune(folder, self.losses, keep_last=self.args.keep_last, keep_all=self.args.keep_all)
         if result["deleted"]:
             self.say(f"checkpoints: deleted steps {result['deleted']}, kept {result['kept']}, best {result['best']}")
         self.state["best_step"] = result["best"]

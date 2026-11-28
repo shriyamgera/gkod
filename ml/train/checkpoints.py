@@ -1,4 +1,5 @@
-"""Which training checkpoints to keep: the last two and the one with the lowest validation loss.
+"""Which training checkpoints to keep: the last two and the one with the lowest validation loss, or (for a learning
+curve) every one, with the lowest validation loss still named in best.json.
 
 mlx-lm's LoRA trainer writes `0000200_adapters.safetensors` every --save-every steps (plus `adapters.safetensors`, the
 latest) and prints a validation line every --steps-per-eval steps: `  200    val 1.234    3.21s` in mlx-lm 0.32 (with
@@ -75,15 +76,19 @@ def best_checkpoint(checkpoints: list[Checkpoint], losses: dict[int, float]) -> 
     return min(scored, key=lambda c: (losses[c.step], c.step)) if scored else None
 
 
-def prune(folder: Path, losses: dict[int, float], keep_last: int = 2) -> dict:
-    """Delete every step checkpoint except the last `keep_last` and the best, and write best.json.
+def prune(folder: Path, losses: dict[int, float], keep_last: int = 2, keep_all: bool = False) -> dict:
+    """Delete every step checkpoint except the last `keep_last` and the best (none with `keep_all`), and write
+    best.json.
 
     `adapters.safetensors`, `adapter_config.json` and any other file are never touched. Returns what was kept and
     deleted, for the log.
     """
     checkpoints = find_checkpoints(folder)
     best = best_checkpoint(checkpoints, losses)
-    keep = {c.step for c in checkpoints[-keep_last:]} if keep_last > 0 else set()
+    if keep_all:
+        keep = {c.step for c in checkpoints}
+    else:
+        keep = {c.step for c in checkpoints[-keep_last:]} if keep_last > 0 else set()
     if best:
         keep.add(best.step)
     deleted = []

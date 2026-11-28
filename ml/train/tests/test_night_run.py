@@ -14,6 +14,9 @@ from pathlib import Path
 
 import pytest
 
+# The script holds the Mac awake with caffeinate and reads the power with pmset; only macOS has them.
+pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="night-run needs macOS (caffeinate, pmset)")
+
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "night-run.py"
 PY = sys.executable
 FAST = ["--allow-battery", "--disk-every", "0.2", "--restart-wait", "0.1", "--grace", "5"]
@@ -309,6 +312,26 @@ def test_training_keeps_the_last_two_and_the_best_and_resumes_from_the_newest(tm
     assert (ckpt / "adapters.safetensors").exists()
 
 
+def test_keep_all_keeps_every_checkpoint_and_still_names_the_best(tmp_path):
+    trainer = script(tmp_path, "trainer.py", TRAINER)
+    ckpt = tmp_path / "adapters"
+    done = night(
+        tmp_path,
+        "--name", "curve",
+        "--checkpoints", str(ckpt),
+        "--keep-all",
+        "--resume-args", "--resume-from {checkpoint} --start {step}",
+        "--",
+        PY, trainer, "--out", str(ckpt), "--steps", "6", "--crash-after", "3",
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "resuming from 0000003_adapters.safetensors (step 3)" in logs(tmp_path, "curve")
+    kept = sorted(p.name for p in ckpt.glob("*_adapters.safetensors"))
+    assert kept == [f"{s:07d}_adapters.safetensors" for s in range(1, 7)]
+    assert json.loads((ckpt / "best.json").read_text())["step"] == 2
+    assert state(tmp_path, "curve")["best_step"] == 2
+
+
 def test_starting_again_after_the_script_died_resumes(tmp_path):
     trainer = script(tmp_path, "trainer.py", TRAINER)
     ckpt = tmp_path / "adapters"
@@ -335,6 +358,6 @@ def test_starting_again_after_the_script_died_resumes(tmp_path):
 
 
 def test_options_are_checked():
-    for bad in (["--name", "x"], ["--name", "bad name", "--", "true"]):
+    for bad in (["--name", "x"], ["--name", "bad name", "--", "true"], ["--name", "x", "--keep-all", "--", "true"]):
         done = subprocess.run([PY, str(SCRIPT), *bad], capture_output=True, text=True)
         assert done.returncode == 2

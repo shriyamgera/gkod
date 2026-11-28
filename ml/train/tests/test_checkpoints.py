@@ -72,6 +72,14 @@ def test_keeps_the_last_two_and_the_best(tmp_path):
     assert (tmp_path / "adapter_config.json").exists()
 
 
+def test_keep_all_deletes_nothing_and_still_writes_the_best(tmp_path):
+    make(tmp_path, 100, 200, 300, 400, 500)
+    result = prune(tmp_path, {100: 1.5, 200: 0.9, 300: 1.1, 400: 1.0, 500: 1.2}, keep_all=True)
+    assert steps_in(tmp_path) == [100, 200, 300, 400, 500]
+    assert result == {"kept": [100, 200, 300, 400, 500], "deleted": [], "best": 200}
+    assert json.loads((tmp_path / "best.json").read_text())["step"] == 200
+
+
 def test_keeps_two_when_the_best_is_one_of_the_last_two(tmp_path):
     make(tmp_path, 100, 200, 300)
     prune(tmp_path, {100: 2.0, 200: 1.0, 300: 1.5})
