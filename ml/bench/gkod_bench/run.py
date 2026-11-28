@@ -199,6 +199,9 @@ def run_row(
         if not config_path.exists():
             write_json(config_path, {**config, "started": datetime.now(UTC).isoformat(timespec="seconds")})
         log(f"{row} on {split}: {len(done)} done before, {len(todo)} to run now, {len(items)} in all")
+        if hasattr(engine, "prepare"):
+            # an engine that answers several prompts at once (the local engine with --batch) sees what comes next
+            engine.prepare([messages[i.id] for i in todo])
 
         errors_in_a_row = failures_in_a_row = 0
         for n, item in enumerate(todo, 1):
