@@ -61,3 +61,15 @@ def test_best_turn_finds_a_part_drawn_lying_another_way():
     for a, b in ((box(10, 10, 10), box(10, 10, 5)), (plate_with_holes(3), plate_with_holes(2)), (hollow_cube(), box(3, 3, 3))):
         assert best_turn_iou(a, b)["iou_as_drawn"] == iou(a, b)["iou"]
     assert best_turn_iou(np.zeros((0, 3, 3)), box(1, 1, 1))["iou"] is None
+
+
+def test_a_flat_face_on_a_row_of_voxel_centres_does_not_flip_its_layer():
+    # 48 x 30 x 3: the voxel size is 0.24 mm and the top face, at 12.5 voxels, would sit exactly on a row of centres
+    # without the z offset. Drawn with other triangles, or moved, the face's height comes out one bit off 3.0, and the
+    # whole top layer flipped (0.989 for the same part).
+    plain = box(48, 30, 3)
+    finer = blocks([(i, j, 0) for i in range(7) for j in range(7)], scale=(48 / 7, 30 / 7, 3.0))
+    assert iou(plain, finer)["iou"] == pytest.approx(1.0, abs=1e-3)
+    for offset in ((1.234, 5.678, 0.0), (100.01, -50.3, 0.0), (13.37, -7.1, 0.0)):
+        assert iou(plain, box(48, 30, 3, offset=offset))["iou"] == pytest.approx(1.0, abs=1e-3)
+        assert best_turn_iou(finer + np.array(offset), plain)["iou"] == pytest.approx(1.0, abs=1e-3)

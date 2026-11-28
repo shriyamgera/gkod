@@ -2,7 +2,8 @@
 
 Each mesh is filled on the same grid by casting a ray up every column of voxel centres and counting crossings:
 a centre is inside between an odd and the next even crossing. The grid is a little off the round numbers parts
-are drawn on, so a ray never runs exactly along an edge. The voxel size is the longest side of the two boxes
+are drawn on, in x, y and z, so a ray never runs exactly along an edge and a flat face never sits exactly on a row of
+centres (where a rounding error of one bit in the face's height would flip the whole layer). The voxel size is the longest side of the two boxes
 divided by `resolution` (200 by default: 1 mm voxels for a 200 mm part, a fraction of a second per part).
 """
 
@@ -14,13 +15,15 @@ import math
 import numpy as np
 
 RESOLUTION = 200
-# fractions of a voxel; irrational, so grid points do not land on part corners drawn at round numbers
-_JITTER = (math.sqrt(2) - 1.4142) * 10, (math.sqrt(3) - 1.7320) * 10
+# fractions of a voxel in x, y and z; irrational, so grid points do not land on part corners or faces drawn at round
+# numbers
+_JITTER = (math.sqrt(2) - 1.4142) * 10, (math.sqrt(3) - 1.7320) * 10, (math.sqrt(5) - 2.2360) * 10
 _MAX_PAIRS = 4_000_000
 
 
 def fill(tri: np.ndarray, pitch: float, shape: tuple[int, int, int]) -> np.ndarray:
-    """Occupancy of a grid whose corner is at the origin, voxel centres at (i + 0.5) * pitch (plus the jitter)."""
+    """Occupancy of a grid whose corner is at the origin, voxel centres at (i + 0.5) * pitch (plus the jitter on each
+    axis)."""
     nx, ny, nz = shape
     grid = np.zeros((nx, ny, nz + 1), dtype=np.int16)
     tri = np.asarray(tri, dtype=np.float64).reshape(-1, 3, 3)
@@ -28,7 +31,7 @@ def fill(tri: np.ndarray, pitch: float, shape: tuple[int, int, int]) -> np.ndarr
     area = (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0])
     keep = np.abs(area) > 1e-12
     a, b, c, area = a[keep], b[keep], c[keep], area[keep]
-    jx, jy = _JITTER
+    jx, jy, jz = _JITTER
     # the columns whose centre can be inside each triangle's shadow on the bed
     xs = np.stack([a[:, 0], b[:, 0], c[:, 0]], axis=1) / pitch - 0.5 - jx
     ys = np.stack([a[:, 1], b[:, 1], c[:, 1]], axis=1) / pitch - 0.5 - jy
@@ -80,8 +83,8 @@ def fill(tri: np.ndarray, pitch: float, shape: tuple[int, int, int]) -> np.ndarr
     col, z, rank = col[usable], z[usable], rank[usable]
     enter, leave = z[rank % 2 == 0], z[rank % 2 == 1]
     column = col[rank % 2 == 0]
-    k0 = np.clip(np.ceil(enter / pitch - 0.5), 0, nz).astype(np.int64)
-    k1 = np.clip(np.ceil(leave / pitch - 0.5), 0, nz).astype(np.int64)
+    k0 = np.clip(np.ceil(enter / pitch - 0.5 - jz), 0, nz).astype(np.int64)
+    k1 = np.clip(np.ceil(leave / pitch - 0.5 - jz), 0, nz).astype(np.int64)
     ci, cj = column // ny, column % ny
     np.add.at(grid, (ci, cj, k0), 1)
     np.add.at(grid, (ci, cj, k1), -1)
