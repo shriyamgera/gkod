@@ -22,8 +22,8 @@ dropout = 0.05            # from the Data-first plan; the Insurance-first plan n
 
 [train]
 effective_batch = 8       # rows per update = batch_size x gradient accumulation
-batch_size = 1            # rows per forward pass; the probe sets it (and the rows are built for it)
-grad_checkpoint = true    # the probe decides; the 25 Nov spike swapped at 9.7 GB without it
+batch_size = 1            # rows per forward pass (the rows are built for it); the 28 Nov probe picked 1
+grad_checkpoint = true    # the 28 Nov probe: without it one 2,000-token row peaked at 11.3 GB, with it 5.55 GB
 max_seq_length = 2048
 mask_prompt = true        # loss on the answer and its end token only
 epochs = 1                # one pass over fresh rows

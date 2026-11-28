@@ -1,6 +1,6 @@
 """Training rows for mlx-lm, from the frozen v1 train split only.
 
-    ml/.venv/bin/python ml/train/build_rows.py --config ml/configs/run1-insurance.toml --rows 5700 --batch-size 1 \
+    ml/.venv/bin/python ml/train/build_rows.py --config ml/configs/run1-insurance.toml [--rows N] [--batch-size N] \
         --out data/train-rows/run1-insurance
 
 Writes three files to --out:
@@ -449,7 +449,7 @@ def build(
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="build_rows", description="Build mlx-lm chat rows from the frozen v1 train split.")
     p.add_argument("--config", required=True, type=Path, help="a run config in ml/configs")
-    p.add_argument("--rows", type=int, help="training rows (rounded down to whole updates); the probe sets it")
+    p.add_argument("--rows", type=int, help="training rows (rounded down to whole updates); the config's [rows] count by default")
     p.add_argument("--batch-size", type=int, help="rows per forward pass, for the length buckets (the config's by default)")
     p.add_argument("--out", required=True, type=Path, help="folder for train.jsonl, valid.jsonl and meta.json")
     p.add_argument("--sets", type=Path, default=SETS, help="the frozen sets folder (data/sets/v1)")
@@ -464,7 +464,7 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(args.config)
     rows = args.rows if args.rows is not None else config.get("rows", {}).get("count")
     if not rows:
-        sys.stderr.write("build_rows: give --rows (the probe sets the row count from the measured speed)\n")
+        sys.stderr.write("build_rows: give --rows, or set [rows] count in the config\n")
         return 2
     batch_size = args.batch_size or int(config.get("train", {}).get("batch_size", 1))
     model_dir = repo_path(config["model"]["path"])
