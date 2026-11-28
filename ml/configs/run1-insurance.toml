@@ -1,0 +1,39 @@
+# Run 1: Insurance-first SFT (approach 2 in research/gkod-finetune-approaches.md). Plain LoRA on frozen v1 train
+# rows only, no generator changes.
+#
+# The row count is set with `build_rows.py --rows N`, from the probe's measured speed. The plan's full size is 5,700
+# rows (4,500 creates and 1,200 edits); its daytime run is the first half of every group (--rows 2850). Rows are
+# taken in the order of sha256(id + "sft-v1"), so a smaller run is the start of every group of a bigger one.
+
+extends = "base.toml"
+name = "run1-insurance"
+method = "insurance-first"
+
+[rows]
+salt = "sft-v1"
+
+[rows.create]
+"*" = 300                 # every train family the same: 300 each at full size (15 families, 4,500)
+
+[rows.edit]
+# Weighted toward the kinds the untrained model did worst on in dev (it passed add 0 of 8, scale 0 of 8, remove 1
+# to 4 of 20, count 3 to 8 of 16). Counts at full size, 1,200 in all. v1 train has add 280, remove 369, count 299,
+# scale 239, size 1,443, move 158 and hole size 212, so at full size `add` is 4 rows short once the validation rows
+# are out.
+add = 280
+remove = 330
+count = 260
+scale = 160
+size = 100
+move = 40
+hole_d = 30               # hole size
+
+[lora]
+scale = 20.0              # mlx-lm takes `scale`, not alpha; scale x learning rate = 4e-4, the common rank-16 strength
+
+[train]
+optimizer = "adam"
+learning_rate = 2e-5
+warmup_fraction = 0.05    # linear warmup over the first 5% of updates ...
+warmup_init = 1e-6
+decay_to = 0.1            # ... then cosine decay to a tenth of the peak at the last update

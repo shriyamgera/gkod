@@ -1,0 +1,42 @@
+# Settings every GKod LoRA run shares. A run's own file names this one with `extends` and adds what its method
+# decides: the row groups and the learning settings (optimizer, learning rate, schedule, LoRA scale), which have no
+# default here on purpose.
+#
+# Every option was checked against the installed mlx-lm 0.32.2 source (see ml/README.md, "Training").
+# Steps are optimizer updates: one update is `effective_batch` rows, whatever the batch size.
+
+name = "base"
+
+[model]
+path = "ml/models/qwen2.5-coder-1.5b-instruct"
+# model.safetensors as fetched by ml/scripts/fetch-model.py; the trainer refuses other weights
+weights_sha256 = "c1b9b30e907950516ba3c646bdf570d8084c25a6410a0cdca80cf04b11bc13a8"
+
+[lora]
+fine_tune_type = "lora"   # mlx-lm: lora, dora or full
+num_layers = 16           # the last 16 of the model's 28 blocks
+rank = 16
+dropout = 0.05            # from the Data-first plan; the Insurance-first plan names none
+# No `keys`: mlx-lm then puts LoRA on every linear layer of those blocks, which in Qwen2 are the 7 projections
+# (q, k, v, o, gate, up, down).
+
+[train]
+effective_batch = 8       # rows per update = batch_size x gradient accumulation
+batch_size = 1            # rows per forward pass; the probe sets it (and the rows are built for it)
+grad_checkpoint = true    # the probe decides; the 25 Nov spike swapped at 9.7 GB without it
+max_seq_length = 2048
+mask_prompt = true        # loss on the answer and its end token only
+epochs = 1                # one pass over fresh rows
+seed = 0
+save_every = 50           # updates between checkpoints (400 rows); every checkpoint is kept for the learning curve
+eval_every = 50           # updates between validation losses; must divide save_every
+peak_memory_cap_gb = 0    # stop when MLX's peak memory passes this (0: no cap; the probe uses 9)
+
+[rows]
+max_tokens = 2048         # a row whose whole chat is longer (model's tokenizer) is refused; at most max_seq_length
+
+[valid]
+# The fixed validation rows, the same for every run so their losses compare: train rows, never dev, never trained on.
+salt = "valid-v1"
+create = 75               # round-robin over the 15 train families: 5 each
+edit = 25                 # round-robin over the 7 edit kinds
