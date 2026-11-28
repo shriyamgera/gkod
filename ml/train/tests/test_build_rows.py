@@ -77,6 +77,16 @@ def test_the_guards_refuse_each_bad_row_and_keep_the_rest(tmp_path, gkod):
     assert not used & refused
     # every good row is a candidate: 36 creates and 18 edits
     assert sum(meta["candidates"].values()) == 54
+    # each guard on its own, called directly
+    edit = tf.edit_row("e1-x", "add", 1)
+    edit["source_tier"] = "t1"
+    assert br.row_problem("edit", edit, set()) == br.NOT_TRAIN
+    create = tf.create_row("s1-x", "plate", 1)
+    create["tree_sha256"] = ""
+    assert br.row_problem("create", create, set()) == br.NO_TREE
+    edit = tf.edit_row("e1-y", "add", 1)
+    edit["source"]["generator"] = None
+    assert br.row_problem("edit", edit, set()) == br.NO_PROVENANCE
 
 
 def test_validation_rows_are_never_trained_on_and_never_dev(tmp_path, gkod):
@@ -95,6 +105,25 @@ def test_validation_rows_are_never_trained_on_and_never_dev(tmp_path, gkod):
         "edit:remove": 2,
         "edit:size": 2,
     }
+
+
+def test_no_training_row_is_made_from_a_validation_rows_part(tmp_path, gkod):
+    made = tf.make_set(tmp_path)
+    meta = build(made, tmp_path / "out", gkod, rows=24)
+    rows = {}
+    for task in ("create", "edit"):
+        for line in (made["sets"] / "train" / f"{task}.jsonl").read_text().splitlines():
+            row = json.loads(line)
+            rows[row["id"]] = (task, row)
+    train_ids = [d[0] for d in meta["train"]["rows_detail"]]
+    valid_ids = [d[0] for d in meta["valid"]["rows_detail"]]
+    valid_parts = {br.part_of(*rows[i]) for i in valid_ids}
+    assert not valid_parts & {br.part_of(*rows[i]) for i in train_ids}
+    # the held-out rows are listed, and each one shares its part with a validation row
+    held = meta["held_out_with_valid"]
+    assert held["rows"] == len(held["ids"]) > 0
+    assert all(br.part_of(*rows[i]) in valid_parts and i not in valid_ids and i not in train_ids for i in held["ids"])
+    assert meta["versions"]["python"] and "transformers" in meta["versions"]
 
 
 def test_the_same_inputs_give_the_same_bytes(tmp_path, gkod):

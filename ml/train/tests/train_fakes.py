@@ -79,6 +79,9 @@ def make_set(root: Path, broken: bool = True) -> dict:
     sets = root / "sets"
     creates = [create_row(f"s1-{f[:2]}{n:03d}", f, n) for f in ("plate", "tray", "spacer") for n in range(12)]
     edits = [edit_row(f"e1-{k[:3]}{n:03d}", k, n) for k in ("add", "size", "remove") for n in range(6)]
+    # as in v1, every train edit is made from a train create part; some parts have two edits
+    for k, edit in enumerate(edits):
+        edit["source"]["id"] = creates[(5 * k) % len(creates)]["id"]
     dev_creates = [create_row(f"s2-dev{n:03d}", "plate", 100 + n, split="dev") for n in range(3)]
     dev_edits = [edit_row(f"e2-dev{n:03d}", "size", 100 + n, split="dev") for n in range(2)]
     refused: dict[str, list[str]] = {}
@@ -101,17 +104,25 @@ def make_set(root: Path, broken: bool = True) -> dict:
         devedit["b"]["tree_sha256"] = dev_edits[1]["b"]["tree_sha256"]
         dirty_source = edit_row("e1-dsrc", "size", 59)
         dirty_source["source"]["generator"]["dirty"] = True
-        creates += [dirty, nogen, failed, missing, devtree, example, long, wrong]
-        edits += [devedit, dirty_source]
+        # an edit in the train file made from a dev part
+        dev_source = edit_row("e1-devsrc", "add", 60)
+        dev_source["source_tier"] = "t1"
+        notree = create_row("s1-notree", "tray", 61)
+        del notree["tree_sha256"]
+        nosourcegen = edit_row("e1-nosgen", "remove", 62)
+        del nosourcegen["source"]["generator"]
+        creates += [dirty, nogen, failed, missing, devtree, example, long, wrong, notree]
+        edits += [devedit, dirty_source, dev_source, nosourcegen]
         refused = {
             "made by a dirty generator": ["e1-dsrc", "s1-dirty"],
-            "no generator provenance": ["s1-nogen"],
+            "no generator provenance": ["e1-nosgen", "s1-nogen"],
             "a failed label": ["s1-failed"],
             "a label is missing": ["s1-nolabel"],
+            "no tree hash": ["s1-notree"],
             "its tree is in dev": ["e1-devb", "s1-devtree"],
             "text from the site's examples": ["s1-example"],
             "over the token limit": ["s1-long"],
-            "not a train row": ["s1-devrow"],
+            "not a train row": ["e1-devsrc", "s1-devrow"],
         }
     files = {
         "train/create.jsonl": creates,

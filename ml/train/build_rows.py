@@ -9,7 +9,9 @@ Writes three files to --out:
   the site's own, read at run time from app/src/engine/prompts.ts through `gkod batch` (as the benchmark reads them),
   so the wording cannot drift. The assistant answer is the generator's code in one openscad block, the way the site
   reads an answer.
-- valid.jsonl: the fixed validation rows (100 train rows no run trains on; never dev rows).
+- valid.jsonl: the fixed validation rows (100 train rows no run trains on; never dev rows). No run trains on a row
+  made from the same part either: a validation create's part is the source of some train edits, and a validation
+  edit's source part is a train create, so those rows are held out of training (the meta lists them).
 - meta.json: the row ids in file order with their token counts, the sha256 of every file read, the generator
   commits, the tokenizer, the selection report and every refusal with its reason.
 
@@ -272,6 +274,24 @@ def token_summary(ids: list[str], tokens: dict[str, tuple[int, int]], batch_size
     }
 
 
+def part_of(task: str, row: dict) -> str:
+    """The part a row is about: a create's own id, or the id of the train create an edit was made from."""
+    return row["id"] if task == "create" else (row.get("source") or {}).get("id") or row["id"]
+
+
+def package_versions() -> dict:
+    """The versions of the packages that render the chat template and count the tokens."""
+    from importlib import metadata
+
+    out = {"python": sys.version.split()[0]}
+    for name in ("transformers", "tokenizers", "jinja2", "mlx-lm"):
+        try:
+            out[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            out[name] = None
+    return out
+
+
 def git_commit(paths: tuple[str, ...] = BUILD_PATHS) -> str:
     try:
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True, timeout=10).stdout.strip()
@@ -381,12 +401,18 @@ def build(
         candidates.setdefault(group, []).append(rid)
     valid_ids = pick_valid(candidates, int(valid_cfg.get("create", 75)), int(valid_cfg.get("edit", 25)), valid_cfg["salt"])
     taken = set(valid_ids)
-    open_rows = {g: [i for i in v if i not in taken] for g, v in candidates.items()}
+    # rows made from a validation row's part would be near copies of it in training (an edit's code A is its source
+    # part's code), so they are held out too
+    parts = {row["id"]: part_of(task, row) for task, row in kept if row["id"] in messages}
+    valid_parts = {parts[i] for i in valid_ids}
+    held_out = sorted(i for i in messages if i not in taken and parts[i] in valid_parts)
+    blocked = taken | set(held_out)
+    open_rows = {g: [i for i in v if i not in blocked] for g, v in candidates.items()}
     families = sorted({g.split(":", 1)[1] for g in candidates if g.startswith("create:")})
     weighted = groups_from_config(rows_cfg, families)
     train_ids, report = pick_rows(open_rows, weighted, rows, salt, effective)
-    if taken & set(train_ids):
-        raise AssertionError("a validation row was picked for training")
+    if taken & set(train_ids) or valid_parts & {parts[i] for i in train_ids}:
+        raise AssertionError("a validation row, or a row made from its part, was picked for training")
 
     train_order = bucket_order(train_ids, {i: tokens[i][1] for i in train_ids}, batch_size, salt, longest_first)
     valid_order = bucket_order(valid_ids, {i: tokens[i][1] for i in valid_ids}, batch_size, valid_cfg["salt"])
@@ -423,6 +449,8 @@ def build(
         "builder_commit": git_commit(),
         "refused": {k: len(v) for k, v in sorted(refused.items())},
         "refused_ids": {k: sorted(v) for k, v in sorted(refused.items())},
+        "held_out_with_valid": {"rows": len(held_out), "ids": held_out, "why": "made from the same part as a validation row"},
+        "versions": package_versions(),
         "candidates": {g: len(v) for g, v in sorted(candidates.items())},
         "selection": report,
         "files": files,
@@ -437,6 +465,7 @@ def build(
         }
     (out / "meta.json").write_text(json.dumps(meta, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
     t = meta["train"]["tokens"]
+    log(f"held out of training: {len(held_out)} rows made from the same part as a validation row")
     log(
         f"wrote {len(train_order)} train rows ({t['total']:,} tokens, {t['answer']:,} answer tokens, padded {t['padded_total']:,}) "
         f"and {len(valid_order)} validation rows to {display(out)}"
