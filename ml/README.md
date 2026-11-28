@@ -336,8 +336,9 @@ ml/.venv/bin/python -m gkod_bench fewshot
   with; every record keeps the sha256 of the set file its prompt came from, and `summarize` and `rescore` refuse a row
   whose set files have changed, so answers scored against two versions of a set never mix.
 - `summarize` writes the summary again from the saved records. `rescore` scores the saved answers again with the
-  current scorer (for a new measurer) without asking the engine. `compare` puts two rows side by side on the prompts
-  both have answered. `fewshot` prints the fixed examples.
+  current scorer (for a new measurer) without asking the engine. Both work out the split's guess ceiling first if it
+  has none yet (a few minutes for dev's 300 create prompts, once; `run` only reads it). `compare` puts two rows side
+  by side on the prompts both have answered. `fewshot` prints the fixed examples.
 - Other options: `--tiers t1,t3`, `--model` (a local model folder, a Gemini model id or a Claude Code model name),
   `--adapter` (a trained LoRA folder for the local model), `--max-tokens` (1,024), `--temperature` (0) and `--seed`,
   `--rpm` (Gemini requests a minute, 10) and `--retries` (4), `--effort` (Claude Code), `--workers` (compiles at once
@@ -397,18 +398,29 @@ the split it is read from.
 
 ### Scores, all by code, for every prompt
 
+- **Right part** (the headline, `right_part`). True only when the answer compiles, passes all four print checks,
+  passes every measured stated fact, overlaps the reference part by at least 0.99 (best turn), has as many separate
+  pieces (shells) as the reference and as many through holes (genus, added up over its surfaces), and, for an edit,
+  has the right size block. Each record keeps `right_part_failed`, the checks it missed; summaries count them. The
+  rule is `right_part` in [score.py](bench/gkod_bench/score.py), and summaries and `compare` work it out again from
+  each record's saved measurements, so records scored before it existed count too. The threshold is one constant,
+  `RIGHT_PART_IOU`; how it was picked and what it cannot see are below.
 - **Compiles.** The answer's code compiles with the site's pinned OpenSCAD build and rules: warnings are errors, no
   `minkowski()` or `text()`, 10 second limit, a non-empty mesh. A compile that hits the limit is compiled once more,
   alone, so a stall of the machine does not count against the code (both tries are saved).
 - **Passes the print checks.** All four checks for the Anycubic Kobra 2 Neo bed (220 x 220 x 250 mm, 45 degree
   overhangs). False when it does not compile.
-- **Meets the request.** Each fact the request states is marked pass, fail or unmeasured:
+- **Stated sizes match** (`stated_sizes_match`; called "meets the request" before 28 Nov, and records still carry
+  `meets_request` and `meets_request_strict` as copies). It is loose: a solid block of the right size passes for a
+  tray, and in the picture review of the two baseline rows only 2 of the 69 create answers it passed were the part
+  asked for. Each fact the request states is marked pass, fail or unmeasured:
   - an overall size (a fact with an axis) passes when the answer's bounding box is within 0.5 mm (plus 0.0001 mm, as
     the STL's corners are 32-bit numbers and 2.7 comes back as 2.70000005) on the side matched to that axis (two sides
     for a diameter). No prompt says which side is x, and some parts are drawn lying on their side (hooks, clips,
     saddles, handles), so the prompt's overall sizes are matched to the box's three sides in the one order that fits
-    the most of them (then the smallest total error, then the order as drawn): a right part standing up passes. `meets_request_strict` keeps the stricter result, every size on the axis the reference is drawn with,
-    as a second column that is labelled as such and is not the score;
+    the most of them (then the smallest total error, then the order as drawn): a right part standing up passes.
+    `stated_sizes_match_strict` keeps the stricter result, every size on the axis the reference is drawn with, as a
+    second column that is labelled as such and is not a score;
   - stated hole counts (keys ending in `hole_count`, joined by `slot_count` when needed) are checked with the mesh's
     genus, its number of through holes. They are measured only when the reference part is one closed body whose genus
     is exactly the stated total, so the genus is known to count those holes and nothing else. When two counts make the
@@ -419,9 +431,9 @@ the split it is read from.
     showed it can be counted;
   - every other fact (diameters, spacings, wall thickness, flags) is unmeasured until a measurer exists.
 
-  A prompt meets the request when it compiles and every measured fact passes. With no part every measurable fact fails.
-  A prompt with nothing measured is left out of that rate and counted on its own. Summaries give the measured and
-  unmeasured counts, and the reasons.
+  Stated sizes match when the answer compiles and every measured fact passes. With no part every measurable fact
+  fails. A prompt with nothing measured is left out of that rate and counted on its own. Summaries give the measured
+  and unmeasured counts, and the reasons.
 - **Shape overlap.** Voxel intersection over union with the reference part (code B for an edit), after moving each
   bounding box's min corner to the origin, best of the 24 ways the answer can be set down on a face of its box (turns
   only, no mirror images), so a right part drawn lying another way scores 1. `iou_as_drawn` is the answer as drawn,
@@ -439,21 +451,95 @@ the split it is read from.
 
 Every scored prompt also compiles the reference again and saves whether its STL sha256 still matches the set's label.
 
+### How the right-part threshold was picked
+
+Against the picture review of the two baseline rows (27 Nov): 156 compiled answers it described, each with its
+verdict and the measurements `right_part` reads, are in
+[bench/tests/fixtures/right_part_review.json](bench/tests/fixtures/right_part_review.json) (answers that did not
+compile fail at any threshold and are left out). "Right" means the part asked for; for an edit, shape and sliders
+both. "Near miss" means the right body with a small feature the review called wrong.
+
+| Overlap needed | Right (11) | Wrong (142) | Near miss (3) |
+|---|---|---|---|
+| 0.95 | 11 pass | 3 pass | 3 pass |
+| 0.98 | 11 pass | 1 pass | 3 pass |
+| **0.99** (used) | **11 pass** | **0 pass** | **2 pass** |
+| 0.995 | 10 pass | 0 pass | 1 pass |
+
+- Any threshold above 0.9847 and up to 0.9904 gives the 0.99 row. The lowest right answer is `s201-000014` (3-shot,
+  0.9904); the highest wrong one that only the overlap fails is `s201-000019` (3-shot, 0.9847: the right L with both
+  holes in the base instead of the upright, so the hole count matches).
+- The two near misses that pass are rounded corners drawn square (`s201-000055`, 0.9968) or chamfered
+  (`s203-000444`, 0.9911). A 2 to 4 mm corner is too small a share of the volume for the overlap to see, and no
+  measurer reads corner style yet.
+- The review had no right answer whose unstated sizes differ from the reference's (the untrained model never got that
+  far), so it says nothing about how strict 0.99 is there. The guess ceiling below measures exactly that.
+
+### The guess ceiling
+
+Some sizes are never stated (a tray's floor, a bracket's gussets), so even a perfect model has to guess them, and a
+part with other unstated sizes overlaps the reference less. For each create prompt,
+[ceiling.py](bench/gkod_bench/ceiling.py) compiles the reference again with every unstated named size set to its
+train median and compares it with the reference by the same overlap. The ceiling is the share that still reaches 0.99.
+Summaries give it next to right part for every group of create prompts, with right part on the same prompts. It is not
+a hard limit: a model that guesses better than the median can beat it.
+
+- **The guess.** Only `train/create.jsonl` is read (hash checked). The median of the same name over train parts of
+  the same family; for a family train does not have (tier 3), over every train part; then the name's last two words
+  (`arm1_hole_d` as `hole_d`). The lower middle value is used for an even count, so every guess is a value the
+  generator used. A stated `compartment_count` states `divider_count` (one fewer). A name with no train guess at all
+  (`arm_width`, `slot_depth`) keeps the reference value, so tier 3's ceiling leans high; summaries count those prompts
+  (`kept_a_true_value`).
+- **No clamping.** Guesses are not pulled into the reference's slider range: the generator builds each range up to
+  30% either way of the true value, so clamping would leak it.
+- **Saved** in `results/ceiling/<split>.json` with the sha256 of the split's create file and the train file, and
+  worked out again when they change. It uses the create rows the split guard already let through, never more.
+
+On dev (300 create prompts, worked out 28 Nov):
+
+| Guess reaches | t1 | t2 | t3 | All |
+|---|---|---|---|---|
+| 0.99 (the ceiling) | 27 | 4 | 62 | 93 (31%) |
+| 0.9 | 62 | 47 | 95 | 204 (68%) |
+
+- Tier 2 adds features whose sizes requests seldom state (tray tabs, plate lips, gussets, floor thickness), so a
+  median guess almost never reaches 0.99 there. Right part on tier 2 says little until a model guesses those sizes
+  better than the median.
+- 26 tier 3 prompts kept a true value (`slot_depth` 17, `arm_width` 9). 32 prompts state every named size, so their
+  guess is the reference itself.
+- An earlier planning count was 211 of 300 at 0.9 (tiers 65, 51 and 95). Clamping each guess into the reference's
+  slider range gives exactly 65 and 51 for tiers 1 and 2 here too (212 in all), so the gap is the clamp, which leaks
+  the true value. Tier 3 differs by one prompt, not traced.
+
+### The baseline rows, scored again (28 Nov)
+
+Both untrained rows were scored again from their saved answers with `rescore` (no model run). Every earlier
+measurement came back the same; only the new keys were added.
+
+| Row (dev, 400 prompts) | Right part | Creates right (300) | Edits right (100) | Stated sizes match |
+|---|---|---|---|---|
+| `local-qwen2.5-coder-1.5b-instruct-0shot` | 10.2% [7.6, 13.6] | 0 | 41 | 7.8% of 333 |
+| `local-qwen2.5-coder-1.5b-instruct-3shot` | 12.5% [9.6, 16.1] | 4 (2 are corner near misses) | 46 | 22.6% of 332 |
+
+The guess ceiling for both is 93 of 300 creates. The 3 three-shot edits with a right size block but not the right part
+(`e204-000006`, `-062`, `-102`) are the three the picture review found wrong despite their size block.
+
 ### Files
 
 | File | Holds |
 |---|---|
 | `results/raw/<row>/<split>/<id>.json` | One prompt: tier, family, the prompt (system sha256, the user words, the few-shot ids), the answer text, the code read from it, the engine's notes, the scores, the times and the harness commit. Written whole or not at all. |
 | `results/<row>/<split>/run.json` | The row: engine settings, few-shot record, system prompt sha256, data files and their sha256, scoring settings, the harness commit at the start. |
-| `results/<row>/<split>/summary.json` | Rates with 95% Wilson intervals overall, per tier (`t1`, `t2`, `t3`, `edit`) and per tier 3 family: compiles, print checks, meets the request (and the strict-axes column), measured facts (by measurer), shape overlap (best turn and as drawn, each a mean with a Student t 95% interval, and median), slider ends, edit size blocks, why answers had no code, which checks failed, time per prompt, tokens or cost. It says how many prompts are done, missing or without an answer, and is marked incomplete until every prompt is scored. |
-| `results/compare/<a>__vs__<b>/<split>.json` | Two rows on the prompts both answered: each rate, the difference A - B with Newcombe's interval for paired rates and the exact McNemar test, and for overlap the mean paired difference with a Student t interval and the sign test; overall and per tier. |
+| `results/<row>/<split>/summary.json` | Rates with 95% Wilson intervals overall, per tier (`t1`, `t2`, `t3`, `edit`) and per tier 3 family: right part (with the threshold and how many answers missed each check), the guess ceiling for create prompts (with right part on the same prompts), compiles, print checks, stated sizes match (and the strict-axes column), measured facts (by measurer), shape overlap (best turn and as drawn, each a mean with a Student t 95% interval, and median), slider ends, edit size blocks, why answers had no code, which checks failed, time per prompt, tokens or cost. It says how many prompts are done, missing or without an answer, and is marked incomplete until every prompt is scored. |
+| `results/ceiling/<split>.json` | The split's guess ceiling: for each create prompt, the sizes guessed (reference value, guess, where the guess came from), those kept, and the overlap; the sha256 of the files it came from. |
+| `results/compare/<a>__vs__<b>/<split>.json` | Two rows on the prompts both answered: each rate (right part first), the difference A - B with Newcombe's interval for paired rates and the exact McNemar test, and for overlap the mean paired difference with a Student t interval and the sign test; overall and per tier. |
 
 ### Checked so far
 
 - All 400 dev reference parts, compiled again through `gkod batch`, give the STL sha256 the set recorded.
 - Each reference's own code scored as the answer (30 create rows and 10 edits from dev): all compile, pass the checks,
-  meet the request, overlap 1.0, every slider end compiles and every edit size block is right. Scoring takes about
-  0.7 s a prompt with the slider ends.
+  match their stated sizes, overlap 1.0, every slider end compiles and every edit size block is right; on 28 Nov the
+  same 40 were scored again and all are the right part. Scoring takes about 0.7 s a prompt with the slider ends.
 - What can be measured on dev: for create, 871 measured facts for the 1,833 stated, at least one in every prompt: 699
   overall sizes and 172 hole counts by genus. 129 of those are stated counts; 43 are `holes_total` facts, each standing
   for two stated counts whose sum is all one genus can measure (33 corner plates, 7 tool holders, 2 brackets and 1
@@ -461,26 +547,33 @@ Every scored prompt also compiles the reference again and saves whether its STL 
   27 of the 100 edit prompts state anything measurable, so for edits the size block is the score that matters.
 - Real calls, to prove the adapters (smoke checks in a throwaway folder, not scored rows): the local model on 8 dev
   prompts, zero-shot (5 compiled; 3 ran to the 1,024-token limit); Gemini 3 calls with gemini-3.1-flash-lite on one
-  create prompt, zero-shot and with 3 examples (both compiled, passed the checks and met the request; the first
+  create prompt, zero-shot and with 3 examples (both compiled, passed the checks and matched the stated sizes; the first
   3-example try was refused because this API version takes earlier turns as steps, now fixed); Claude Code 2 sessions
   (one only read the session's tool list; on one dev prompt the session had exactly the three GKod tools, compiled,
-  drew and checked the part in 4 turns and 38 s, and its answer compiled, passed the checks and met the request, with
-  an overlap of 0.87).
+  drew and checked the part in 4 turns and 38 s, and its answer compiled, passed the checks and matched the stated
+  sizes, with an overlap of 0.87).
 
-What these numbers do not show: the facts measured are only overall sizes and hole counts. A part can meet the request
-here and still have holes in the wrong place, the wrong size or a missing feature that has no count; the shape overlap
-is the score that catches some of that. Overall sizes and the overlap are checked whichever way the answer lies, so
-they say nothing about whether it lies the way that prints best; the print checks cover that, and the strict columns
-show how often an answer also lies as the reference is drawn. Every prompt, test included, comes from our own
-generator.
+What these numbers do not show: the facts measured are only overall sizes and hole counts. A part can match its
+stated sizes and still have holes in the wrong place, the wrong size or a missing feature that has no count; right
+part catches most of that through the 0.99 overlap, the pieces and the hole count, but not a feature under about 1% of
+the volume (a corner radius, a small chamfer), and on a symmetric part a feature moved to the matching other side can
+still overlap 1. Right part also fails a right answer whose unstated sizes are guessed differently from the reference, so
+read it next to the guess ceiling. Overall sizes and the overlap are checked whichever way the answer lies, so they
+say nothing about whether it lies the way that prints best; the print checks cover that, and the strict columns show
+how often an answer also lies as the reference is drawn. Every prompt, test included, comes from our own generator.
 
 `pytest ml/bench` covers the scorer on hand-made meshes (blocks of unit cubes with 0 to 4 through holes, two pieces, a
 hidden hollow, open and flipped faces, holes added up over pieces) and on hand-written code through the real compiler
 (full marks for the reference, a wrong size and a missing hole, missing holes behind a hidden hollow, the right part
-stood up (it meets the request and overlaps 1, and fails only the strict columns), no code, broken code, a slider end
-that breaks the part, an edit, a timeout tried again), the extractor cases, the intervals and paired tests, the data
-loader and its hash and split checks, the few-shot rule, a whole row on a small hand-made set, resuming after a stop or
-after errors, a resumed row with other settings, other scoring settings or a remade set, prompts turned down or timed
-out scored as no code, few-shot turns, the comparison, the closed test split in every command, and the Gemini and Claude
-Code adapters against recorded replies (no real calls). With `GKOD_BENCH_LOCAL=1` it also loads the local model and
+stood up (its stated sizes match, it overlaps 1 and is the right part, and it fails only the strict columns), no
+code, broken code, a slider end that breaks the part, an edit, a timeout tried again), each right-part check on its
+own (print checks, a failed fact, the overlap just under and at 0.99, an extra piece or a hidden hollow, the hole
+count, an open answer, the edit size block, no part, nothing measured), the threshold against the picture review's
+verdicts, records written before the rename (they summarize and rescore), the guess ceiling (the guess rule,
+the lower middle median, a changed train file refused, saved once and read back, a wrong guess lowering the overlap,
+no file under `test/` opened), the extractor cases, the intervals and paired tests, the data loader and its hash and
+split checks, the few-shot rule, a whole row on a small hand-made set, resuming after a stop or after errors, a resumed
+row with other settings, other scoring settings or a remade set, prompts turned down or timed out scored as no code,
+few-shot turns, the comparison, the printed headline, the closed test split in every command, and the Gemini and
+Claude Code adapters against recorded replies (no real calls). With `GKOD_BENCH_LOCAL=1` it also loads the local model and
 checks that greedy answers repeat exactly.
