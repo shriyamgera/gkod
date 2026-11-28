@@ -98,7 +98,8 @@ DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/scripts/ni
   from `val_loss.jsonl` in that folder. A checkpoint's loss is the one reported at its own step, so set `--save-every`
   equal to `--steps-per-eval`. `--resume-args` adds arguments on a restart, with `{checkpoint}` and `{step}` taken
   from the newest checkpoint. Plain `mlx_lm.lora --resume-adapter-file` loads the weights but counts steps from 1 again
-  with a new optimizer, so day 8's trainer takes the start step itself.
+  with a new optimizer, so day 8's trainer ([train/train.py](train/train.py)) takes the start step itself.
+  `--keep-all` keeps every checkpoint instead (for a learning curve); `best.json` still names the lowest loss.
 - **Power.** It refuses to start on battery unless `--allow-battery` is given.
 - **Stopping.** Ctrl-C (or SIGTERM to the script) stops the command the same way and ends the run. Closing the
   terminal window does not. The window's hang-up (SIGHUP) goes to the whole job: the script ignores it, caffeinate runs
@@ -114,8 +115,148 @@ the owner.
 and a restart, giving up, a missing command, too little disk before the start, the disk filling up during a run, a
 command that ignores SIGTERM, battery, Ctrl-C, a closed terminal, the window's hang-up sent to the whole job of the
 real night-baseline.sh with dummy rows (the first row finishes still held awake and the second row runs), a fake
-trainer that crashes and resumes from its newest checkpoint while the last two and the best are kept, and a run started
-again after the script died.
+trainer that crashes and resumes from its newest checkpoint while the last two and the best are kept (and, with
+`--keep-all`, all of them), and a run started again after the script died. These tests need macOS (caffeinate, pmset)
+and skip elsewhere.
+
+## Training
+
+LoRA fine-tuning of the local model with mlx-lm, on the Mac. Three parts: build the rows, train under the night-run
+script, and pick checkpoints by [PICK_RULE.md](PICK_RULE.md), which was committed before any training.
+
+### Configs
+
+[configs/base.toml](configs/base.toml) holds what every run shares. A run's own file names it with `extends` and adds
+its row groups and its learning settings, which have no default on purpose. Run 1 is
+[configs/run1-insurance.toml](configs/run1-insurance.toml), the Insurance-first plan: plain LoRA on frozen v1 train
+rows, no generator changes.
+
+| Setting | Run 1 |
+|---|---|
+| Rows | v1 train only. Weights at full size: 300 creates per family (4,500) and 1,200 edits toward the weak kinds (add 280, remove 330, count 260, scale 160, size 100, move 40, hole size 30). `--rows` scales them. |
+| LoRA | rank 16, scale 20, dropout 0.05, on all 7 projections of the last 16 of the 28 blocks |
+| Optimizer | Adam, learning rate 2e-5 (scale x rate = 4e-4), linear warmup over 5% of the steps from 1e-6, cosine decay to 2e-6 at the last step |
+| Batch | 8 rows a step (an optimizer update): batch size x gradient accumulation; the probe sets the batch size |
+| Loss | on the answer and its end token only (`mask_prompt`) |
+| Length | at most 2,048 tokens a row; longer rows are refused when the rows are built, never cut |
+| Checkpoints | every 50 steps (400 rows), all kept; the validation loss at the same steps, over all 100 validation rows |
+| Gradient checkpointing | on (the probe decides) |
+| Seed | 0 |
+
+### Building the rows
+
+```sh
+DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/train/build_rows.py \
+  --config ml/configs/run1-insurance.toml --rows 5700 --batch-size 1 --out data/train-rows/run1-insurance
+```
+
+[train/build_rows.py](train/build_rows.py) reads `data/sets/v1/train` only (checked against
+[datagen/sets-v1.sha256](../datagen/sets-v1.sha256)) and the dev files only for their tree hashes. It writes, to
+`--out` (git-ignored under `data/`):
+
+- `train.jsonl`: chat rows `{"messages": [system, user, assistant]}`. The system prompt and the user words are the
+  site's own, read at run time from [app/src/engine/prompts.ts](../app/src/engine/prompts.ts) through `gkod batch`,
+  as the benchmark reads them. The answer is the generator's code in one `openscad` block.
+- `valid.jsonl`: 100 fixed train rows, the same for every run so validation losses compare: 5 creates from each of
+  the 15 families and 25 edits round-robin over the 7 kinds, by their own salt. No run trains on them; no dev row is
+  ever one.
+- `meta.json`: the row ids in file order with their prompt and answer token counts, the sha256 of every file read,
+  the generator commits, the system prompt's sha256, the tokenizer files' sha256, the builder's commit, the
+  selection report and every refused row with its reason.
+
+A row is refused when it is not a train row, has no generator provenance or was made by a dirty generator, has a
+failed or missing label, has a tree whose hash is in dev, shares 4 lines in a row with one of the site's examples
+(`app/src/examples/*.scad`), or has more than 2,048 tokens (the whole chat, counted with the model's own tokenizer on
+the CPU, exactly as mlx-lm's `ChatDataset` counts it). Any path under a test split folder is refused before it is
+opened; a test checks that a whole build opens nothing there.
+
+Selection: each group (a family, or an edit kind) takes its share of `--rows` (rounded down to whole steps) by
+weight, its rows in the order of sha256(id + "sft-v1"). So a smaller run is the start of every group of a bigger one:
+`--rows 2850` is the first half of every group. A group with too few rows gives all it has and the shortfall is
+reported.
+
+Order: rows are sorted by length, cut into batches of `--batch-size`, and the batches put in a seeded order. The
+batch size the trainer uses must be the one the rows were built for (it checks). Same inputs, same bytes.
+
+Measured on 28 Nov: the whole build takes 13 s. All 9,000 v1 train rows pass every check. `--rows 5700` gives 5,688
+rows (rounded to 5,696, then `add` is 4 rows short and 4 rows come off `remove` to keep whole steps): 4,497 creates
+and 1,191 edits, 5,047,956 tokens, of which 2,081,706 are answer tokens; the longest row has 2,003 tokens. The 100
+validation rows have 91,304 tokens. Two builds in a row gave byte-identical `train.jsonl`, `valid.jsonl` and
+`meta.json` (the meta also names the builder's commit, so it changes when the code does).
+
+### What the mlx-lm 0.32.2 source does (read in the installed package)
+
+- `iterate_batches` sorts rows by `CacheDataset.itemlen`, which returns `len(self._data[idx])`: for a chat row that is
+  the number of keys in its dict (1), so every row ties, the sort keeps the file order, and each batch is
+  `batch_size` rows in a row of the file. Hence the length buckets above.
+- With `mask_prompt`, `ChatDataset` takes the prompt as the chat without the answer plus the assistant opening; the
+  loss covers the answer, `<|im_end|>` and the newline after it. The tokens/s it prints counts answer tokens only.
+- `--resume-adapter-file` loads the weights but starts at step 1 with a new optimizer, so a resumed run would redo
+  its warmup.
+- `val_batches: -1` uses `len(valid) // batch_size` batches, so a part batch is dropped, and each validation runs
+  before the step it is named after.
+- `steps_per_eval` and `save_every` count forward passes; the learning-rate schedule counts optimizer updates.
+- LoRA takes `scale`, not alpha, and with no `keys` it goes on every linear layer of the trained blocks. LoRA
+  weights are float32.
+- Options used, all present: `fine_tune_type` (lora, dora, full), `num_layers`, `lora_parameters` (rank, scale,
+  dropout), `optimizer` (adam, adamw), `learning_rate`, `lr_schedule` (`build_schedule`: name, arguments, warmup,
+  warmup_init), `batch_size`, `grad_accumulation_steps`, `grad_checkpoint`, `max_seq_length`, `save_every`,
+  `steps_per_eval`, `val_batches`, `mask_prompt`, `seed`.
+
+### Training
+
+```sh
+DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/scripts/night-run.py --name run1-insurance \
+  --checkpoints adapters/run1-insurance --keep-all --resume-args '--resume-from {checkpoint}' -- \
+  ml/.venv/bin/python ml/train/train.py --config ml/configs/run1-insurance.toml \
+  --data data/train-rows/run1-insurance --out adapters/run1-insurance
+```
+
+[train/train.py](train/train.py) uses mlx-lm's own parts (model loading, `linear_to_lora_layers`, `ChatDataset` with
+the prompt masked, `default_loss`, `build_schedule`, gradient checkpointing, the same compiled step with gradient
+accumulation) in a loop of its own, for the four things the stock trainer does not do: resume at the right step with
+the optimizer state, keep every checkpoint, validate on every validation row, and log every loss. A step here is one
+optimizer update (8 rows), so runs with other batch sizes line up by rows seen.
+
+It writes to `--out` (git-ignored under `adapters/`):
+
+| File | Holds |
+|---|---|
+| `0000050_adapters.safetensors`, ... | every checkpoint, never deleted; `adapters.safetensors` is the newest, and with `adapter_config.json` the folder loads as an mlx-lm adapter |
+| `0000050_optimizer.safetensors` | the optimizer state at a checkpoint, for resuming; the last two are kept |
+| `train_log.jsonl` | one line per step (train loss, learning rate, answer tokens, all tokens, padded tokens, the step's seconds and the time since the start or resume, tokens/s by the clock, peak memory), per validation and per save |
+| `val_loss.jsonl` | the validation losses, as night-run reads them (step 0 is the untrained model) |
+| `run.json` | the plan, the schedule, the same run as a stock mlx-lm config, the sha256 of train.jsonl, valid.jsonl, meta.json and the base weights, the config files, the trainable weight count, the git commit and versions of each start and resume, and the status |
+
+- **Size.** Each checkpoint holds 10,551,296 float32 LoRA weights, about 42.2 MB (worked out from the model's
+  config; a test checks the formula against real LoRA layers). Run 1 with `--rows 5700` (5,688 rows) has 711 steps
+  and 15 checkpoints, about 0.63 GB, plus two optimizer files of about 84 MB.
+- **Resume.** night-run passes `--resume-from` the newest checkpoint after a crash. The trainer loads its weights
+  and optimizer state, skips the batches already trained and carries on the schedule. Dropout draws a fresh key per
+  batch from the seed and the batch number, so a resumed run ends where an unbroken one does (a test checks this on a
+  tiny model). It refuses to resume with other settings, other rows or other base weights, and refuses a fresh start
+  into a folder that already has checkpoints.
+- **Checks at start.** The base weights' sha256 must match the config; the rows' files must match their meta.json;
+  every row must tokenize to the counts it was built with.
+- **Other options.** `--dry-run` prints the plan (steps, warmup, learning rates, checkpoint count and size) without
+  loading the model. `--print-mlx-config` prints the same run as a stock `mlx_lm.lora` config, as a fallback without
+  resume or the loss log. `--adapter-folder STEP` makes `at/<step>/`, a folder that loads one checkpoint, for
+  `gkod_bench run --adapter`. For the probe: `--batch-size` and `--grad-checkpoint` (the rows must be built for the
+  same batch size), `--max-steps N` (the schedule stays the full run's), `--peak-memory-cap-gb` (exit code 4 when
+  passed; under night-run that counts as a crash), and `build_rows.py --longest-first` (the longest batches first).
+
+`pytest ml/train` also covers the row builder on a hand-made set with the site's real wording (each refusal, the
+validation rows, byte-identical builds, the length buckets, a changed set file, no file opened under the test split,
+test paths and links into it refused), the selection rules and the run 1 config, the plan (steps, accumulation,
+warmup, learning rates against mlx's own schedule, refused plans, every option present in the installed mlx-lm), and a
+tiny random model trained on the CPU: every checkpoint kept and logged, a crash resumed to the same weights as an
+unbroken run, also under night-run, a resume with other settings refused, a checkpoint loaded back as an mlx-lm
+adapter, and the memory cap. With the model's real tokenizer (on the Mac) it checks that each row's prompt is
+byte-for-byte the benchmark's local-engine prompt and that the answer tokens start the loss. These tests never load
+the model's weights or use the GPU; the ones that need mlx, the tokenizer or macOS skip elsewhere.
+
+Not measured yet: training speed and memory on this model (the probe does that, and sets `--rows` and the batch size
+from it).
 
 ## Tonight: baseline rows on the dev set
 
