@@ -280,6 +280,10 @@ def test_the_threshold_sits_between_the_closest_right_and_wrong_answers(monkeypa
     only_shape = [a for a in answers if a["verdict"] == "wrong" and right_part(a["scores"])["failed"] == ["shape"]]
     highest_wrong = max(a["scores"]["iou"] for a in only_shape)
     assert highest_wrong < RIGHT_PART_IOU <= lowest_right
+    # how thin this is: 10 of the 11 right answers overlap exactly 1, so the cut rests on one right create (0.9904)
+    # and one wrong answer (0.9847)
+    assert sum(a["scores"]["iou"] == 1.0 for a in answers if a["verdict"] == "right") == 10
+    assert sorted(a["scores"]["iou"] for a in answers if a["verdict"] == "right")[0] == pytest.approx(0.9904, abs=1e-4)
     assert {"s201-000019"} <= {a["id"] for a in only_shape if a["scores"]["iou"] == highest_wrong}
     # a lower threshold lets wrong parts through; a higher one fails a right part
     monkeypatch.setattr(score, "RIGHT_PART_IOU", 0.95)

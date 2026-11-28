@@ -7,14 +7,15 @@ day 8, training. Everything here runs on the Mac (Apple silicon) in one virtuale
 
 ```sh
 DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" /opt/homebrew/bin/python3.12 -m venv ml/.venv
-DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python -m pip install -r ml/requirements.txt
+DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python -m pip install -r ml/requirements.txt -r ml/requirements-dev.txt -e ml/bench
 ml/.venv/bin/python ml/scripts/fetch-model.py
 ```
 
 Every pin is in [requirements.txt](requirements.txt) (mlx 0.32.4, mlx-lm 0.32.2, huggingface_hub 2.4.0,
-transformers 5.23.0, matplotlib 3.11.2 for the learning-curve plot, and what they pull in). The tests also need [requirements-dev.txt](requirements-dev.txt)
-(pytest 9.2.0): `ml/.venv/bin/python -m pip install -r ml/requirements-dev.txt`, then `ml/.venv/bin/python -m pytest
-ml/train`.
+transformers 5.23.0, matplotlib 3.11.2 for the learning-curve plot, and what they pull in). The tests also need
+[requirements-dev.txt](requirements-dev.txt) (pytest 9.2.0) and the benchmark package (`-e ml/bench`), which the row
+builder and its tests import; then `ml/.venv/bin/python -m pytest ml/train`. The row-builder tests also need Node and
+the OpenSCAD web build (`npm ci`, `npm run fetch:openscad`); without them they skip as "gkod batch is not available".
 
 On this Mac, Homebrew's Python 3.12 cannot load its XML module against the system's expat, and Python then also fails
 to read the macOS version, which huggingface_hub needs. `DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib"` in front of
@@ -133,13 +134,13 @@ rows, no generator changes.
 
 | Setting | Run 1 |
 |---|---|
-| Rows | v1 train only. Weights at full size: 300 creates per family (4,500) and 1,200 edits toward the weak kinds (add 280, remove 330, count 260, scale 160, size 100, move 40, hole size 30). Run 1 takes 5,600 rows (`[rows] count`, from the probe below), one pass; `--rows` overrides it. |
+| Rows | v1 train only. Weights at full size: 300 creates per family (4,500) and 1,200 edits toward the weak kinds (add 280, remove 330, count 260, scale 160, size 100, move 40, hole size 30). Run 1 asks for 5,600 rows (`[rows] count`, from the probe below) and gets 5,592 (below), one pass; `--rows` overrides it. |
 | LoRA | rank 16, scale 20, dropout 0.05, on all 7 projections of the last 16 of the 28 blocks |
 | Optimizer | Adam, learning rate 2e-5 (scale x rate = 4e-4), linear warmup over 5% of the steps from 1e-6, cosine decay to 2e-6 at the last step |
 | Batch | 8 rows a step (an optimizer update): batch size 1 x gradient accumulation 8 (the probe below picked batch 1) |
-| Loss | on the answer and its end token only (`mask_prompt`) |
+| Loss | on the answer and its end (`<|im_end|>` and the newline after it) only (`mask_prompt`, with the padding target mlx-lm's own batches add left out, below) |
 | Length | at most 2,048 tokens a row; longer rows are refused when the rows are built, never cut |
-| Checkpoints | every 50 steps (400 rows), all kept: 14 in run 1 (steps 50 to 700); the validation loss at the same steps and at step 0, over all 100 validation rows |
+| Checkpoints | every 50 steps (400 rows) and at the last step, all kept: 14 in run 1 (steps 50 to 650, and 699); the validation loss at the same steps and at step 0, over all 100 validation rows |
 | Gradient checkpointing | on (without it one 2,000-token row peaked at 11.3 GB in the probe) |
 | Seed | 0 |
 
@@ -159,10 +160,13 @@ DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/train/buil
   as the benchmark reads them. The answer is the generator's code in one `openscad` block.
 - `valid.jsonl`: 100 fixed train rows, the same for every run so validation losses compare: 5 creates from each of
   the 15 families and 25 edits round-robin over the 7 kinds, by their own salt. No run trains on them; no dev row is
-  ever one.
+  ever one. No run trains on a row made from the same part either: every v1 train edit is made from a train create
+  part, so a validation create's part is code A of some train edits, and a validation edit's part is a train create.
+  Those rows are held out of training, so the validation loss is not read on near copies of training answers.
 - `meta.json`: the row ids in file order with their prompt and answer token counts, the sha256 of every file read,
-  the generator commits, the system prompt's sha256, the tokenizer files' sha256, the builder's commit, the
-  selection report and every refused row with its reason.
+  the generator commits, the system prompt's sha256, the tokenizer files' sha256, the versions of Python,
+  transformers, tokenizers, jinja2 and mlx-lm, the builder's commit, the selection report, every refused row with its
+  reason, and the rows held out for sharing a part with a validation row.
 
 A row is refused when it is not a train row, has no generator provenance or was made by a dirty generator, has a
 failed or missing label, has a tree whose hash is in dev, shares 4 lines in a row with one of the site's examples
@@ -181,12 +185,15 @@ reported.
 Order: rows are sorted by length, cut into batches of `--batch-size`, and the batches put in a seeded order. The
 batch size the trainer uses must be the one the rows were built for (it checks). Same inputs, same bytes.
 
-Measured on 28 Nov: the whole build takes 13 s. All 9,000 v1 train rows pass every check. Run 1's 5,600 rows need
-no group to fall short: 4,423 creates (295 or 294 per family) and 1,177 edits (add 275, remove 324, count 255, scale
-157, size 98, move 39, hole size 29), 4,971,290 tokens (887.7 a row), of which 2,049,093 are answer tokens; the
-longest row has 2,003 tokens. (The plan's full size, `--rows 5700`, gives 5,688 rows, because `add` runs 4 rows short
-and 4 more come off `remove` to keep whole steps.) The 100
-validation rows have 91,304 tokens. Two builds in a row gave byte-identical `train.jsonl`, `valid.jsonl` and
+Measured on 28 Nov: the whole build takes 13 s. All 9,000 v1 train rows pass every check, and 77 (25 creates, 52
+edits) are held out because they share a part with a validation row. Run 1 asks for 5,600 rows and gets 5,592: `add`
+runs 5 rows short, and 3 come off `remove` to keep whole steps of 8. That is 4,423 creates (295 or 294 per family) and
+1,169 edits (add 270, remove 321, count 255, scale 157, size 98, move 39, hole size 29), 4,961,450 tokens (887.2 a
+row), of which 2,045,798 are answer tokens; the longest row has 2,003 tokens. (The plan's full size, `--rows 5700`,
+gives 5,680 rows: `add` runs 10 short and 6 more come off `remove`.) The 100 validation rows have 91,304 tokens.
+Before the hold-out (builder commit `72d335e`), 34 of the 100 validation rows (12 creates, 22 edits) shared a part
+with a training row, 37 of the 5,600 training rows were such rows, and those 12 validation creates appeared word for
+word as code A in training edit prompts. Two builds in a row gave byte-identical `train.jsonl`, `valid.jsonl` and
 `meta.json` (the meta also names the builder's commit, so it changes when the code does).
 
 ### What the mlx-lm 0.32.2 source does (read in the installed package)
@@ -194,8 +201,13 @@ validation rows have 91,304 tokens. Two builds in a row gave byte-identical `tra
 - `iterate_batches` sorts rows by `CacheDataset.itemlen`, which returns `len(self._data[idx])`: for a chat row that is
   the number of keys in its dict (1), so every row ties, the sort keeps the file order, and each batch is
   `batch_size` rows in a row of the file. Hence the length buckets above.
-- With `mask_prompt`, `ChatDataset` takes the prompt as the chat without the answer plus the assistant opening; the
-  loss covers the answer, `<|im_end|>` and the newline after it. The tokens/s it prints counts answer tokens only.
+- With `mask_prompt`, `ChatDataset` takes the prompt as the chat without the answer plus the assistant opening. The
+  tokens/s it prints counts answer tokens only.
+- `default_loss` keeps the targets at positions from a row's prompt length up to and including its length, and
+  `iterate_batches` gives it (prompt length, length). Position `length` is past the row's last token, so the stock
+  trainer also takes the loss on one padding token per row (id 0, `!`, after `<|im_end|>` and the newline). Our
+  trainer gives (prompt length, length - 1), so its loss covers the answer, `<|im_end|>` and the newline, and nothing
+  else; the stock config from `--print-mlx-config` still has the padding target.
 - `--resume-adapter-file` loads the weights but starts at step 1 with a new optimizer, so a resumed run would redo
   its warmup.
 - `val_batches: -1` uses `len(valid) // batch_size` batches, so a part batch is dropped, and each validation runs
@@ -231,11 +243,11 @@ It writes to `--out` (git-ignored under `adapters/`):
 | `0000050_optimizer.safetensors` | the optimizer state at a checkpoint, for resuming; the last two are kept |
 | `train_log.jsonl` | one line per step (train loss, learning rate, answer tokens, all tokens, padded tokens, the step's seconds and the time since the start or resume, tokens/s by the clock, peak memory), per validation and per save |
 | `val_loss.jsonl` | the validation losses, as night-run reads them (step 0 is the untrained model) |
-| `run.json` | the plan, the schedule, the same run as a stock mlx-lm config, the sha256 of train.jsonl, valid.jsonl, meta.json and the base weights, the config files, the trainable weight count, the git commit and versions of each start and resume, and the status |
+| `run.json` | the plan, the schedule, the same run as a stock mlx-lm config, the sha256 of train.jsonl, valid.jsonl, meta.json and the base weights, the config files, the trainable weight count, the status, and for each start and resume the git commit, the sha256 of every file in `ml/train` and `ml/configs` (with the diff, when they had uncommitted changes) and the versions (Python, mlx, mlx-lm, transformers, tokenizers, jinja2, numpy) |
 
 - **Size.** Each checkpoint holds 10,551,296 float32 LoRA weights, about 42.2 MB (worked out from the model's
-  config; a test checks the formula against real LoRA layers; the saved files are 42,229,570 bytes). Run 1 (5,600
-  rows) has 700 steps and 14 checkpoints, about 0.59 GB, plus two optimizer files of about 84 MB.
+  config; a test checks the formula against real LoRA layers; the saved files are 42,229,570 bytes). Run 1 (5,592
+  rows) has 699 steps and 14 checkpoints, about 0.59 GB, plus two optimizer files of about 84 MB.
 - **Memory.** After every forward pass (training and validation) the trainer hands MLX's cached buffers back
   (`mx.clear_cache()`), as mlx-lm's own trainer does by default. Without it MLX keeps a buffer for every padded width
   it has seen and the wired limit lets them stay wired: in the first probe the untrained validation pass reached about
@@ -246,7 +258,9 @@ It writes to `--out` (git-ignored under `adapters/`):
   tiny model). It refuses to resume with other settings, other rows or other base weights, and refuses a fresh start
   into a folder that already has checkpoints.
 - **Checks at start.** The base weights' sha256 must match the config; the rows' files must match their meta.json;
-  every row must tokenize to the counts it was built with.
+  every row must tokenize to the counts it was built with. A real run (not `--dry-run`) refuses to start or resume
+  with uncommitted changes in `ml/train` or `ml/configs`, so `run.json` always names the code that trained it;
+  `--allow-dirty` overrides that and saves the diff.
 - **Other options.** `--dry-run` prints the plan (steps, warmup, learning rates, checkpoint count and size) without
   loading the model. `--print-mlx-config` prints the same run as a stock `mlx_lm.lora` config, as a fallback without
   resume or the loss log. `--adapter-folder STEP` makes `at/<step>/`, a folder that loads one checkpoint, for
@@ -304,23 +318,26 @@ groups), 60 steps, checkpoints at 20, 40 and 60, under night-run exactly as run 
   the steps up to each checkpoint.
 - The checkpoints load in the benchmark's local engine. The curve code (`run_curve`, called with a 5-prompt subset of
   dev-curve: one per tier and a second edit, results under `results/smoke/`) scored all three: right part 1, 1 and 2
-  of 5, compiles 3, 4 and 4 of 5, no answer at the token limit. This checks the pipeline. It is not a result and not
-  a dev look (PICK_RULE.md).
+  of 5, compiles 3, 4 and 4 of 5, no answer at the token limit. This checks the pipeline. It is not a result; it is
+  a pipeline check, logged as one in PICK_RULE.md.
+- The smoke run's losses include one padding target per row (mlx-lm's stock spans, see above); run 1's leave it out,
+  so its losses are not directly comparable with these.
 
 **Run 1's size,** from the smoke run's speed:
 
 | | |
 |---|---|
-| Rows | 5,600 (4,971,290 tokens), one pass |
-| Steps | 700 of 8 rows; warmup 35 |
-| Checkpoints | every 50 steps: 14, so 15 points on the learning curve with step 0 |
-| Validation | at steps 0, 50, ..., 700: 15 times, about 170 s each, about 43 minutes |
-| Training | 4,971,290 tokens at 240.5 tokens/s: 5.7 hours |
+| Rows | 5,592 (4,961,450 tokens), one pass |
+| Steps | 699 of 8 rows; warmup 35 |
+| Checkpoints | every 50 steps and at step 699: 14, so 15 points on the learning curve with step 0 |
+| Validation | at steps 0, 50, ..., 650 and 699: 15 times, about 170 s each, about 43 minutes |
+| Training | 4,961,450 tokens at 240.5 tokens/s: 5.7 hours |
 | In all | about 6.5 hours (6.25 to 6.6 at the fastest and slowest thirds of the smoke run's speed) |
 
-The rows are built (`data/train-rows/run1-insurance`, builder commit `72d335e`, `train.jsonl` sha256
-`1946902d…ab4f`) and `train.py --dry-run` gives the plan above. Not started yet. To start it (Mac plugged in, lid
-open, browser closed, nothing else on the GPU):
+The rows are built again with the hold-out (`data/train-rows/run1-insurance`, builder commit `2015ea5`, `train.jsonl`
+sha256 `d8f40496…79a5`; `valid.jsonl` is byte for byte the one before) and `train.py --dry-run` gives the plan
+above. Not started yet. To start it (Mac plugged in, lid open, browser closed, nothing else on the GPU, and no
+uncommitted changes in `ml/train` or `ml/configs`):
 
 ```sh
 DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/scripts/night-run.py --name run1-insurance \
@@ -341,7 +358,11 @@ DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python -m gkod_bench
 
 It loads the model on the GPU, so it runs after training, never beside it: it refuses a run whose `run.json` still says
 `running` (`--even-if-running` only if the trainer was killed). Under night-run it carries on after a crash:
-`ml/scripts/night-run.py --name curve-run1 -- ml/.venv/bin/python -m gkod_bench curve --run adapters/run1-insurance`.
+
+```sh
+DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python ml/scripts/night-run.py --name curve-run1 -- \
+  ml/.venv/bin/python -m gkod_bench curve --run adapters/run1-insurance
+```
 
 **How long:** in the smoke run (15 answers, 3 checkpoints, one prompt at a time) the trained model wrote 27.3 tokens/s
 per answer with its adapter (25.5 by the clock with the prompt read), answers averaged 390 tokens and none hit the
@@ -398,30 +419,40 @@ were picked from. The rule, in [bench/gkod_bench/subsets.py](bench/gkod_bench/su
 | Key | Holds |
 |---|---|
 | `points` | One per checkpoint, step 0 first: the step, rows seen, the row, the adapter's sha256, `train_loss` (each step's training loss weighted by its answer tokens, over the steps since the previous checkpoint, with those steps named), `valid_loss` (at that step, the 100 validation rows), then right part (with the checks it failed), compiles, print checks, stated sizes match, the overlap's median and mean, answers with no code and answers cut off at the token limit, each rate with its 95% Wilson interval, and the same per tier. |
-| `saturation` | The two rules below. |
-| `full_dev_candidates` | The checkpoints PICK_RULE.md sends to full dev, once every checkpoint is scored: the last, and the best on dev-curve if that is another one (a tie goes to the later). |
+| `saturation` | The two rules below, each with the end-of-run check, and for the paired rule the smallest gain it can call real. |
+| `full_dev_candidates` | The checkpoints PICK_RULE.md sends to full dev, once every checkpoint is scored: the last, and the best on dev-curve if that is another one (of checkpoints tied on that count, the later). |
 | `guess_ceiling` | The guess ceiling of the subset's 37 create prompts, when dev's has been worked out. |
 | `scorer_commits` | The harness commits that scored the points; a note asks for `rescore` when there is more than one. |
 
 `dev-curve.png` beside it draws right part with its 95% interval (top) and the two losses (bottom) against the step,
-on one step axis, with dashed and dotted lines where the two rules put the end of the rise.
+on one step axis, with dashed and dotted lines where the two rules put the end of the rise, or the words "not
+saturated within this run" when the curve still rises at the end.
 
 ### Where the curve stops rising
 
 Both rules read the scored points in step order, step 0 included, and stop at the first point not fully scored.
 
+- **End of the run first:** the curve is still rising when the last point has more right parts than every earlier
+  one, or when a trend test over the last half of the points (at least 3; Cochran-Armitage, one-sided p below 0.05)
+  finds a rise. Then neither rule names a step: the file says "not saturated within this run" and why, and more
+  training may still help. The trend test treats the points as separate samples although they share their prompts;
+  answers to one prompt agree from one checkpoint to the next, so its p is if anything too large.
 - **Interval rule:** the earliest point s with two points after it, neither of which has a right-part rate above the
-  upper end of s's 95% Wilson interval. Points after those two that do go above it are listed in `rises_later`, so a
-  late rise is not hidden. Fewer than three points: no answer yet.
+  upper end of s's 95% Wilson interval, and no later point above it either. A point that is flat for two points and
+  then rises is skipped (and reported as `first_flat` when no point qualifies), so a late rise never reads as a stop.
+  Fewer than three points: no answer yet.
 - **Paired rule** (PICK_RULE.md's saturation point): the earliest point that no later point beats by a real margin,
-  that is with more right parts and an exact McNemar p below 0.05 on the prompts both answered. While that point is
-  the last one, nothing later can test it, and the file says so.
+  that is with more right parts and an exact McNemar p below 0.05 on the prompts both answered. A point among the last
+  3 is never named: too few later points can test it.
 
 With 50 prompts the upper end of the 95% interval sits about 11 to 14 points above the rate (for rates from 10 to
-50%), so the interval rule only sees a rise of about 6 or 7 prompts within two checkpoints, and a slow climb reads as
-flat early: made-up rates of 10, 24, 32, 38, 40, 44 ...
-48% put it at step 100 (32%), with later points above its interval listed. The paired rule needs about 6 prompts
-gained with none lost (p = 0.03) to call a gain real. Read both next to the plot; neither picks.
+50%), and the paired rule needs 6 prompts gained with none lost (p = 0.03) to call a gain real, so both rules see only
+large steps. Without the end-of-run check they named a stop on curves that never flatten: on made-up curves of 15
+points with +2 right parts per checkpoint (5 to 33 of 50), the paired rule named step 600 (29 right, against 33 at the
+end: 4 to 0, p 0.125) and the interval rule step 0. With it, both say "not saturated within this run" for +2 and +1 per
+checkpoint, and a curve that flattens at step 400 gets step 300 from both: a plateau is found, but at or before where
+it starts. On made-up flat curves (each prompt right with its own chance, drawn again at every checkpoint) the check
+wrongly says "still rising" in about 6% of runs. Read both next to the plot; neither picks.
 
 ### Batched answers (`--batch N`, off by default)
 
@@ -610,7 +641,8 @@ the split it is read from.
 ### Scores, all by code, for every prompt
 
 - **Right part** (the headline, `right_part`). True only when the answer compiles, passes all four print checks,
-  passes every measured stated fact, overlaps the reference part by at least 0.99 (best turn), has as many separate
+  passes every measured stated fact (for a create these include its stated sizes read from its named sizes, below),
+  overlaps the reference part by at least 0.99 (best turn, both parts compiled with `$fn = 48`), has as many separate
   pieces (shells) as the reference and as many through holes (genus, added up over its surfaces), and, for an edit,
   has the right size block. Each record keeps `right_part_failed`, the checks it missed; summaries count them. The
   rule is `right_part` in [score.py](bench/gkod_bench/score.py), and summaries and `compare` work it out again from
@@ -623,8 +655,8 @@ the split it is read from.
   overhangs). False when it does not compile.
 - **Stated sizes match** (`stated_sizes_match`; called "meets the request" before 28 Nov, and records still carry
   `meets_request` and `meets_request_strict` as copies). It is loose: a solid block of the right size passes for a
-  tray, and in the picture review of the two baseline rows only 2 of the 69 create answers it passed were the part
-  asked for. Each fact the request states is marked pass, fail or unmeasured:
+  tray, and in the picture review of the two baseline rows only 2 of the 69 create answers it passed (before stated
+  sizes were read from code) were the part asked for. Each fact the request states is marked pass, fail or unmeasured:
   - an overall size (a fact with an axis) passes when the answer's bounding box is within 0.5 mm (plus 0.0001 mm, as
     the STL's corners are 32-bit numbers and 2.7 comes back as 2.70000005) on the side matched to that axis (two sides
     for a diameter). No prompt says which side is x, and some parts are drawn lying on their side (hooks, clips,
@@ -640,7 +672,18 @@ the split it is read from.
     once, not twice. The answer's count is the genus of all its closed surfaces added up, so a second piece brings its
     own holes and a hidden hollow brings none; an answer that is not closed fails the count, since the reference
     showed it can be counted;
-  - every other fact (diameters, spacings, wall thickness, flags) is unmeasured until a measurer exists.
+  - for a create, every other stated size in mm that is a named size of the reference (a hole diameter, a slot
+    width, a floor or a lip, a wall, a spacing: 630 facts on dev, all of them) is read from the answer's code, from
+    its named sizes as the compiler lists them for the site's sliders. It passes when the answer's size of the same
+    name has the stated value within 0.05 mm, or, when there is none of that name, when another named size has that
+    value (for a diameter, a size named as a radius with half of it). This reads the code, not the mesh: a size that
+    is hard-coded, or named and then not used as named, is not seen, and an answer that keeps its sizes inside a module
+    fails. The site's system prompt asks every engine to put each size, hole and slot sizes included, at the top of the
+    file as a named number, so the rule is the same for every row. It exists because the overlap cannot see these
+    sizes: a 3.5 mm hole drawn 2.8 mm, or a 1.8 mm floor drawn 1.4 mm, still overlaps the reference by 0.99 or more.
+    Edits leave sizes to the size block;
+  - every other fact (flags such as countersunk holes or rounded corners, and an edit's stated sizes) is unmeasured
+    until a measurer exists.
 
   Stated sizes match when the answer compiles and every measured fact passes. With no part every measurable fact
   fails. A prompt with nothing measured is left out of that rate and counted on its own. Summaries give the measured
@@ -648,8 +691,14 @@ the split it is read from.
 - **Shape overlap.** Voxel intersection over union with the reference part (code B for an edit), after moving each
   bounding box's min corner to the origin, best of the 24 ways the answer can be set down on a face of its box (turns
   only, no mirror images), so a right part drawn lying another way scores 1. `iou_as_drawn` is the answer as drawn,
-  not turned. The voxel size is the longer of the two parts' longest sides divided by 200; the 24 turns take 10 to 100
-  ms a part. 0 when there is no part.
+  not turned. Both parts are compiled again for it with `-D $fn=48` (the generator's own value, so a reference keeps
+  its mesh), which overrides the file's top-level `$fn`: a right cup with a 1.6 mm wall drawn with `$fn = 32`
+  overlapped only 0.93 before, and one with no `$fn` 0.87. A `$fn` given inside one call (`cylinder(..., $fn = 6)` for
+  a hexagon) is part of the shape and is kept, so an answer that sets coarse circles call by call is still marked
+  down. If either part does not compile that way, both are compared as drawn (`iou_detail.fn` is then empty). The
+  voxel size is the longer of the two parts' longest sides divided by 200, and the grid is a little off round numbers
+  in x, y and z, so a flat face never sits exactly on a row of voxel centres; the 24 turns take 10 to 100 ms a part.
+  0 when there is no part.
 - **Edits: the size block.** The answer's named sizes, read by the compiler as the site's sliders read them, against
   code B: every kept size has the same name, value and caption; every changed size has its new value; every removed
   size is gone; every added size is there as a new size (a name code A did not have) with its value. Names of added
@@ -677,14 +726,36 @@ both. "Near miss" means the right body with a small feature the review called wr
 | **0.99** (used) | **11 pass** | **0 pass** | **2 pass** |
 | 0.995 | 10 pass | 0 pass | 1 pass |
 
-- Any threshold above 0.9847 and up to 0.9904 gives the 0.99 row. The lowest right answer is `s201-000014` (3-shot,
-  0.9904); the highest wrong one that only the overlap fails is `s201-000019` (3-shot, 0.9847: the right L with both
-  holes in the base instead of the upright, so the hole count matches).
+- This evidence is thin. 10 of the 11 right answers overlap exactly 1, so they cannot test a threshold: four are code
+  B word for word, and one (`e204-000000`, 3-shot) is code B with `$fn` left out, which was 0.9996 before shapes were
+  compared at `$fn = 48`. So the cut rests on one right create, `s201-000014` (3-shot, 0.9904, 0.0004 above it), and
+  one wrong answer, `s201-000019` (3-shot, 0.9847: the right L with both holes in the base instead of the upright, so
+  the hole count matches), the highest wrong one that only the overlap fails. Any threshold above 0.9847 and up to
+  0.9904 gives the 0.99 row. Only three other answers that fail nothing but the shape come anywhere near it (0.981,
+  0.978 and 0.968).
+- The counts above are after the evening rescore (28 Nov), which changed no verdict in the review.
 - The two near misses that pass are rounded corners drawn square (`s201-000055`, 0.9968) or chamfered
   (`s203-000444`, 0.9911). A 2 to 4 mm corner is too small a share of the volume for the overlap to see, and no
   measurer reads corner style yet.
 - The review had no right answer whose unstated sizes differ from the reference's (the untrained model never got that
   far), so it says nothing about how strict 0.99 is there. The guess ceiling below measures exactly that.
+
+Checked again on built variants of known label, all 300 dev create references scored as answers through
+`score_answer` (28 Nov, after the fixes):
+
+| Variant | Should be | Before the fixes | After |
+|---|---|---|---|
+| Turned 90 degrees on the bed (code wrapped in a module) | right | 0 of 300 fail | 0 of 300 fail the shape (all overlap 1); 279 fail the stated sizes read from code, since the wrapping hides the named sizes |
+| Moved by (13.37, -7.1, 0) (wrapped the same way) | right | 1 of 300 fails (a comb at 0.9887: a face on a row of voxel centres) | 0 of 300 fail the shape; 279 fail the sizes read from code, as above |
+| `$fn = 32` | right | 9 of 286 fail (cups and grommets with 1.6 to 2 mm walls, down to 0.932) | 0 of 286 fail |
+| `$fn` left out | right | 42 of 286 fail, 34 on the shape alone (down to 0.870) | 0 of 286 fail the shape; 8 coasters fail an overall size, since their coarse polygon really is more than 0.5 mm smaller |
+| One stated size in mm at 0.8 of its value | wrong | 247 of 630 pass | 0 of 630 pass (the 247 that the shape alone lets through fail the sizes read from code) |
+| One stated count plus 1 | wrong | 0 of 130 pass | 0 of 130 pass |
+| The reference moved by numpy, against itself (400 dev parts) | right | 3 of 400 under 0.99 | 0 of 400 |
+
+The wrapped variants say nothing new about the sizes read from code: those parts break the site's rule that every size
+sits at the top of the file. The size variants keep the changed size named, which is the case the measurer reads; a
+wrong size written as a plain number would still pass it.
 
 ### The guess ceiling
 
@@ -706,7 +777,8 @@ a hard limit: a model that guesses better than the median can beat it.
 - **Saved** in `results/ceiling/<split>.json` with the sha256 of the split's create file and the train file, and
   worked out again when they change. It uses the create rows the split guard already let through, never more.
 
-On dev (300 create prompts, worked out 28 Nov):
+On dev (300 create prompts, worked out 28 Nov, and again after the voxel grid change the same evening, with the same
+counts):
 
 | Guess reaches | t1 | t2 | t3 | All |
 |---|---|---|---|---|
@@ -724,13 +796,15 @@ On dev (300 create prompts, worked out 28 Nov):
 
 ### The baseline rows, scored again (28 Nov)
 
-Both untrained rows were scored again from their saved answers with `rescore` (no model run). Every earlier
-measurement came back the same; only the new keys were added.
+Both untrained rows were scored again from their saved answers with `rescore` (no model run), first when right part
+was added (every earlier measurement came back the same), then again in the evening with the stated sizes read from
+code, the overlap at `$fn = 48` and the voxel grid offset in z (`e67b943`). No right-part verdict changed; only two
+overlaps moved by more than 0.005, both on wrong answers.
 
-| Row (dev, 400 prompts) | Right part | Creates right (300) | Edits right (100) | Stated sizes match |
-|---|---|---|---|---|
-| `local-qwen2.5-coder-1.5b-instruct-0shot` | 10.2% [7.6, 13.6] | 0 | 41 | 7.8% of 333 |
-| `local-qwen2.5-coder-1.5b-instruct-3shot` | 12.5% [9.6, 16.1] | 4 (2 are corner near misses) | 46 | 22.6% of 332 |
+| Row (dev, 400 prompts) | Right part | Creates right (300) | Edits right (100) | Stated sizes match | Stated sizes read from code |
+|---|---|---|---|---|---|
+| `local-qwen2.5-coder-1.5b-instruct-0shot` | 10.2% [7.6, 13.6] | 0 | 41 | 6.9% of 333 (7.8% before the sizes read from code) | 270 of 630 |
+| `local-qwen2.5-coder-1.5b-instruct-3shot` | 12.5% [9.6, 16.1] | 4 (2 are corner near misses) | 46 | 21.4% of 332 (22.6% before) | 433 of 630 |
 
 The guess ceiling for both is 93 of 300 creates. The 3 three-shot edits with a right size block but not the right part
 (`e204-000006`, `-062`, `-102`) are the three the picture review found wrong despite their size block.
@@ -752,11 +826,14 @@ The guess ceiling for both is 93 of 300 creates. The 3 three-shot edits with a r
 - Each reference's own code scored as the answer (30 create rows and 10 edits from dev): all compile, pass the checks,
   match their stated sizes, overlap 1.0, every slider end compiles and every edit size block is right; on 28 Nov the
   same 40 were scored again and all are the right part. Scoring takes about 0.7 s a prompt with the slider ends.
-- What can be measured on dev: for create, 871 measured facts for the 1,833 stated, at least one in every prompt: 699
-  overall sizes and 172 hole counts by genus. 129 of those are stated counts; 43 are `holes_total` facts, each standing
-  for two stated counts whose sum is all one genus can measure (33 corner plates, 7 tool holders, 2 brackets and 1
-  plate). Together they cover 189 of the 191 `hole_count` facts. For edits, 38 of 129, and only
-  27 of the 100 edit prompts state anything measurable, so for edits the size block is the score that matters.
+- What can be measured on dev: for create, 1,501 measured facts for the 1,833 stated, at least one in every prompt.
+  On the mesh, 699 overall sizes and 172 hole counts by genus: 129 of those are stated counts, and 43 are
+  `holes_total` facts, each standing for two stated counts whose sum is all one genus can measure (33 corner plates, 7
+  tool holders, 2 brackets and 1 plate); together they cover 189 of the 191 `hole_count` facts. From the code, 630
+  stated sizes read from the named sizes (every other stated size in mm; each is a named size of its reference). Left
+  unmeasured: the 135 flags, the 178 counts that are not hole counts, and the hole counts that only a total measures.
+  For edits, 38 of 129, and only 27 of the 100 edit prompts state anything measurable, so for edits the size block is
+  the score that matters.
 - Real calls, to prove the adapters (smoke checks in a throwaway folder, not scored rows): the local model on 8 dev
   prompts, zero-shot (5 compiled; 3 ran to the 1,024-token limit); Gemini 3 calls with gemini-3.1-flash-lite on one
   create prompt, zero-shot and with 3 examples (both compiled, passed the checks and matched the stated sizes; the first
@@ -765,11 +842,14 @@ The guess ceiling for both is 93 of 300 creates. The 3 three-shot edits with a r
   drew and checked the part in 4 turns and 38 s, and its answer compiled, passed the checks and matched the stated
   sizes, with an overlap of 0.87).
 
-What these numbers do not show: the facts measured are only overall sizes and hole counts. A part can match its
-stated sizes and still have holes in the wrong place, the wrong size or a missing feature that has no count; right
-part catches most of that through the 0.99 overlap, the pieces and the hole count, but not a feature under about 1% of
-the volume (a corner radius, a small chamfer), and on a symmetric part a feature moved to the matching other side can
-still overlap 1. Right part also fails a right answer whose unstated sizes are guessed differently from the reference, so
+What these numbers do not show: on the mesh, the facts measured are only overall sizes and hole counts. The overlap
+does not see a change smaller than about a voxel or a small share of the volume: before the stated sizes were read
+from code, 247 of 630 stated sizes changed to 0.8 of their value (one at a time, on the dev references) still passed
+as the right part, among them 62 of 68 hole diameters, every base slot width, 23 of 54 lip heights and 3 of 8 floors.
+Reading the stated sizes from the code catches those when the answer names them, but not a size it hard-codes, an
+unstated size (a floor or a gusset the request never gives), a missing countersink, or a corner radius or small
+chamfer (under about 1% of the volume); and on a symmetric part a feature moved to the matching other side can still
+overlap 1. Right part also fails a right answer whose unstated sizes are guessed differently from the reference, so
 read it next to the guess ceiling. Overall sizes and the overlap are checked whichever way the answer lies, so they
 say nothing about whether it lies the way that prints best; the print checks cover that, and the strict columns show
 how often an answer also lies as the reference is drawn. Every prompt, test included, comes from our own generator.
@@ -777,21 +857,23 @@ how often an answer also lies as the reference is drawn. Every prompt, test incl
 `pytest ml/bench` covers the scorer on hand-made meshes (blocks of unit cubes with 0 to 4 through holes, two pieces, a
 hidden hollow, open and flipped faces, holes added up over pieces) and on hand-written code through the real compiler
 (full marks for the reference, a wrong size and a missing hole, missing holes behind a hidden hollow, the right part
-stood up (its stated sizes match, it overlaps 1 and is the right part, and it fails only the strict columns), no
-code, broken code, a slider end that breaks the part, an edit, a timeout tried again), each right-part check on its
-own (print checks, a failed fact, the overlap just under and at 0.99, an extra piece or a hidden hollow, the hole
-count, an open answer, the edit size block, no part, nothing measured), the threshold against the picture review's
-verdicts, records written before the rename (they summarize and rescore), the guess ceiling (the guess rule,
-the lower middle median, a changed train file refused, saved once and read back, a wrong guess lowering the overlap,
-no file under `test/` opened), the extractor cases, the intervals and paired tests, the data loader and its hash and
-split checks, the few-shot rule, a whole row on a small hand-made set, resuming after a stop or after errors, a resumed
-row with other settings, other scoring settings or a remade set, prompts turned down or timed out scored as no code,
-few-shot turns, the comparison, the printed headline, the closed test split in every command, and the Gemini and
-Claude Code adapters against recorded replies (no real calls), and the learning curve with a scripted engine and fake
-checkpoints: the subset rule (quotas and shares), the dev-curve file against its rule, a row on a subset, every
-checkpoint scored on the same prompts as a plain row, the losses per point, both stopping rules and the full-dev
-candidates on made-up numbers, stages, a stop inside a checkpoint resumed, a run still training refused, a checkpoint
-that changed refused, step 0 borrowed from the baseline row only with the same settings, batched rows kept apart,
-`same-answers`, the batched engine's queue, and its batched answers against one-at-a-time answers on a tiny random
-model on the CPU. With `GKOD_BENCH_LOCAL=1` it also loads the local model and
-checks that greedy answers repeat exactly.
+stood up (its stated sizes match, it overlaps 1 and is the right part, and it fails only the strict columns), no code,
+broken code, a slider end that breaks the part, an edit, a timeout tried again, a stated hole size drawn wrong and the
+same hole given by its radius, a thin-walled cup with a coarser `$fn` or none, and a six-sided cup), the stated sizes
+read from named sizes (by name, by value, a radius for a diameter, no named sizes), a flat face on a row of voxel
+centres, each right-part check on its own (print checks, a failed fact, the overlap just under and at 0.99, an extra
+piece or a hidden hollow, the hole count, an open answer, the edit size block, no part, nothing measured), the
+threshold against the picture review's verdicts, records written before the rename (they summarize and rescore), the
+guess ceiling (the guess rule, the lower middle median, a changed train file refused, saved once and read back, a
+wrong guess lowering the overlap, no file under `test/` opened), the extractor cases, the intervals and paired tests,
+the data loader and its hash and split checks, the few-shot rule, a whole row on a small hand-made set, resuming after
+a stop or after errors, a resumed row with other settings, other scoring settings or a remade set, prompts turned down
+or timed out scored as no code, few-shot turns, the comparison, the printed headline, the closed test split in every
+command, and the Gemini and Claude Code adapters against recorded replies (no real calls), and the learning curve with
+a scripted engine and fake checkpoints: the subset rule (quotas and shares), the dev-curve file against its rule, a
+row on a subset, every checkpoint scored on the same prompts as a plain row, the losses per point, both stopping rules
+and the full-dev candidates on made-up numbers, a curve still rising at the end against one that flattens, the trend
+test, stages, a stop inside a checkpoint resumed, a run still training refused, a checkpoint that changed refused,
+step 0 borrowed from the baseline row only with the same settings, batched rows kept apart, `same-answers`, the
+batched engine's queue, and its batched answers against one-at-a-time answers on a tiny random model on the CPU. With
+`GKOD_BENCH_LOCAL=1` it also loads the local model and checks that greedy answers repeat exactly.

@@ -53,9 +53,11 @@ SIZE_TOLERANCE_MM = 0.5
 # the very mesh it was labelled with. A $fn given inside one call (cylinder(..., $fn = 6) for a hexagon) is kept.
 OVERLAP_FN = 48
 # The shape overlap (best turn) a right part needs. Picked against the picture review of the two baseline rows (27
-# Nov): every compiled answer the reviewers called right is at 0.9904 or more, and the highest wrong one that only the
-# overlap can fail (the right holes in the wrong leg of an L) is at 0.9847. Two near misses still pass: square or
-# chamfered corners where rounded ones were asked (0.9911 and 0.9968), which no overlap at this voxel size can see.
+# Nov), which is thin evidence: 10 of its 11 right answers overlap exactly 1 (four are code B word for word), so the
+# cut rests on one right create at 0.9904 and one wrong answer at 0.9847 (the right holes in the wrong leg of an L),
+# the highest wrong one that only the overlap fails. Two near misses still pass: square or chamfered corners where
+# rounded ones were asked (0.9968 and 0.9911), which no overlap at this voxel size can see. Built variants of known
+# label were checked as well (dev references moved, turned, with a coarser $fn, or with one stated size off by 20%).
 # The counts are in ml/README.md and tests/fixtures/right_part_review.json.
 RIGHT_PART_IOU = 0.99
 # the checks a right part must pass, in the order summaries list the failures
