@@ -12,7 +12,7 @@ ml/.venv/bin/python ml/scripts/fetch-model.py
 ```
 
 Every pin is in [requirements.txt](requirements.txt) (mlx 0.32.4, mlx-lm 0.32.2, huggingface_hub 2.4.0,
-transformers 5.23.0 and what they pull in). The tests also need [requirements-dev.txt](requirements-dev.txt)
+transformers 5.23.0, matplotlib 3.11.2 for the learning-curve plot, and what they pull in). The tests also need [requirements-dev.txt](requirements-dev.txt)
 (pytest 9.2.0): `ml/.venv/bin/python -m pip install -r ml/requirements-dev.txt`, then `ml/.venv/bin/python -m pytest
 ml/train`.
 
@@ -258,6 +258,129 @@ the model's weights or use the GPU; the ones that need mlx, the tokenizer or mac
 Not measured yet: training speed and memory on this model (the probe does that, and sets `--rows` and the batch size
 from it).
 
+## Learning curve
+
+`gkod_bench curve` scores every saved checkpoint of a training run on dev-curve, a fixed set of 50 dev prompts, so the
+curve shows where more training stops helping. It describes a run; [PICK_RULE.md](PICK_RULE.md) picks checkpoints, on
+full dev.
+
+```sh
+DYLD_LIBRARY_PATH="$(brew --prefix expat)/lib" ml/.venv/bin/python -m gkod_bench curve --run adapters/run1-insurance
+```
+
+It loads the model on the GPU, so it runs after training, never beside it: it refuses a run whose `run.json` still says
+`running` (`--even-if-running` only if the trainer was killed). Under night-run it carries on after a crash:
+`ml/scripts/night-run.py --name curve-run1 -- ml/.venv/bin/python -m gkod_bench curve --run adapters/run1-insurance`.
+
+**How long (worked out, not measured):** 50 prompts at about 15 to 19 s each (answers of about 400 tokens at the
+29 tokens/s measured above, about 15% slower with an unfused adapter, plus scoring) is 12 to 16 minutes a checkpoint,
+so run 1's 15 checkpoints take about 3 to 4 hours. Step 0 costs nothing (below).
+
+### dev-curve
+
+[bench/subsets/dev-curve.json](bench/subsets/dev-curve.json) holds the 50 ids and the sha256 of the two dev files they
+were picked from. The rule, in [bench/gkod_bench/subsets.py](bench/gkod_bench/subsets.py) (seed `dev-curve-v1`):
+
+1. Each tier is a quarter of dev, so it gets a quarter of the 50: t1 13, t2 12, t3 12, edit 13. Tiers 2 and 3 get 12
+   because 12 splits their 4 and 3 families evenly.
+2. Inside a tier, prompts are sorted by group, then by sha256(`dev-curve-v1:` + id). The group is the family for t1,
+   t2 and t3, and (edit kind, tier of the part edited, family) for edits.
+3. Of the n prompts of a tier, the ones at places floor((i + 0.5) x n / quota), i = 0 to quota - 1, are taken. Every
+   group then gets its share of the quota, rounded down or up.
+
+| Tier | Prompts | Spread |
+|---|---|---|
+| t1 | 13 | 13 of the 15 families, one each (no bracket, no knob) |
+| t2 | 12 | 3 each of bracket, channel, plate and tray |
+| t3 | 12 | 4 each of coaster, comb and corner plate |
+| edit | 13 | size 5, remove 3, count 2, add 1, scale 1, hole size 1, move 0; parts from t1 5, t2 4, t3 4 |
+
+- The first 50 prompts in the benchmark's own order, the earlier plan, had 17 t1, only 5 t2, 12 t3 (8 of them combs)
+  and 16 edits, so PICK_RULE.md now names this file instead (changed on 28 Nov, before any dev look).
+- `gkod_bench subset dev-curve` checks the file against its rule on the current dev files and prints the spread
+  (`--write` makes it again). A test does the same where the dev files are (the Mac).
+- `gkod_bench run --subset dev-curve` runs any row on these prompts only. The row checks the dev files against the
+  subset's sha256, keeps the ids in its `run.json`, and is never the same row as a full one.
+- The untrained zero-shot row has 7 of the 50 right (14%, 95% interval 7 to 26%), all of them edits. On full dev it
+  has 10.2%.
+
+### What the command does
+
+- **One row per checkpoint.** For each checkpoint, in step order, it makes `at/<step>/` in the run folder (the folder
+  `train.py --adapter-folder` makes) and runs an ordinary benchmark row, `dev-curve-<run>-s<step>`, on the subset: the
+  local engine with that adapter, greedy, at most 1,024 answer tokens, the site's system prompt and the same scorer as
+  every row. So everything a row does holds: one record per prompt, it resumes at the first missing prompt, it refuses
+  other settings, and `summarize`, `rescore` and `compare` work on it.
+- **One look per checkpoint.** A checkpoint whose row is complete is not asked again. A row that was scored with
+  another file at the same step (a run trained again into the same folder) is refused.
+- **Step 0** is the untrained model. It is read from `local-qwen2.5-coder-1.5b-instruct-0shot` when that row was made
+  with the same settings (the run's base weights, zero-shot, greedy, one prompt at a time, the same token limit, mlx
+  versions, system prompt, set files and slider-end scoring) and has every subset prompt done; checked on 28 Nov, it
+  does. Otherwise step 0 is scored as its own row, `dev-curve-base-<model>`. `--no-base` leaves it out.
+- **Stages.** `--max-checkpoints N` scores at most N points now. `--plot-only` scores nothing and writes `curve.json`
+  and the plot from what is scored (it also works while training runs). `curve.json` is written again after every
+  checkpoint.
+
+`results/curve/<run>/dev-curve.json` (git-ignored) holds:
+
+| Key | Holds |
+|---|---|
+| `points` | One per checkpoint, step 0 first: the step, rows seen, the row, the adapter's sha256, `train_loss` (each step's training loss weighted by its answer tokens, over the steps since the previous checkpoint, with those steps named), `valid_loss` (at that step, the 100 validation rows), then right part (with the checks it failed), compiles, print checks, stated sizes match, the overlap's median and mean, answers with no code and answers cut off at the token limit, each rate with its 95% Wilson interval, and the same per tier. |
+| `saturation` | The two rules below. |
+| `full_dev_candidates` | The checkpoints PICK_RULE.md sends to full dev, once every checkpoint is scored: the last, and the best on dev-curve if that is another one (a tie goes to the later). |
+| `guess_ceiling` | The guess ceiling of the subset's 37 create prompts, when dev's has been worked out. |
+| `scorer_commits` | The harness commits that scored the points; a note asks for `rescore` when there is more than one. |
+
+`dev-curve.png` beside it draws right part with its 95% interval (top) and the two losses (bottom) against the step,
+on one step axis, with dashed and dotted lines where the two rules put the end of the rise.
+
+### Where the curve stops rising
+
+Both rules read the scored points in step order, step 0 included, and stop at the first point not fully scored.
+
+- **Interval rule:** the earliest point s with two points after it, neither of which has a right-part rate above the
+  upper end of s's 95% Wilson interval. Points after those two that do go above it are listed in `rises_later`, so a
+  late rise is not hidden. Fewer than three points: no answer yet.
+- **Paired rule** (PICK_RULE.md's saturation point): the earliest point that no later point beats by a real margin,
+  that is with more right parts and an exact McNemar p below 0.05 on the prompts both answered. While that point is
+  the last one, nothing later can test it, and the file says so.
+
+With 50 prompts the upper end of the 95% interval sits about 11 to 14 points above the rate (for rates from 10 to
+50%), so the interval rule only sees a rise of about 6 or 7 prompts within two checkpoints, and a slow climb reads as
+flat early: made-up rates of 10, 24, 32, 38, 40, 44 ...
+48% put it at step 100 (32%), with later points above its interval listed. The paired rule needs about 6 prompts
+gained with none lost (p = 0.03) to call a gain real. Read both next to the plot; neither picks.
+
+### Batched answers (`--batch N`, off by default)
+
+mlx-lm 0.32.2 has batched generation: `batch_generate` and `BatchGenerator` in `mlx_lm/generate.py` (read in the
+installed package). `curve --batch N` and `run --batch N` make the local engine answer the next N prompts at once.
+Nothing has been measured with it on the GPU yet. It keeps the plain path's rules: the prompt tokens by
+`stream_generate`'s rule, the greedy sampler, the model's stop tokens, the same token limit (a stop token is counted
+in the token count, as `stream_generate` counts it), and the text put together by the same streaming detokenizer. A
+temperature with batches is refused. The batch size goes into the row's settings and its name (`-b8`), so batched and
+one-at-a-time answers never mix and a row cannot change mode when resumed.
+
+**Can batched greedy answers differ from one-at-a-time answers? Yes** (read in the source, not measured):
+
+- Padding does not leak into the answers. Prompts are right-padded for the prompt pass, where the causal mask keeps
+  real tokens from seeing the pads after them; the cache is then rolled so the pads sit on the left, a left-padding
+  mask hides them while answering, and each prompt keeps its own RoPE positions. Answers that finish leave the batch.
+- The numbers can differ. The batch runs other shapes and kernels: an explicit mask array in the prompt pass instead of
+  the fused causal path, a matrix product over N rows at each answer step instead of one, attention over the padded
+  length, and a batch that shrinks as answers finish. In bf16 that changes the last bits of the logits. Greedy takes
+  the top token, so where the top two are within rounding one token can flip, and the rest of the answer follows from
+  there.
+- Which prompts share a batch changes the padded length, so a batched row resumed after a crash can give other
+  answers than an unbroken one.
+- On the CPU only, a tiny random Qwen2 model (not the real weights) with the real tokenizer gives the same text, token
+  counts and endings both ways (a test). That checks the plumbing, not the real model on the GPU.
+
+To test it on the real model (the probe's job): score some checkpoints plainly and again with `--batch 8`, then
+`gkod_bench same-answers dev-curve-run1-insurance-s0000050 dev-curve-run1-insurance-s0000050-b8` (how many answers
+are the same text, and where the others first differ) and `gkod_bench compare` on the same two rows (the scores).
+Curve numbers in any write-up come from the plain rows, and full-dev rows for picking always use the plain path.
+
 ## Tonight: baseline rows on the dev set
 
 ```sh
@@ -327,6 +450,9 @@ ml/.venv/bin/python -m gkod_bench summarize --row NAME [--split dev]
 ml/.venv/bin/python -m gkod_bench rescore --row NAME [--split dev]
 ml/.venv/bin/python -m gkod_bench compare ROW_A ROW_B [--split dev]
 ml/.venv/bin/python -m gkod_bench fewshot
+ml/.venv/bin/python -m gkod_bench curve --run RUN_FOLDER [--subset dev-curve] [--batch N] [--max-checkpoints N] [--plot-only]
+ml/.venv/bin/python -m gkod_bench subset [dev-curve] [--write]
+ml/.venv/bin/python -m gkod_bench same-answers ROW_A ROW_B
 ```
 
 - `run` asks the engine once per prompt and scores the answer. `--limit` runs only the next N prompts, so a row can be
@@ -342,7 +468,9 @@ ml/.venv/bin/python -m gkod_bench fewshot
 - Other options: `--tiers t1,t3`, `--model` (a local model folder, a Gemini model id or a Claude Code model name),
   `--adapter` (a trained LoRA folder for the local model), `--max-tokens` (1,024), `--temperature` (0) and `--seed`,
   `--rpm` (Gemini requests a minute, 10) and `--retries` (4), `--effort` (Claude Code), `--workers` (compiles at once
-  while scoring, 4), `--no-slider-ends`.
+  while scoring, 4), `--no-slider-ends`, `--subset` (only the prompts of a fixed dev subset, such as dev-curve) and
+  `--batch` (the local model answers that many prompts at once; off by default, see "Learning curve").
+- `curve`, `subset` and `same-answers` are described under "Learning curve" above.
 
 **The test split stays closed.** Every command refuses `--split test` unless `--final` is given, before any engine
 starts or any file is read; the data loader refuses it too. Only the day 10 run passes `--final`. A split's files are
@@ -532,6 +660,7 @@ The guess ceiling for both is 93 of 300 creates. The 3 three-shot edits with a r
 | `results/<row>/<split>/run.json` | The row: engine settings, few-shot record, system prompt sha256, data files and their sha256, scoring settings, the harness commit at the start. |
 | `results/<row>/<split>/summary.json` | Rates with 95% Wilson intervals overall, per tier (`t1`, `t2`, `t3`, `edit`) and per tier 3 family: right part (with the threshold and how many answers missed each check), the guess ceiling for create prompts (with right part on the same prompts), compiles, print checks, stated sizes match (and the strict-axes column), measured facts (by measurer), shape overlap (best turn and as drawn, each a mean with a Student t 95% interval, and median), slider ends, edit size blocks, why answers had no code, which checks failed, time per prompt, tokens or cost. It says how many prompts are done, missing or without an answer, and is marked incomplete until every prompt is scored. |
 | `results/ceiling/<split>.json` | The split's guess ceiling: for each create prompt, the sizes guessed (reference value, guess, where the guess came from), those kept, and the overlap; the sha256 of the files it came from. |
+| `results/curve/<run>/<subset>.json` and `.png` | A training run's learning curve on a dev subset (see "Learning curve"); `-b<N>` in the name when answered in batches. |
 | `results/compare/<a>__vs__<b>/<split>.json` | Two rows on the prompts both answered: each rate (right part first), the difference A - B with Newcombe's interval for paired rates and the exact McNemar test, and for overlap the mean paired difference with a Student t interval and the sign test; overall and per tier. |
 
 ### Checked so far
@@ -575,5 +704,11 @@ no file under `test/` opened), the extractor cases, the intervals and paired tes
 split checks, the few-shot rule, a whole row on a small hand-made set, resuming after a stop or after errors, a resumed
 row with other settings, other scoring settings or a remade set, prompts turned down or timed out scored as no code,
 few-shot turns, the comparison, the printed headline, the closed test split in every command, and the Gemini and
-Claude Code adapters against recorded replies (no real calls). With `GKOD_BENCH_LOCAL=1` it also loads the local model and
+Claude Code adapters against recorded replies (no real calls), and the learning curve with a scripted engine and fake
+checkpoints: the subset rule (quotas and shares), the dev-curve file against its rule, a row on a subset, every
+checkpoint scored on the same prompts as a plain row, the losses per point, both stopping rules and the full-dev
+candidates on made-up numbers, stages, a stop inside a checkpoint resumed, a run still training refused, a checkpoint
+that changed refused, step 0 borrowed from the baseline row only with the same settings, batched rows kept apart,
+`same-answers`, the batched engine's queue, and its batched answers against one-at-a-time answers on a tiny random
+model on the CPU. With `GKOD_BENCH_LOCAL=1` it also loads the local model and
 checks that greedy answers repeat exactly.
