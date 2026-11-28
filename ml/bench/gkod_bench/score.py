@@ -38,6 +38,11 @@ from gkod_bench.stl import read_stl
 from gkod_bench.voxel import best_turn_iou
 
 SIZE_TOLERANCE_MM = 0.5
+# The shape overlap compares the two parts with $fn set to this (with -D, which overrides the file's own top-level
+# $fn), so circles are drawn as finely in both and an answer is not marked down for a coarser circle setting: on a
+# 1.6 mm wall, $fn = 32 alone took a right cup down to 0.93. 48 is the generator's own value, so every reference keeps
+# the very mesh it was labelled with. A $fn given inside one call (cylinder(..., $fn = 6) for a hexagon) is kept.
+OVERLAP_FN = 48
 # The shape overlap (best turn) a right part needs. Picked against the picture review of the two baseline rows (27
 # Nov): every compiled answer the reviewers called right is at 0.9904 or more, and the highest wrong one that only the
 # overlap can fail (the right holes in the wrong leg of an L) is at 0.9847. Two near misses still pass: square or
@@ -283,6 +288,23 @@ def reference_code(row: dict, task: str) -> tuple[str, str | None]:
     return row["code"], row["labels"].get("stl_sha256")
 
 
+def _overlap_meshes(gkod: Gkod, code: str, ref_code: str, ref: dict, ans_stl: Path, ref_tri, tmp: Path) -> tuple[Any, Any, int | None]:
+    """The answer's and the reference's meshes for the overlap, both compiled with $fn = OVERLAP_FN, and that $fn.
+    When either does not compile that way (a part too slow at the finer setting), both are taken as drawn and the
+    $fn is None."""
+    ans_fn_stl, ref_fn_stl = tmp / "answer-fn.stl", tmp / "reference-fn.stl"
+    ans_fn, ref_fn = gkod.compile_many(
+        [
+            {"code": code, "defines": {"$fn": OVERLAP_FN}, "stl": ans_fn_stl, "check": False},
+            {"code": ref_code, "defines": {"$fn": OVERLAP_FN}, "stl": ref_fn_stl, "check": False},
+        ]
+    )
+    if not (ans_fn.get("ok") and ref_fn.get("ok")):
+        return read_stl(ans_stl), ref_tri, None
+    ref_out = ref_tri if ref_fn.get("stl_sha256") == ref.get("stl_sha256") else read_stl(ref_fn_stl)
+    return read_stl(ans_fn_stl), ref_out, OVERLAP_FN
+
+
 def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slider_ends: bool = True) -> dict:
     """Every score for one answer. `answer_text` None means the engine gave no answer at all."""
     started = time.perf_counter()
@@ -349,10 +371,11 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
         scores["size_orientation"] = "".join("xyz"[i] for i in orient(planned, info.size)) if info else None
 
         if ok:
-            overlap = best_turn_iou(read_stl(ans_stl), ref_tri)
+            ans_tri, ref_overlap_tri, fn = _overlap_meshes(gkod, code, ref_code, ref, ans_stl, ref_tri, Path(tmp))
+            overlap = best_turn_iou(ans_tri, ref_overlap_tri)
             scores["iou"] = overlap["iou"] if overlap["iou"] is not None else 0.0
             scores["iou_as_drawn"] = overlap["iou_as_drawn"] if overlap["iou_as_drawn"] is not None else 0.0
-            scores["iou_detail"] = overlap
+            scores["iou_detail"] = {**overlap, "fn": fn}
         else:
             scores["iou"] = 0.0
             scores["iou_as_drawn"] = 0.0

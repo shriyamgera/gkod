@@ -33,11 +33,15 @@ const failed = (error: string, log: string[] = [], ms = 0): CompileResult => ({
   error,
 });
 
-// Only plain numbers go through -D, as from the site's sliders.
+// Names that may be set with -D: a named size, as the site's sliders set them, or $fn, which the benchmark sets to
+// compare two parts at the same circle smoothness. -D comes after the file, so it overrides the file's own value.
+export const DEFINE_NAME = /^(?:[A-Za-z_]\w*|\$fn)$/;
+
+// Only plain numbers go through -D.
 function defineArgs(defines: Record<string, number>): string[] {
   const args: string[] = [];
   for (const [name, value] of Object.entries(defines)) {
-    if (/^[A-Za-z_]\w*$/.test(name) && Number.isFinite(value)) args.push('-D', `${name}=${value}`);
+    if (DEFINE_NAME.test(name) && Number.isFinite(value)) args.push('-D', `${name}=${value}`);
   }
   return args;
 }

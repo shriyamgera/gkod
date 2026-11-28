@@ -37,6 +37,9 @@ describe('parseJob', () => {
     expect(parseJob('{"op": "compile", "code": "cube(1);"}')).toEqual({ id: null, error: expect.stringMatching(/id/) });
     expect(parseJob('{"id": "a", "op": "slice"}')).toEqual({ id: 'a', error: expect.stringMatching(/Unknown op/) });
     expect(parseJob('{"id": "a", "op": "compile", "code": "cube(1);", "defines": {"w": "big"}}')).toMatchObject({ id: 'a' });
+    // $fn may be set (the benchmark compares parts at one circle smoothness); other special variables may not
+    expect(parseJob('{"id": "a", "op": "compile", "code": "cube(1);", "defines": {"$fn": 48}}')).toMatchObject({ job: { defines: { $fn: 48 } } });
+    expect(parseJob('{"id": "a", "op": "compile", "code": "cube(1);", "defines": {"$fa": 1}}')).toMatchObject({ error: expect.stringMatching(/defines/) });
     expect(parseJob('{"id": "a", "op": "prompt", "request": {"kind": "repair"}}')).toMatchObject({ error: expect.stringMatching(/create/) });
   });
 });

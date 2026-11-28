@@ -524,3 +524,37 @@ def test_an_answer_that_hits_the_time_limit_once_is_compiled_again(gkod, monkeyp
     monkeypatch.setattr(gkod, "compile", stalled_once)
     s = score_answer(gkod, CREATE_ROW, "create", f"```openscad\n{PLATE}```", slider_ends=False)
     assert s["compiles"] and s["compile"]["first_try"] == {"error": TIMEOUT_MESSAGE, "ms": 10000.0}
+
+
+CUP = """// Cup
+// Diameter (mm)
+diameter = 75; // [50:1:100]
+// Height (mm)
+height = 60; // [40:1:80]
+// Wall thickness (mm)
+wall = 1.6; // [1.2:0.2:2.4]
+
+/* [Hidden] */
+$fn = 48;
+
+difference() {
+  cylinder(d = diameter, h = height);
+  translate([0, 0, 2]) cylinder(d = diameter - 2 * wall, h = height);
+}
+"""
+
+CUP_ROW = {"id": "hand-cup", "code": CUP, "labels": {"stl_sha256": None}, "facts": [fact("diameter", 75, axis="xy"), fact("height", 60, axis="z")]}
+
+
+@needs_compiler
+def test_a_coarser_circle_setting_is_not_marked_down_on_a_thin_wall(gkod):
+    # the same cup with $fn = 32, or with no $fn at all (OpenSCAD's defaults): drawn as written, the 1.6 mm wall moves
+    # by a tenth of a millimetre and the overlap fell to about 0.93 to 0.95. Both parts are compared at $fn = 48.
+    for code in (CUP.replace("$fn = 48;", "$fn = 32;"), CUP.replace("$fn = 48;\n", "")):
+        s = score_answer(gkod, CUP_ROW, "create", f"```openscad\n{code}```", slider_ends=False)
+        assert s["iou"] == pytest.approx(1.0) and s["right_part"] is True
+        assert s["iou_detail"]["fn"] == score.OVERLAP_FN
+    # a $fn given inside the call is the part's own shape and is kept: a six-sided cup is not a round one
+    hexagon = CUP.replace("cylinder(d = diameter, h = height);", "cylinder(d = diameter, h = height, $fn = 6);")
+    s = score_answer(gkod, CUP_ROW, "create", f"```openscad\n{hexagon}```", slider_ends=False)
+    assert s["iou"] < 0.9 and s["right_part"] is False

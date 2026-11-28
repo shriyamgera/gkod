@@ -23,6 +23,16 @@ describe('compileScad', () => {
     }, 30000);
   }
 
+  it('lets -D set $fn over the file\'s own value, but not a $fn given inside a call', async () => {
+    const round = 'cylinder(d = 20, h = 5);';
+    const at48 = await compileScad(`$fn = 48;\n${round}`);
+    const overridden = await compileScad(`$fn = 12;\n${round}`, { $fn: 48 });
+    expect(overridden.ok).toBe(true);
+    expect(overridden.triangles).toBe(at48.triangles);
+    const hexagon = await compileScad('$fn = 48;\ncylinder(d = 20, h = 5, $fn = 6);', { $fn: 32 });
+    expect(hexagon.triangles).toBe(20);
+  }, 30000);
+
   it('explains a part too detailed to build', async () => {
     const result = await compileScad('$fn = 2000; sphere(50);');
     expect(result.error).toBe('The part is too detailed to build; lower $fn or use fewer pieces.');

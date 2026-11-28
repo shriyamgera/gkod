@@ -6,7 +6,7 @@ import { writeFileSync } from 'node:fs';
 import { type Bed, checkStl } from '@gkod/checks';
 import { SYSTEM_INSTRUCTION, userText } from '../../app/src/engine/prompts.ts';
 import { answerOf } from '../../datagen/src/splits/tokens.ts';
-import { compileScad } from './compile.ts';
+import { compileScad, DEFINE_NAME } from './compile.ts';
 
 export const OVERHANG_DEG = 45;
 const LOG_TAIL = 20;
@@ -15,7 +15,7 @@ export type CompileJob = {
   id: string;
   op: 'compile';
   code: string;
-  /** named sizes set with -D, as the site's sliders set them */
+  /** named sizes set with -D, as the site's sliders set them (and $fn, for the benchmark's overlap) */
   defines?: Record<string, number>;
   /** where to write the STL when it compiles; nothing is written without it */
   stl?: string | null;
@@ -41,7 +41,7 @@ function isDefines(value: unknown): value is Record<string, number> {
     value !== null &&
     typeof value === 'object' &&
     !Array.isArray(value) &&
-    Object.entries(value).every(([name, v]) => /^[A-Za-z_]\w*$/.test(name) && typeof v === 'number' && Number.isFinite(v))
+    Object.entries(value).every(([name, v]) => DEFINE_NAME.test(name) && typeof v === 'number' && Number.isFinite(v))
   );
 }
 
