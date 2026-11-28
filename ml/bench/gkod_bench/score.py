@@ -1,6 +1,10 @@
-"""Scores one answer, all by code: compiles, passes the print checks, meets the request (each stated fact checked on
-the mesh where a measurer exists), shape overlap with the reference part, the size block for edits, and whether the
-part still compiles at both ends of every slider.
+"""Scores one answer, all by code: compiles, passes the print checks, stated sizes match (each stated fact checked on
+the mesh where a measurer exists), shape overlap with the reference part, the size block for edits, whether the part
+still compiles at both ends of every slider, and the headline: right part, which needs all of them at once (see
+`right_part`).
+
+"Stated sizes match" was called "meets the request" before 28 Nov. It is loose: a solid block of the right size passes
+for a tray. Records keep the old keys (meets_request, meets_request_strict) as copies, so older readers still work.
 
 What counts as measured:
 - A fact with an axis (the part's real overall size along x, y, z, or x and y for a diameter) is checked on the
@@ -34,6 +38,14 @@ from gkod_bench.stl import read_stl
 from gkod_bench.voxel import best_turn_iou
 
 SIZE_TOLERANCE_MM = 0.5
+# The shape overlap (best turn) a right part needs. Picked against the picture review of the two baseline rows (27
+# Nov): every compiled answer the reviewers called right is at 0.9904 or more, and the highest wrong one that only the
+# overlap can fail (the right holes in the wrong leg of an L) is at 0.9847. Two near misses still pass: square or
+# chamfered corners where rounded ones were asked (0.9911 and 0.9968), which no overlap at this voxel size can see.
+# The counts are in ml/README.md and tests/fixtures/right_part_review.json.
+RIGHT_PART_IOU = 0.99
+# the checks a right part must pass, in the order summaries list the failures
+RIGHT_PART_GATES = ("compiles", "checks", "facts", "shape", "pieces", "holes", "sizes")
 # edit values are written with a few decimals; scaled sizes are exact to 1e-6 in code B
 VALUE_TOLERANCE = 1e-3
 MAX_SLIDERS = 30
@@ -141,7 +153,7 @@ def check_facts(planned: list[dict], answer: MeshInfo | None) -> list[dict]:
     return out
 
 
-def meets_request(compiled: bool, facts: list[dict]) -> bool | None:
+def stated_sizes_match(compiled: bool, facts: list[dict]) -> bool | None:
     """False when there is no part or a measured fact fails; True when at least one fact was measured and all
     passed; None when nothing could be measured."""
     if not compiled:
@@ -152,11 +164,52 @@ def meets_request(compiled: bool, facts: list[dict]) -> bool | None:
     return True if measured else None
 
 
-def meets_request_strict(compiled: bool, facts: list[dict]) -> bool | None:
-    """meets_request with every overall size on the axis its fact names, as the reference part is drawn: width on x,
-    depth on y, height on z, and a hook, clip, saddle or handle lying on its side. No prompt says this, so it is the
-    second, stricter column, not the score."""
-    return meets_request(compiled, [{**f, "status": f["strict"]["status"]} if "strict" in f else f for f in facts])
+def stated_sizes_match_strict(compiled: bool, facts: list[dict]) -> bool | None:
+    """stated_sizes_match with every overall size on the axis its fact names, as the reference part is drawn: width on
+    x, depth on y, height on z, and a hook, clip, saddle or handle lying on its side. No prompt says this, so it is a
+    second, stricter column, not a score."""
+    return stated_sizes_match(compiled, [{**f, "status": f["strict"]["status"]} if "strict" in f else f for f in facts])
+
+
+# the old names, for code written before 28 Nov
+meets_request = stated_sizes_match
+meets_request_strict = stated_sizes_match_strict
+
+
+def stated_of(scores: dict) -> bool | None:
+    """stated_sizes_match from a saved record, new or old (records before 28 Nov have only meets_request)."""
+    return scores["stated_sizes_match"] if "stated_sizes_match" in scores else scores.get("meets_request")
+
+
+def stated_strict_of(scores: dict) -> bool | None:
+    return scores["stated_sizes_match_strict"] if "stated_sizes_match_strict" in scores else scores.get("meets_request_strict")
+
+
+def right_part(scores: dict) -> dict:
+    """The strict score: the answer is the part that was asked for. True only when it compiles, passes all four print
+    checks, passes every measured stated fact, overlaps the reference part by at least RIGHT_PART_IOU (best turn), has
+    as many separate pieces (shells) as the reference and as many through holes (genus, added up over its surfaces),
+    and, for an edit, has the right size block. Works on any saved record's scores, so older records count too.
+    `failed` names every check it missed, in RIGHT_PART_GATES order; an answer with no part fails only "compiles"."""
+    if not scores.get("compiles"):
+        return {"ok": False, "failed": ["compiles"]}
+    mesh = scores.get("mesh") or {}
+    ref = (scores.get("reference") or {}).get("mesh") or {}
+    failed = []
+    if not scores.get("checks_pass"):
+        failed.append("checks")
+    if any(f["status"] == "fail" for f in scores.get("facts") or []):
+        failed.append("facts")
+    if not (scores.get("iou") or 0.0) >= RIGHT_PART_IOU:
+        failed.append("shape")
+    if mesh.get("shells") != ref.get("shells"):
+        failed.append("pieces")
+    # every reference so far is one closed body whose holes can be counted; if one ever is not, this check is left out
+    if ref.get("holes") is not None and mesh.get("holes") != ref["holes"]:
+        failed.append("holes")
+    if "edit" in scores and not scores["edit"].get("sizes_ok"):
+        failed.append("sizes")
+    return {"ok": not failed, "failed": failed}
 
 
 def _close(a: Any, b: Any) -> bool:
@@ -287,8 +340,11 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
         scores["facts_measured"] = sum(f["status"] != "unmeasured" for f in facts)
         scores["facts_passed"] = sum(f["status"] == "pass" for f in facts)
         scores["facts_unmeasured"] = sum(f["status"] == "unmeasured" for f in facts)
-        scores["meets_request"] = meets_request(ok, facts)
-        scores["meets_request_strict"] = meets_request_strict(ok, facts)
+        scores["stated_sizes_match"] = stated_sizes_match(ok, facts)
+        scores["stated_sizes_match_strict"] = stated_sizes_match_strict(ok, facts)
+        # the old names, as copies, so readers written before 28 Nov still work
+        scores["meets_request"] = scores["stated_sizes_match"]
+        scores["meets_request_strict"] = scores["stated_sizes_match_strict"]
         # the answer's axes that the request's x, y and z sizes were read on ("xyz" when it lies as drawn)
         scores["size_orientation"] = "".join("xyz"[i] for i in orient(planned, info.size)) if info else None
 
@@ -323,5 +379,8 @@ def score_answer(gkod: Gkod, row: dict, task: str, answer_text: str | None, slid
                 "same_mesh_as_a": same_mesh,
             }
         scores["slider_ends"] = _slider_ends(gkod, code, params or []) if ok and slider_ends else None
+    verdict = right_part(scores)
+    scores["right_part"] = verdict["ok"]
+    scores["right_part_failed"] = verdict["failed"]
     scores["score_s"] = round(time.perf_counter() - started, 3)
     return scores
