@@ -106,6 +106,12 @@ jobs:
           python -m pip install -r ml/requirements-dev.txt -e ml/bench
           python -m pytest -q ml/bench
 
+      # The training code: the row builder on a hand-made set (with the site's wording through the gkod command), the
+      # selection rules, the trainer's plan and the checkpoint rules. The tiny-model training tests need mlx, the
+      # real-tokenizer test needs the model's files and the night-run tests need macOS, so those skip here.
+      - name: Test the training code
+        run: python -m pytest -q ml/train
+
   # The backend: its tests against a real PostgreSQL with pgvector, then the same stack in Docker Compose.
   api:
     runs-on: ubuntu-latest
