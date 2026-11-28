@@ -1,9 +1,10 @@
 # Run 1: Insurance-first SFT (approach 2 in research/gkod-finetune-approaches.md). Plain LoRA on frozen v1 train
 # rows only, no generator changes.
 #
-# The row count is set with `build_rows.py --rows N`, from the probe's measured speed. The plan's full size is 5,700
-# rows (4,500 creates and 1,200 edits); its daytime run is the first half of every group (--rows 2850). Rows are
-# taken in the order of sha256(id + "sft-v1"), so a smaller run is the start of every group of a bigger one.
+# The row count is `count` below, set from the probe's measured speed (28 Nov, ml/README.md "The probe"): 5,600 rows,
+# one pass, about 6.5 hours. `build_rows.py --rows N` overrides it. The plan's full size was 5,700 rows (4,500
+# creates and 1,200 edits). Rows are taken in the order of sha256(id + "sft-v1"), so a smaller run is the start of
+# every group of a bigger one.
 
 extends = "base.toml"
 name = "run1-insurance"
@@ -11,6 +12,9 @@ method = "insurance-first"
 
 [rows]
 salt = "sft-v1"
+# 5,600 rows = 700 steps of 8: 4,971,290 tokens at the measured 240 tokens/s is 5.7 hours of training, plus 15
+# validations of about 170 s (steps 0, 50, ..., 700): about 6.5 hours in all
+count = 5600
 
 [rows.create]
 "*" = 300                 # every train family the same: 300 each at full size (15 families, 4,500)
@@ -32,6 +36,12 @@ hole_d = 30               # hole size
 scale = 20.0              # mlx-lm takes `scale`, not alpha; scale x learning rate = 4e-4, the common rank-16 strength
 
 [train]
+# From the probe (28 Nov): batch 1 with gradient checkpointing peaked at 5.55 GB on the 8 longest rows and trained at
+# 240 tokens/s; batch 1 without it peaked at 11.3 GB, and batch 2 with it at 7.2 GB and no faster.
+batch_size = 1
+grad_checkpoint = true
+save_every = 50           # 14 checkpoints (steps 50 to 700), 15 points on the learning curve with step 0
+eval_every = 50           # a validation loss at every checkpoint, about 170 s each
 optimizer = "adam"
 learning_rate = 2e-5
 warmup_fraction = 0.05    # linear warmup over the first 5% of updates ...

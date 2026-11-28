@@ -88,8 +88,10 @@ def test_run1_follows_the_insurance_first_plan():
     assert len(creates) == 15 and set(creates.values()) == {300}
     assert edits == {"add": 280, "remove": 330, "count": 260, "scale": 160, "size": 100, "move": 40, "hole_d": 30}
     assert sum(groups.values()) == 5700
-    # no row count in the file: the probe sets it with --rows
-    assert "count" not in config["rows"]
+    # the row count, batch size, gradient checkpointing and checkpoint spacing the 28 Nov probe set
+    assert config["rows"]["count"] == 5600
+    assert config["train"]["batch_size"] == 1 and config["train"]["grad_checkpoint"] is True
+    assert config["train"]["save_every"] == 50 and config["train"]["eval_every"] == 50
     # the plan's learning settings: rank 16 on the last 16 layers, scale x learning rate = 4e-4, Adam, 5% warmup
     assert config["lora"]["rank"] == 16 and config["lora"]["num_layers"] == 16
     assert config["lora"]["scale"] * config["train"]["learning_rate"] == pytest.approx(4e-4)

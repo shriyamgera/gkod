@@ -45,6 +45,10 @@ def test_every_checkpoint_has_a_validation_loss_at_its_own_step():
     assert plan.checkpoint_steps() == [*range(50, 701, 50), 712]
     assert set(plan.checkpoint_steps()) <= set(plan.eval_steps())
     assert plan.eval_steps()[0] == 0
+    # run 1 as the probe sized it: 5,600 rows, 700 steps, 14 checkpoints and 15 validations
+    sized = tr.make_plan(load_config(CONFIGS / "run1-insurance.toml"), meta(rows=5600), {})
+    assert (sized.steps, sized.warmup_steps) == (700, 35)
+    assert sized.checkpoint_steps() == list(range(50, 701, 50)) and len(sized.eval_steps()) == 15
     with pytest.raises(tr.PlanError, match="eval_every must divide save_every"):
         run1(save_every=50, eval_every=20)
 
