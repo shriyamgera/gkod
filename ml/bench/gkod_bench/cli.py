@@ -1,4 +1,4 @@
-"""gkod-bench run | summarize | rescore | compare | fewshot"""
+"""gkod-bench run | summarize | rescore | compare | fewshot | curve | subset | same-answers"""
 
 from __future__ import annotations
 
@@ -20,14 +20,16 @@ def default_row(args: argparse.Namespace) -> str:
         return f"gemini-{args.model or 'gemini-3.1-flash-lite'}-{args.shots}shot".replace("gemini-gemini", "gemini")
     name = Path(args.model).name if args.model else LOCAL_MODEL.name
     trained = "-" + Path(args.adapter).name if args.adapter else ""
-    return f"local-{name}{trained}-{args.shots}shot"
+    subset = f"-{args.subset}" if getattr(args, "subset", None) else ""
+    batch = f"-b{args.batch}" if getattr(args, "batch", 1) > 1 else ""
+    return f"local-{name}{trained}-{args.shots}shot{subset}{batch}"
 
 
 def make_engine(args: argparse.Namespace):
     if args.engine == "local":
         from gkod_bench.engines.local import LocalEngine
 
-        return LocalEngine(Path(args.model) if args.model else LOCAL_MODEL, adapter=args.adapter, max_tokens=args.max_tokens, temperature=args.temperature, seed=args.seed)
+        return LocalEngine(Path(args.model) if args.model else LOCAL_MODEL, adapter=args.adapter, max_tokens=args.max_tokens, temperature=args.temperature, seed=args.seed, batch_size=args.batch)
     if args.engine == "gemini":
         from gkod_bench.engines.gemini import DEFAULT_MODEL, GeminiEngine
 
@@ -64,6 +66,8 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--effort", help="claude-code: effort level")
     r.add_argument("--workers", type=int, default=4, help="compiles at the same time while scoring")
     r.add_argument("--no-slider-ends", action="store_true", help="skip compiling at both ends of every slider")
+    r.add_argument("--subset", help="only the prompts of a fixed dev subset (ml/bench/subsets/<name>.json), e.g. dev-curve")
+    r.add_argument("--batch", type=int, default=1, help="local: answer this many prompts at once (greedy only; may differ from one at a time, so rows for picking keep 1)")
 
     s = sub.add_parser("summarize", help="write the summary again from the saved records")
     s.add_argument("--row", required=True)
@@ -81,6 +85,32 @@ def parser() -> argparse.ArgumentParser:
 
     f = sub.add_parser("fewshot", help="show the fixed few-shot examples")
     f.add_argument("--sets", type=Path, default=SETS)
+
+    cv = sub.add_parser("curve", help="score every checkpoint of a training run on a dev subset: the learning curve")
+    cv.add_argument("--run", required=True, type=Path, help="the training run's folder (train.py --out)")
+    cv.add_argument("--subset", default="dev-curve")
+    cv.add_argument("--model", type=Path, help="the base model folder (default: the one the run's run.json names)")
+    cv.add_argument("--max-tokens", type=int, default=1024)
+    cv.add_argument("--batch", type=int, default=1, help="answer this many prompts at once (off by default; answers may differ from one at a time)")
+    cv.add_argument("--base-row", help="the row that stands for step 0 if it has the same settings (default: the untrained zero-shot row)")
+    cv.add_argument("--no-base", action="store_true", help="leave out step 0, the untrained model")
+    cv.add_argument("--max-checkpoints", type=int, help="score at most this many points now (the rest on a later run)")
+    cv.add_argument("--even-if-running", action="store_true", help="score although run.json says training is still running (only if the trainer was killed)")
+    cv.add_argument("--plot-only", action="store_true", help="score nothing: write curve.json and the plot from what is scored")
+    cv.add_argument("--workers", type=int, default=4)
+    cv.add_argument("--no-slider-ends", action="store_true")
+    cv.add_argument("--results", type=Path, default=RESULTS)
+    cv.add_argument("--sets", type=Path, default=SETS)
+
+    sb = sub.add_parser("subset", help="check a fixed dev subset against its rule and show its spread")
+    sb.add_argument("name", nargs="?", default="dev-curve")
+    sb.add_argument("--write", action="store_true", help="pick it again by its rule and write the file")
+    sb.add_argument("--sets", type=Path, default=SETS)
+
+    sa = sub.add_parser("same-answers", help="how many prompts two rows answered with the very same text")
+    sa.add_argument("a")
+    sa.add_argument("b")
+    sa.add_argument("--results", type=Path, default=RESULTS)
     return p
 
 
@@ -92,7 +122,12 @@ def main(argv: list[str] | None = None) -> int:
             check_open(args.split, args.final)
         if args.command == "run":
             from gkod_bench.run import run_row
+            from gkod_bench.subsets import load as load_subset
 
+            if args.batch > 1 and args.engine != "local":
+                raise SystemExit("--batch is for the local engine only.")
+            if args.subset and args.split != "dev":
+                raise SystemExit("Subsets are of the dev split only.")
             tiers = tuple(t.strip() for t in args.tiers.split(",")) if args.tiers else None
             engine = make_engine(args)
             try:
@@ -108,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
                     sets_dir=args.sets,
                     workers=args.workers,
                     slider_ends=not args.no_slider_ends,
+                    subset=load_subset(args.subset) if args.subset else None,
                 )
             finally:
                 engine.close()
@@ -128,6 +164,36 @@ def main(argv: list[str] | None = None) -> int:
             for task in ("create", "edit"):
                 _, record = fewshot(task, sets_dir=args.sets)
                 print(json.dumps({task: record}))
+        elif args.command == "curve":
+            from gkod_bench.curve import headline as curve_headline
+            from gkod_bench.curve import run_curve
+
+            print(
+                curve_headline(
+                    run_curve(
+                        args.run,
+                        args.subset,
+                        model=args.model,
+                        max_tokens=args.max_tokens,
+                        batch=args.batch,
+                        include_base=not args.no_base,
+                        base_row_name=args.base_row,
+                        results=args.results,
+                        sets_dir=args.sets,
+                        workers=args.workers,
+                        slider_ends=not args.no_slider_ends,
+                        max_checkpoints=args.max_checkpoints,
+                        even_if_running=args.even_if_running,
+                        plot_only=args.plot_only,
+                    )
+                )
+            )
+        elif args.command == "subset":
+            return subset_command(args)
+        elif args.command == "same-answers":
+            from gkod_bench.curve import same_answers
+
+            print(json.dumps(same_answers(args.a, args.b, results=args.results), indent=1))
     except SplitClosed:
         print(FROZEN, file=sys.stderr)
         return 2
@@ -135,6 +201,26 @@ def main(argv: list[str] | None = None) -> int:
         print("Stopped. Every finished prompt is saved; run the same command again to go on.", file=sys.stderr)
         return 130
     return 0
+
+
+def subset_command(args: argparse.Namespace) -> int:
+    """Prints the subset's spread and whether its file is what its rule picks from the dev files now."""
+    from gkod_bench import subsets
+
+    if args.name != "dev-curve":
+        raise SystemExit(f"There is no rule for a subset called {args.name}.")
+    fresh = subsets.make_dev_curve(sets_dir=args.sets)
+    if args.write:
+        print(f"wrote {subsets.write(fresh)}")
+    try:
+        saved = subsets.load(args.name)
+    except FileNotFoundError:
+        print(f"{args.name}: no file yet; --write makes it")
+        return 1
+    same = list(saved.ids) == fresh["ids"] and saved.files == fresh["files"]
+    print(json.dumps(fresh["spread"], indent=1))
+    print(f"{args.name}: {len(saved.ids)} prompts; the file {'matches' if same else 'does NOT match'} its rule on the current dev files")
+    return 0 if same else 1
 
 
 def headline(summary: dict) -> str:
