@@ -63,15 +63,15 @@ def wilson_ci(k, n):
 
 
 def test_the_interval_rule_finds_the_first_point_the_next_two_do_not_rise_above():
-    points, _ = points_from([(0, 0), (50, 20), (100, 22), (150, 21), (200, 23)])
+    points, _ = points_from([(0, 0), (50, 20), (100, 22), (150, 21), (200, 21)])
     sat = cv.interval_saturation(points)
     # 0 of 50 has an upper end of about 7%, and 20 of 50 is above it; 20 of 50 has about 54%, and 44% and 42% are not
-    assert sat["step"] == 50 and sat["rises_later"] == [] and sat["ci95_upper"] == pytest.approx(wilson_ci(20, 50)[1])
+    assert sat["step"] == 50 and sat["saturated"] and sat["rises_later"] == [] and sat["ci95_upper"] == pytest.approx(wilson_ci(20, 50)[1])
     assert [p["step"] for p in sat["next_two"]] == [100, 150]
-    # a rise after the two is listed, not hidden
+    # a point that is flat for two points and then rises above its interval is not where the curve stops
     points, _ = points_from([(0, 0), (50, 20), (100, 22), (150, 21), (200, 40)])
     sat = cv.interval_saturation(points)
-    assert sat["step"] == 50 and sat["rises_later"] == [200]
+    assert sat["step"] is None and sat["verdict"] == cv.NOT_SATURATED and sat["first_flat"]["step"] == 50 and sat["first_flat"]["rises_later"] == [200]
     # still rising: no step yet; too few points: no step
     points, _ = points_from([(0, 0), (50, 10), (100, 25), (150, 45)])
     assert cv.interval_saturation(points)["step"] is None
@@ -83,15 +83,38 @@ def test_the_interval_rule_finds_the_first_point_the_next_two_do_not_rise_above(
 
 
 def test_the_paired_rule_is_the_earliest_point_no_later_point_beats_by_a_real_margin():
-    points, rights = points_from([(0, 0), (50, 20), (100, 22), (150, 21), (200, 23)])
+    points, rights = points_from([(0, 0), (50, 20), (100, 22), (150, 21), (200, 21)])
     sat = cv.paired_saturation(points, rights)
-    # 20 of 50 beats 0 of 50 (p far below 0.05); 23 against 20 is 3 discordant prompts, p 0.25
-    assert sat["step"] == 50 and "note" not in sat
-    assert all(not t["beats_it"] for t in sat["against_later"]) and sat["against_later"][-1]["only_later"] == 3
+    # 20 of 50 beats 0 of 50 (p far below 0.05); 22 against 20 is 2 discordant prompts, p 0.5
+    assert sat["step"] == 50 and sat["saturated"] and sat["earliest_unbeaten_step"] == 50
+    assert all(not t["beats_it"] for t in sat["against_later"]) and sat["against_later"][0]["only_later"] == 2
+    # 6 prompts gained with none lost is the least a later point needs on 50 prompts (p 0.031; 5 gives 0.0625)
+    assert sat["min_detectable_gain"]["prompts"] == 6 and sat["min_detectable_gain"]["of"] == 50
     # nothing later to test the last point against
     points, rights = points_from([(0, 0), (50, 25)])
     sat = cv.paired_saturation(points, rights)
-    assert sat["step"] == 50 and "last scored point" in sat["note"]
+    assert sat["step"] is None and sat["earliest_unbeaten_step"] == 50 and "among the last 3" in sat["why"][0]
+
+
+def test_a_curve_still_rising_at_the_end_is_not_saturated_within_the_run():
+    steps = list(range(0, 701, 50))
+    # the 50 prompts can hardly ever show the last points beaten, so without the end check the paired rule named step
+    # 600 (29 right, against 33 at the end: 4 to 0, p 0.125) and the interval rule step 0, on a curve that never flattens
+    for climb in ([5 + 2 * i for i in range(15)], [5 + i for i in range(15)]):
+        points, rights = points_from(list(zip(steps, climb)))
+        paired, interval = cv.paired_saturation(points, rights), cv.interval_saturation(points)
+        assert paired["step"] is None and paired["verdict"] == cv.NOT_SATURATED and paired["end_of_run"]["rising"]
+        assert interval["step"] is None and interval["verdict"] == cv.NOT_SATURATED
+    # a real plateau still gets a step, at or before where it flattens (step 400): the rules cannot see small gains
+    plateau = [5, 8, 11, 14, 17, 20, 23, 26, 28, 28, 28, 28, 28, 28, 28]
+    points, rights = points_from(list(zip(steps, plateau)))
+    paired, interval = cv.paired_saturation(points, rights), cv.interval_saturation(points)
+    assert paired["saturated"] and paired["step"] <= 400 and interval["saturated"] and interval["step"] <= 400
+    assert not paired["end_of_run"]["rising"]
+    # the trend test: a steady rise is found, a flat run is not
+    rising = cv.trend_test(points_from([(s, 10 + 2 * i) for i, s in enumerate(steps[:8])])[0])
+    flat = cv.trend_test(points_from([(s, 20) for s in steps[:8]])[0])
+    assert rising["p_rising"] < 0.05 and rising["slope_per_100_steps"] == pytest.approx(0.08) and flat["p_rising"] >= 0.5
 
 
 def test_full_dev_gets_the_last_checkpoint_and_the_best_on_the_subset_with_ties_to_the_later():

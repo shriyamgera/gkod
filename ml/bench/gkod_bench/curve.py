@@ -19,8 +19,14 @@ Where the curve stops rising, two rules, both over the scored points in step ord
   end of s's 95% Wilson interval. Points after those two that do go above it are listed (`rises_later`), so a late
   rise is not hidden.
 - Paired rule (PICK_RULE.md's saturation point): the earliest point that no later point beats by a real margin, that
-  is with more right parts and an exact McNemar p below 0.05 on the prompts both answered. While it is the last point
-  there is nothing later to test it against, and the file says so.
+  is with more right parts and an exact McNemar p below 0.05 on the prompts both answered. With 50 prompts a later
+  point needs about 6 prompts gained and none lost to count, so the last few points can hardly ever be beaten: a point
+  among the last 3 is never named.
+
+Both rules first ask whether the curve is still rising at the end of the run: the last point has more right parts than
+every earlier one, or a trend test over the last half of the points (Cochran-Armitage, one-sided p below 0.05) says
+they still rise. Then neither names a step: the run is "not saturated within this run", and more training may still
+help. The interval rule also skips a point that some later point rises above (`rises_later`).
 
 Neither picks a checkpoint; PICK_RULE.md does that on full dev.
 """
@@ -29,6 +35,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -45,12 +52,15 @@ from gkod_bench.paths import LOCAL_MODEL, REPO, RESULTS, SETS, SETS_HASHES, SUBS
 from gkod_bench.prompts import build
 from gkod_bench.run import RowMismatch, _current, expected_of, harness_source, read_records, row_dir, run_row, say, write_json
 from gkod_bench.score import RIGHT_PART_IOU, right_part
-from gkod_bench.stats import paired_rates, rate
+from gkod_bench.stats import binom_two_sided, paired_rates, rate
 from gkod_bench.summary import summarize
 
 SPLIT = "dev"
 CHECKPOINT = re.compile(r"^(\d+)_adapters\.safetensors$")
 REAL_MARGIN_P = 0.05
+# a paired-rule point among the last this many scored points has too few later points to test it
+END_POINTS = 3
+NOT_SATURATED = "not saturated within this run"
 INTERVAL_RULE = (
     "the earliest scored point with two points after it, neither of which has a right-part rate above the upper end of "
     "its 95% Wilson interval"
@@ -61,7 +71,7 @@ PAIRED_RULE = (
 )
 FULL_DEV_RULE = (
     "PICK_RULE.md: at most two checkpoints of a run go to full dev, the last one and the one with the most right parts "
-    "on dev-curve if that is another one; a tie on dev-curve goes to the later checkpoint"
+    "on dev-curve if that is another one; when checkpoints tie on that count, the later of them goes, with the last"
 )
 
 
@@ -289,22 +299,86 @@ def _leading_complete(points: list[dict]) -> list[dict]:
     return out
 
 
+def trend_test(points: list[dict]) -> dict:
+    """Cochran-Armitage test for a rising right-part rate over the points (step as the score): the slope in right
+    parts per 100 steps (as a share of the prompts) and the one-sided p for a rise. It treats the points as separate
+    samples; they share their prompts, and answers to one prompt agree from one checkpoint to the next, which makes the
+    real spread of the slope smaller, so this p is if anything too large (it calls a rise less often than it should)."""
+    xs = [float(p["step"]) for p in points]
+    ks = [p["right_part"]["k"] for p in points]
+    ns = [p["right_part"]["n"] for p in points]
+    total = sum(ns)
+    out = {"steps": [p["step"] for p in points], "slope_per_100_steps": None, "p_rising": 1.0}
+    if len(points) < 3 or not total:
+        return out
+    pbar = sum(ks) / total
+    xbar = sum(n * x for n, x in zip(ns, xs)) / total
+    sxx = sum(n * (x - xbar) ** 2 for n, x in zip(ns, xs))
+    if sxx <= 0:
+        return out
+    slope = sum(n * (x - xbar) * (k / n - pbar) for n, x, k in zip(ns, xs, ks)) / sxx
+    out["slope_per_100_steps"] = round(100 * slope, 6)
+    var = pbar * (1 - pbar) * sxx
+    if var > 0:
+        z = sum((x - xbar) * (k - n * pbar) for n, x, k in zip(ns, xs, ks)) / math.sqrt(var)
+        out["p_rising"] = 0.5 * math.erfc(z / math.sqrt(2))
+    return out
+
+
+def still_rising(pts: list[dict]) -> dict:
+    """Whether the curve is still rising at the end of what is scored: the last point has more right parts than every
+    earlier one, or the trend over the last half of the points (at least 3) is a rise with p below 0.05."""
+    if len(pts) < 2:
+        return {"rising": False, "why": []}
+    window = pts[-max(3, math.ceil(len(pts) / 2)) :]
+    trend = trend_test(window)
+    last_high = pts[-1]["right_part"]["k"] > max(p["right_part"]["k"] for p in pts[:-1])
+    why = []
+    if last_high:
+        why.append(f"the last point (step {pts[-1]['step']}) has more right parts than every earlier one")
+    if trend["p_rising"] < REAL_MARGIN_P:
+        why.append(f"the last {len(window)} points still rise (Cochran-Armitage trend test, one-sided p = {trend['p_rising']:.3g})")
+    return {"rising": bool(why), "why": why, "last_is_highest": last_high, "trend_over_last_half": trend}
+
+
+def min_detectable_gain(n: int) -> int | None:
+    """The fewest prompts a later point must gain, losing none, for an exact McNemar p below 0.05 on n prompts."""
+    for b in range(1, n + 1):
+        if binom_two_sided(0, b) < REAL_MARGIN_P:
+            return b
+    return None
+
+
 def interval_saturation(points: list[dict]) -> dict:
+    """The earliest point whose next two points stay within its interval and that no later point rises above. A point
+    that is flat for two points and then rises is skipped, and reported (`first_flat`) when no point qualifies."""
     pts = _leading_complete(points)
     out: dict = {"rule": INTERVAL_RULE, "points_read": len(pts)}
+    if len(pts) < 3:
+        return {**out, "step": None, "note": "needs at least three scored points"}
+    end = still_rising(pts)
+    first_flat = None
     for i in range(len(pts) - 2):
         high = pts[i]["right_part"]["ci95"][1]
-        if all(p["right_part"]["rate"] <= high for p in pts[i + 1 : i + 3]):
-            return {
-                **out,
-                "step": pts[i]["step"],
-                "right_part": pts[i]["right_part"]["rate"],
-                "ci95_upper": high,
-                "next_two": [{"step": p["step"], "right_part": p["right_part"]["rate"]} for p in pts[i + 1 : i + 3]],
-                "rises_later": [p["step"] for p in pts[i + 3 :] if p["right_part"]["rate"] > high],
-            }
-    note = "needs at least three scored points" if len(pts) < 3 else "every point so far is followed within two points by a rise above its interval"
-    return {**out, "step": None, "note": note}
+        if not all(p["right_part"]["rate"] <= high for p in pts[i + 1 : i + 3]):
+            continue
+        found = {
+            "step": pts[i]["step"],
+            "right_part": pts[i]["right_part"]["rate"],
+            "ci95_upper": high,
+            "next_two": [{"step": p["step"], "right_part": p["right_part"]["rate"]} for p in pts[i + 1 : i + 3]],
+            "rises_later": [p["step"] for p in pts[i + 3 :] if p["right_part"]["rate"] > high],
+        }
+        if found["rises_later"]:
+            first_flat = first_flat or found
+            continue
+        if end["rising"]:
+            return {**out, **found, "step": None, "flat_step": found["step"], "saturated": False, "verdict": NOT_SATURATED, "why": end["why"], "end_of_run": end}
+        return {**out, **found, "saturated": True, "end_of_run": end, **({"first_flat": first_flat} if first_flat else {})}
+    if first_flat:
+        why = [f"it is flat for two points after step {first_flat['step']}, then rises above that interval at {first_flat['rises_later']}", *end["why"]]
+        return {**out, "step": None, "saturated": False, "verdict": NOT_SATURATED, "why": why, "first_flat": first_flat, "end_of_run": end}
+    return {**out, "step": None, "note": "every point so far is followed within two points by a rise above its interval", "end_of_run": end}
 
 
 def paired_saturation(points: list[dict], rights: dict[int, dict[str, bool]]) -> dict:
@@ -312,6 +386,9 @@ def paired_saturation(points: list[dict], rights: dict[int, dict[str, bool]]) ->
     out: dict = {"rule": PAIRED_RULE, "points_read": len(pts)}
     if not pts:
         return {**out, "step": None, "note": "no scored point yet"}
+    n = pts[0]["right_part"]["n"]
+    out["min_detectable_gain"] = {"prompts": min_detectable_gain(n), "of": n, "note": "gained by a later point with none lost, for p below 0.05"}
+    end = still_rising(pts)
     for i, p in enumerate(pts):
         tests, beaten = [], False
         for q in pts[i + 1 :]:
@@ -321,10 +398,14 @@ def paired_saturation(points: list[dict], rights: dict[int, dict[str, bool]]) ->
             tests.append({"later_step": q["step"], "only_later": pr["only_a"], "only_earlier": pr["only_b"], "p": pr["mcnemar_p"], "beats_it": better})
             beaten = beaten or better
         if not beaten:
-            res = {**out, "step": p["step"], "right_part": p["right_part"]["rate"], "against_later": tests}
-            if i == len(pts) - 1:
-                res["note"] = "this is the last scored point, so nothing later can test it yet"
-            return res
+            res = {**out, "earliest_unbeaten_step": p["step"], "right_part": p["right_part"]["rate"], "against_later": tests, "end_of_run": end}
+            why = list(end["why"])
+            if i >= len(pts) - END_POINTS:
+                later = len(pts) - 1 - i
+                why.insert(0, f"step {p['step']} is among the last {END_POINTS} scored points ({later} after it), too few to test it")
+            if why:
+                return {**res, "step": None, "saturated": False, "verdict": NOT_SATURATED, "why": why}
+            return {**res, "step": p["step"], "saturated": True}
     raise AssertionError("the last point is never beaten by a later one")
 
 
@@ -380,17 +461,18 @@ def plot(curve: dict, path: Path) -> bool:
         top.fill_between(steps, low, high, color=blue, alpha=0.14, linewidth=0, label="95% interval")
         top.plot(steps, rates, color=blue, linewidth=2, marker="o", markersize=5, label="right part")
         top.set_ylim(0, max(100 * max(p["right_part"]["ci95"][1] for p in pts) + 5, 20))
-    # where it stops rising: the interval rule dashed, the paired rule dotted (when it is a step with a later point)
-    marks = [("interval rule", curve["saturation"]["interval_rule"].get("step"), (0, (4, 3)), -12)]
-    paired = curve["saturation"]["paired_rule"]
-    if "note" not in paired:
-        marks.append(("paired rule", paired.get("step"), (0, (1, 2)), -24))
+    # where it stops rising: the interval rule dashed, the paired rule dotted, only where a rule names a step; when the
+    # curve still rises at the end, the panel says so instead
+    sat = curve["saturation"]
+    marks = [("interval rule", sat["interval_rule"].get("step"), (0, (4, 3)), -12), ("paired rule", sat["paired_rule"].get("step"), (0, (1, 2)), -24)]
     for name, step, style, dy in marks:
         if step is None:
             continue
         for ax in (top, bottom):
             ax.axvline(step, color=muted, linewidth=1, linestyle=style)
         top.annotate(f"stops rising, {name}: step {step}", xy=(step, top.get_ylim()[1]), xytext=(4, dy), textcoords="offset points", color=muted, fontsize=8.5)
+    if sat["paired_rule"].get("verdict") == NOT_SATURATED:
+        top.annotate(f"{NOT_SATURATED}: more training may still help", xy=(0, 1), xycoords="axes fraction", xytext=(4, -12), textcoords="offset points", color=muted, fontsize=8.5)
     n = curve["subset"]["prompts"]
     top.set_ylabel(f"right part, % of {n} prompts", color=text, fontsize=10)
     top.set_title(f"{curve['run']} on {curve['subset']['name']}", color=text, fontsize=12, loc="left")
@@ -657,9 +739,17 @@ def headline(curve: dict) -> str:
         part = "" if p["complete"] else f" ({p['done']} of {p['prompts']} scored)"
         lines.append(f"  step {p['step']:>6}: right part {r['k']:>2}/{r['n']} {r['rate']:.0%} [{r['ci95'][0]:.0%}, {r['ci95'][1]:.0%}], compiles {p['compiles']['rate']:.0%}{losses}{part}")
     sat = curve["saturation"]
-    s1, s2 = sat["interval_rule"], sat["paired_rule"]
-    lines.append(f"  stops rising, interval rule: {'step ' + str(s1['step']) if s1['step'] is not None else s1.get('note')}" + (f" (later rises above its interval at {s1['rises_later']})" if s1.get("rises_later") else ""))
-    lines.append(f"  stops rising, paired rule: {'step ' + str(s2['step']) if s2.get('step') is not None else s2.get('note')}" + (f" ({s2['note']})" if s2.get("note") and s2.get("step") is not None else ""))
+    for name, s in (("interval rule", sat["interval_rule"]), ("paired rule", sat["paired_rule"])):
+        if s.get("step") is not None:
+            text = f"step {s['step']}"
+        elif s.get("verdict"):
+            text = f"{s['verdict']} ({'; '.join(s['why'])})"
+        else:
+            text = s.get("note")
+        lines.append(f"  stops rising, {name}: {text}")
+    gain = sat["paired_rule"].get("min_detectable_gain")
+    if gain and gain["prompts"]:
+        lines.append(f"  smallest gain the paired rule can call real: {gain['prompts']} of {gain['of']} prompts, with none lost")
     fd = curve["full_dev_candidates"]
     lines.append(f"  to full dev (PICK_RULE.md): {fd['steps'] if fd.get('steps') else fd.get('note')}")
     if curve.get("plot"):
